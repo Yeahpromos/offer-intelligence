@@ -15,6 +15,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
+from api.tier_moves import handle_tier_moves
+
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "public"
@@ -748,7 +750,25 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/levanta/payments":
             self.handle_payments_api(parsed)
             return
+        if parsed.path == "/api/tier_moves":
+            handle_tier_moves(self, "GET")
+            return
         self.handle_static(parsed.path)
+
+    def do_OPTIONS(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/tier_moves":
+            handle_tier_moves(self, "OPTIONS")
+            return
+        self.send_response(204)
+        self.end_headers()
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/tier_moves":
+            handle_tier_moves(self, "POST")
+            return
+        self.send_error(404)
 
     def handle_payments_api(self, parsed):
         api_key = os.environ.get("LEVANTA_API_KEY", "").strip()

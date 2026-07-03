@@ -116,12 +116,31 @@ The bottom offer list is grouped by main category instead of being a flat previe
 
 Dashboard filters and exports continue to operate on the same filtered offer set.
 
+### Shared Tier Moves
+
+The tier pages include move controls for changing merchant tier placement. By default, moves are applied immediately in the current browser so the operator can preview the result. To make tier moves visible to everyone, configure the shared write path:
+
+1. Add `scripts/tier_moves_apps_script.gs` to the Google Sheet Apps Script project.
+2. In Apps Script project properties, set `TIER_MOVES_WEBHOOK_SECRET` to a random shared secret. If the script is not bound to the sheet, also set `SPREADSHEET_ID`.
+3. Deploy the Apps Script as a web app that can receive requests.
+4. In Vercel project environment variables, set:
+   - `TIER_MOVES_WEBHOOK_URL`: the Apps Script web app URL.
+   - `TIER_MOVES_WEBHOOK_SECRET`: the same secret from Apps Script.
+   - Optional `TIER_MOVES_ADMIN_TOKEN`: if set, browser requests must send this token in `X-Tier-Move-Token`.
+
+The browser never receives the Apps Script secret. It only calls `/api/tier_moves`; the Vercel function validates the optional admin token and forwards the server-side secret to Google Apps Script.
+When `TIER_MOVES_ADMIN_TOKEN` is enabled, the first protected move prompts the operator for the token and stores it in that browser's local storage as `offerTierMoveAdminToken`.
+
+If `TIER_MOVES_WEBHOOK_URL` is not configured, move buttons still work locally but the status message says the change is local only.
+
 ## Run Locally
 
 macOS/Linux:
 
 ```bash
 export LEVANTA_API_KEY="your_levanta_api_key"
+export TIER_MOVES_WEBHOOK_URL="your_apps_script_web_app_url"
+export TIER_MOVES_WEBHOOK_SECRET="your_shared_secret"
 python3 server.py
 ```
 
@@ -129,6 +148,8 @@ Windows PowerShell:
 
 ```powershell
 $env:LEVANTA_API_KEY="your_levanta_api_key"
+$env:TIER_MOVES_WEBHOOK_URL="your_apps_script_web_app_url"
+$env:TIER_MOVES_WEBHOOK_SECRET="your_shared_secret"
 python server.py
 ```
 

@@ -36,6 +36,8 @@
   const TIER_SHEET_EXPANDABLE_TIERS = new Set(STANDARD_CATEGORY_REPORT_TIERS);
   const TIER_SHEET_MOVE_TARGETS = CATEGORY_REPORT_TIER_OPTIONS.slice();
   const TIER_SHEET_MOVE_STORAGE_KEY = "offerTierSheetManualMoves.v1";
+  const TIER_SHARED_MOVES_API = "/api/tier_moves";
+  const TIER_MOVE_ADMIN_TOKEN_KEY = "offerTierMoveAdminToken";
   const CATEGORY_REPORT_ADDITIVE_SORTS = new Set(["merchantCount", "revenue", "orders", "clicks"]);
   const PAYMENT_TODAY = new Date(`${localDateKey(new Date())}T00:00:00`);
   const originalTierSheetRows = new Map();
@@ -77,6 +79,8 @@
     selectedTierRowKeys: new Set(),
     visibleTierRowKeys: [],
     manualTierMoves: loadManualTierMoves(),
+    sharedTierMovesConfigured: false,
+    sharedTierMovesLoading: false,
     tierMoveTarget: "",
     tierMoveStatus: "",
     tierSheetFilters: {
@@ -735,7 +739,28 @@
     rebuildPaymentIndex();
   }
 
-  function moveOfferToTier(key, targetTier) {
+  function setManualTierMoveFromOffer(offer, targetTier) {
+    const sourceTier = canonicalTierName(offer && offer.originalTier);
+    const tier = canonicalTierName(targetTier);
+    const merchantId = String(offer && offer.merchantId || "").trim();
+    const key = originalMoveKeyForRecord({ merchantId, sourceTier });
+    if (!key || !isTierMoveTarget(sourceTier) || !isTierMoveTarget(tier)) return false;
+    if (tier === sourceTier) {
+      delete state.manualTierMoves[key];
+      return true;
+    }
+    const original = originalTierSheetRowIndex.get(key);
+    state.manualTierMoves[key] = {
+      sourceTier,
+      targetTier: tier,
+      merchantId,
+      merchantName: String((offer && offer.brand) || (original && tierRowMerchantName(original.row)) || "").trim(),
+      movedAt: localDateKey(new Date())
+    };
+    return true;
+  }
+
+  async function moveOfferToTier(key, targetTier) {
     const offer = offers.find((item) => offerKey(item) === key);
     const tier = canonicalTierName(targetTier);
     if (!offer || !TIER_MOVE_OPTIONS.includes(tier)) return;
@@ -744,8 +769,13 @@
     } else {
       tierOverrides[key] = tier;
     }
+    const syncedCandidate = setManualTierMoveFromOffer(offer, tier);
     saveTierOverrides();
     applyTierOverrideToOffer(offer);
+    if (syncedCandidate) {
+      persistManualTierMoves();
+      applyManualTierMoves();
+    }
     updatePaymentRowsForTierMove();
     refreshPaymentFilterOptions();
     setPaymentStamp(state.livePaymentsLoaded ? "live" : "saved");
@@ -755,6 +785,11 @@
       renderTierPage(state.selectedTierPage);
     } else {
       renderAll();
+    }
+    if (syncedCandidate) {
+      setTierMoveStatus(`Moved ${offer.brand || offer.merchantId || "merchant"}; syncing shared data...`);
+      const result = await saveSharedTierMoves("replace");
+      setTierMoveStatus(result.ok ? `Moved ${offer.brand || offer.merchantId || "merchant"}; synced for everyone` : `Moved ${offer.brand || offer.merchantId || "merchant"} locally only (${result.error})`);
     }
   }
 
@@ -5558,6 +5593,159 @@
     storage.setItem(TIER_SHEET_MOVE_STORAGE_KEY, JSON.stringify(state.manualTierMoves));
   }
 
+  function tierMoveAdminToken() {
+    const storage = storageApi();
+    if (!storage) return "";
+    try {
+      return String(storage.getItem(TIER_MOVE_ADMIN_TOKEN_KEY) || "").trim();
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function requestTierMoveAdminToken() {
+    const storage = storageApi();
+    if (!storage || typeof window.prompt !== "function") return "";
+    const token = String(window.prompt("Enter the tier move admin token") || "").trim();
+    if (token) storage.setItem(TIER_MOVE_ADMIN_TOKEN_KEY, token);
+    return token;
+  }
+
+  function originalMoveKeyForRecord(record) {
+    const explicitKey = String(record && (record.key || record.rowKey || record.row_key) || "").trim();
+    if (explicitKey && originalTierSheetRowIndex.has(explicitKey)) return explicitKey;
+    const merchantId = String(record && (record.merchantId || record.merchant_id) || "").trim().replace(/\.0$/, "");
+    const sourceTier = canonicalTierName(record && (record.sourceTier || record.source_tier));
+    if (!merchantId || !isTierMoveTarget(sourceTier)) return "";
+    for (const [key, original] of originalTierSheetRowIndex.entries()) {
+      if (original.sourceTier !== sourceTier) continue;
+      if (tierRowMerchantId(original.row) === merchantId) return key;
+    }
+    return "";
+  }
+
+  function manualTierMovesFromRecords(records) {
+    return (records || []).reduce((moves, record) => {
+      const sourceTier = canonicalTierName(record && (record.sourceTier || record.source_tier));
+      const targetTier = canonicalTierName(record && (record.targetTier || record.target_tier));
+      const key = originalMoveKeyForRecord(record);
+      if (!key || !isTierMoveTarget(sourceTier) || !isTierMoveTarget(targetTier) || sourceTier === targetTier) return moves;
+      const original = originalTierSheetRowIndex.get(key);
+      moves[key] = {
+        sourceTier: original ? original.sourceTier : sourceTier,
+        targetTier,
+        merchantId: String(record.merchantId || record.merchant_id || (original && tierRowMerchantId(original.row)) || "").trim().replace(/\.0$/, ""),
+        merchantName: String(record.merchantName || record.merchant_name || (original && tierRowMerchantName(original.row)) || "").trim(),
+        movedAt: String(record.movedAt || record.moved_at || "")
+      };
+      return moves;
+    }, {});
+  }
+
+  function tierMovePayload(action = "replace") {
+    return {
+      action,
+      updatedBy: "offer-intelligence-ui",
+      moves: Object.entries(state.manualTierMoves || {}).map(([key, move]) => {
+        const original = originalTierSheetRowIndex.get(key);
+        return {
+          key,
+          sourceTier: move.sourceTier || (original && original.sourceTier) || "",
+          targetTier: move.targetTier || "",
+          merchantId: move.merchantId || (original && tierRowMerchantId(original.row)) || "",
+          merchantName: move.merchantName || (original && tierRowMerchantName(original.row)) || "",
+          movedAt: move.movedAt || localDateKey(new Date())
+        };
+      })
+    };
+  }
+
+  function renderAfterTierMoveSync(fallbackTier = state.selectedTierPage) {
+    applyManualTierMoves();
+    updatePaymentRowsForTierMove();
+    refreshPaymentFilterOptions();
+    setPaymentStamp(state.livePaymentsLoaded ? "live" : "saved");
+    if (state.page === "tier") {
+      renderTierPage(fallbackTier);
+    } else if (state.page === "payments") {
+      renderPaymentsPage();
+    } else {
+      renderAll();
+    }
+    renderDashboardCategoryReport();
+  }
+
+  async function loadSharedTierMoves({ silent = false } = {}) {
+    if (typeof fetch !== "function" || state.sharedTierMovesLoading) return false;
+    state.sharedTierMovesLoading = true;
+    try {
+      const response = await fetch(TIER_SHARED_MOVES_API, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      state.sharedTierMovesConfigured = Boolean(payload.configured);
+      if (!payload.configured) {
+        if (!silent) setTierMoveStatus("Shared tier moves are not configured; changes stay local in this browser.");
+        return false;
+      }
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `HTTP ${response.status}`);
+      }
+      state.manualTierMoves = manualTierMovesFromRecords(payload.moves || []);
+      persistManualTierMoves();
+      renderAfterTierMoveSync();
+      if (!silent) {
+        const count = Object.keys(state.manualTierMoves).length;
+        setTierMoveStatus(`Loaded ${count.toLocaleString()} shared tier move${count === 1 ? "" : "s"}`);
+      }
+      return true;
+    } catch (error) {
+      if (!silent) setTierMoveStatus(`Could not load shared tier moves; using local moves only (${error.message || error})`);
+      return false;
+    } finally {
+      state.sharedTierMovesLoading = false;
+    }
+  }
+
+  async function saveSharedTierMoves(action = "replace") {
+    if (typeof fetch !== "function") return { ok: false, configured: false, error: "fetch is unavailable" };
+    const buildHeaders = () => {
+      const headers = { "Content-Type": "application/json; charset=utf-8" };
+      const token = tierMoveAdminToken();
+      if (token) headers["X-Tier-Move-Token"] = token;
+      return headers;
+    };
+    const requestBody = JSON.stringify(tierMovePayload(action));
+    try {
+      let response = await fetch(TIER_SHARED_MOVES_API, {
+        method: "POST",
+        headers: buildHeaders(),
+        body: requestBody
+      });
+      if (response.status === 401 && requestTierMoveAdminToken()) {
+        response = await fetch(TIER_SHARED_MOVES_API, {
+          method: "POST",
+          headers: buildHeaders(),
+          body: requestBody
+        });
+      }
+      const payload = await response.json().catch(() => ({}));
+      state.sharedTierMovesConfigured = Boolean(payload.configured);
+      if (!payload.configured) {
+        return { ok: false, configured: false, error: "shared tier write is not configured" };
+      }
+      if (!response.ok || payload.ok === false) {
+        return { ok: false, configured: true, error: payload.error || `HTTP ${response.status}` };
+      }
+      if (Array.isArray(payload.moves)) {
+        state.manualTierMoves = manualTierMovesFromRecords(payload.moves);
+        persistManualTierMoves();
+        renderAfterTierMoveSync();
+      }
+      return { ok: true, configured: true };
+    } catch (error) {
+      return { ok: false, configured: state.sharedTierMovesConfigured, error: error.message || String(error) };
+    }
+  }
+
   function defineTierRowMeta(row, key, sourceTier, currentTier) {
     Object.defineProperties(row, {
       __tierRowKey: { value: key, enumerable: false, configurable: true },
@@ -5812,7 +6000,7 @@
 
   function renderSheetTable(sheet, titleEl, countEl, headEl, rowsEl, customRows = null) {
     const headers = sheet.headers || [];
-    const allDisplayHeaders = displayHeadersForSheet(sheet, headers, true);
+    const allDisplayHeaders = displayHeadersForSheet(sheet, headers);
     const displayHeaders = visibleHeadersForSheet(sheet, allDisplayHeaders);
     const sourceRows = customRows || sheet.rows || [];
     const rows = headers.length
@@ -5864,10 +6052,9 @@
     return "";
   }
 
-  function displayHeadersForSheet(sheet, headers, includeMoveAction = false) {
+  function displayHeadersForSheet(sheet, headers) {
     if (!sheet || !(sheetReport.tierSheets || []).includes(sheet.name)) return headers || [];
-    const withAction = (list) => includeMoveAction ? [...list, "Move"] : list;
-    if (sheet.name !== "Tier 1") return withAction(headers || []);
+    if (sheet.name !== "Tier 1") return headers || [];
     const desired = ["May Revenue", "June Revenue", "Completion Rate"];
     const output = [];
     (headers || []).forEach((header) => {
@@ -5879,7 +6066,7 @@
         });
       }
     });
-    return withAction(output);
+    return output;
   }
 
   function selectedHeadersForTierSheet(sheetName, headers) {
@@ -5896,7 +6083,7 @@
   }
 
   function coreHeadersForSheet(sheet, headers) {
-    const preferred = ["Merchant ID", "Merchant Name", "Network", "Agency", "Backend EPC", "EPC", "Move"];
+    const preferred = ["Merchant ID", "Merchant Name", "Network", "Agency", "Backend EPC", "EPC"];
     const selected = preferred.filter((header) => headers.includes(header));
     return selected.length ? selected : headers.slice(0, Math.min(6, headers.length));
   }
@@ -6034,9 +6221,6 @@
   }
 
   function sheetCellHtml(sheet, row, header) {
-    if (header === "Move") {
-      return tierMoveControlHtml(row._offerKey ? offers.find((offer) => offerKey(offer) === row._offerKey) : offerForSheetRow(row));
-    }
     const value = formatSheetCell(header, row[header]);
     const kind = header === "Phase" ? tier2PhaseKind(sheet, row) : "";
     if (!kind || !value) return escapeHtml(value);
@@ -6153,7 +6337,7 @@
     if (els.tierMoveSelected && !els.tierMoveSelected.disabled) els.tierMoveSelected.focus();
   }
 
-  function moveSelectedTierRows() {
+  async function moveSelectedTierRows() {
     const sourceTier = state.selectedTierPage;
     const targetTier = state.tierMoveTarget;
     const sheet = sheetByName(sourceTier);
@@ -6185,21 +6369,27 @@
     persistManualTierMoves();
     applyManualTierMoves();
     state.selectedTierRowKeys.clear();
-    setTierMoveStatus(movedCount ? `Moved ${movedCount.toLocaleString()} to ${categoryReportTierLabel(targetTier)}` : "No merchants moved");
+    const localMessage = movedCount ? `Moved ${movedCount.toLocaleString()} to ${categoryReportTierLabel(targetTier)}` : "No merchants moved";
+    setTierMoveStatus(movedCount ? `${localMessage}; syncing shared data...` : localMessage);
     closeTierMoveDialog();
     renderTierPage(sourceTier);
     renderDashboardCategoryReport();
+    if (!movedCount) return;
+    const result = await saveSharedTierMoves("replace");
+    setTierMoveStatus(result.ok ? `${localMessage}; synced for everyone` : `${localMessage}; local only (${result.error})`);
   }
 
-  function resetTierMoves() {
+  async function resetTierMoves() {
     if (!hasManualTierMoves()) return;
     state.manualTierMoves = {};
     state.selectedTierRowKeys.clear();
     persistManualTierMoves();
     applyManualTierMoves();
-    setTierMoveStatus("Manual tier moves reset");
+    setTierMoveStatus("Manual tier moves reset; syncing shared data...");
     renderTierPage(state.selectedTierPage);
     renderDashboardCategoryReport();
+    const result = await saveSharedTierMoves("clear");
+    setTierMoveStatus(result.ok ? "Manual tier moves reset for everyone" : `Manual tier moves reset locally only (${result.error})`);
   }
 
   function handleTierSelectionChange(event) {
@@ -6678,7 +6868,7 @@
       const input = event.target.closest("input[type='checkbox']");
       const sheet = sheetByName(state.selectedTierPage);
       if (!input || !sheet) return;
-      const allHeaders = displayHeadersForSheet(sheet, sheet.headers || [], true);
+      const allHeaders = displayHeadersForSheet(sheet, sheet.headers || []);
       const selected = Array.from(els.tierColumnList.querySelectorAll("input[type='checkbox']:checked"))
         .map((checkbox) => checkbox.value)
         .filter((header) => allHeaders.includes(header));
@@ -6691,14 +6881,12 @@
     els.tierColumnCore.addEventListener("click", () => {
       const sheet = sheetByName(state.selectedTierPage);
       if (!sheet) return;
-      const allHeaders = displayHeadersForSheet(sheet, sheet.headers || [], true);
+      const allHeaders = displayHeadersForSheet(sheet, sheet.headers || []);
       setTierVisibleHeaders(sheet, coreHeadersForSheet(sheet, allHeaders));
     });
     els.tierColumnAll.addEventListener("click", () => {
       resetTierVisibleHeaders(sheetByName(state.selectedTierPage));
     });
-    if (els.table) els.table.addEventListener("click", handleTierMoveClick);
-    els.tierSheetRows.addEventListener("click", handleTierMoveClick);
     els.sheetGridHead.addEventListener("click", handleReportSortClick);
     els.tierSheetHead.addEventListener("click", handleReportSortClick);
     els.tierSheetHead.addEventListener("change", handleTierSelectionChange);
@@ -6768,6 +6956,7 @@
     renderAll();
     renderPaymentsPage();
     rerenderForLanguage();
+    loadSharedTierMoves({ silent: true });
     maybeAutoSyncLevantaPayments();
     window.setInterval(maybeAutoSyncLevantaPayments, AUTO_PAYMENT_SYNC_INTERVAL_MS);
   }
