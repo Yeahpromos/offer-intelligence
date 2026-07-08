@@ -6,6 +6,7 @@
   "outputDirectory": "public",
   "functions": {
     "api/**/*.py": {
+      "includeFiles": "protected_data/**",
       "excludeFiles": "{scripts/**,.git/**}"
     }
   }

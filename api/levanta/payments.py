@@ -5,6 +5,7 @@ import os
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 
+from auth import require_auth
 from server import (
     fetch_invoice_items_for_marketplaces,
     is_trackable_payment_record,
@@ -28,6 +29,8 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if not require_auth(self):
+            return
         api_key = os.environ.get("LEVANTA_API_KEY", "").strip()
         if not api_key:
             self.send_json(503, {"ok": False, "source": "fallback", "error": "LEVANTA_API_KEY is not configured"})

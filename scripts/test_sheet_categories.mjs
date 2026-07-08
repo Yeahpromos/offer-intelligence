@@ -14,8 +14,8 @@ function assertEqual(actual, expected, label) {
   }
 }
 
-const chatbotData = loadWindowPayload("public/chatbot_data.js", "CHATBOT_DATA");
-const sheetReportData = loadWindowPayload("public/sheet_report_data.js", "SHEET_REPORT_DATA");
+const chatbotData = loadWindowPayload("protected_data/chatbot_data.js", "CHATBOT_DATA");
+const sheetReportData = loadWindowPayload("protected_data/sheet_report_data.js", "SHEET_REPORT_DATA");
 
 const categoryColumnByTier = {
   "Tier 1": 23,

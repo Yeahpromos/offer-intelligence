@@ -5,6 +5,7 @@ const helperSource = fs.readFileSync("public/tier2_recommendation_rules.js", "ut
 const html = fs.readFileSync("public/index.html", "utf8");
 const app = fs.readFileSync("public/app.js", "utf8");
 const i18n = fs.readFileSync("public/chatbot_i18n.js", "utf8");
+const authBootstrap = fs.readFileSync("public/auth.js", "utf8");
 const sandbox = { window: {} };
 vm.runInNewContext(helperSource, sandbox, { filename: "public/tier2_recommendation_rules.js" });
 
@@ -95,8 +96,13 @@ assertMatch(redZh.action, /新增测试 publisher/, "Chinese Tier 2 recovery cop
 assert(
   html.includes("tier2_recommendation_rules.js") &&
     html.indexOf("tier2_recommendation_rules.js") > html.indexOf("chatbot_i18n.js") &&
-    html.indexOf("tier2_recommendation_rules.js") < html.indexOf("app.js"),
-  "index.html should load tier2_recommendation_rules.js after i18n and before app.js."
+    html.indexOf("tier2_recommendation_rules.js") < html.indexOf("auth.js"),
+  "index.html should load tier2_recommendation_rules.js after i18n and before the auth bootstrap."
+);
+
+assert(
+  authBootstrap.includes("APP_SCRIPT") && authBootstrap.includes("app.js"),
+  "auth.js should load app.js after protected payloads."
 );
 
 [

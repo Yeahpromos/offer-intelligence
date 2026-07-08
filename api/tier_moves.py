@@ -7,6 +7,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from auth import auth_enabled, is_authenticated, require_auth
+
 
 TIER_MOVE_TARGETS = {"Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"}
 
@@ -93,6 +95,8 @@ def _client_token(headers):
 
 
 def _require_admin(target):
+    if auth_enabled() and is_authenticated(target):
+        return True
     expected = _admin_token()
     if not expected:
         return True
@@ -161,6 +165,8 @@ def _call_webhook(method, payload=None):
 def handle_tier_moves(target, method):
     if method == "OPTIONS":
         _send_json(target, 204, {})
+        return
+    if not require_auth(target):
         return
 
     if method == "GET":

@@ -31,12 +31,14 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
+          node --check public/auth.js
           node --check public/app.js
           node --check public/chatbot_i18n.js
           node --check public/tier2_recommendation_rules.js
 
       - name: Run regression tests
         run: |
+          python scripts/test_auth_helpers.py
           node scripts/test_chatbot_intent_flow.mjs
           node scripts/test_tier2_recommendation_rules.mjs
           node scripts/test_sheet_categories.mjs

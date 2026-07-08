@@ -7,9 +7,10 @@ Internal YeahPromos Amazon offer intelligence dashboard for offer ranking, categ
 ## What Is Included
 
 - Static dashboard UI in `public/`.
-- Prebuilt browser payloads:
-  - `public/chatbot_data.js`
-  - `public/sheet_report_data.js`
+- Protected browser payloads in `protected_data/`, served only after admin login:
+  - `protected_data/chatbot_data.js`
+  - `protected_data/sheet_report_data.js`
+  - `protected_data/product_keywords.js`
 - Google Sheet and Feishu category intelligence for main-category and subcategory search.
 - Recommendation chatbot with English and Chinese prompt support.
 - Tier 2 publisher recommendation rules in `public/tier2_recommendation_rules.js`.
@@ -24,7 +25,7 @@ Internal YeahPromos Amazon offer intelligence dashboard for offer ranking, categ
 
 ### Database Migration Path
 
-The dashboard uses a hybrid migration path: MySQL is the server-side source of truth, while the browser keeps loading committed static payloads by default. Browser code must not connect to MySQL directly.
+The dashboard uses a hybrid migration path: MySQL is the server-side source of truth, while the browser loads committed payloads only after the admin session is validated. Browser code must not connect to MySQL directly.
 
 - Reporting views/tables are limited to `oi_*` objects.
 - Static snapshots can be built with `scripts/build_db_static_snapshot.py`.
@@ -36,6 +37,27 @@ The dashboard uses a hybrid migration path: MySQL is the server-side source of t
   public search matches when a chat query is a merchant lookup.
 - Local UI preview without DB env can use `http://127.0.0.1:8765/?dbStatusDemo=1`; this demo mode only activates on localhost.
 - Full setup details are in `docs/offer-db-migration.md`.
+
+### Admin Login
+
+The app has a single administrator login. There is no user registration or role table. A successful login receives an `HttpOnly` signed session cookie and has full dashboard permissions.
+
+Required environment variables:
+
+```text
+OI_AUTH_ENABLED=1
+OI_ADMIN_USERNAME=admin
+OI_ADMIN_PASSWORD_HASH=<pbkdf2_sha256 hash>
+OI_SESSION_SECRET=<random long secret>
+```
+
+Generate the password hash locally:
+
+```bash
+python scripts/hash_auth_password.py
+```
+
+The login protects `/api/levanta/payments`, `/api/tier_moves`, `/api/ui/db/*`, and the browser payload endpoint `/api/auth/data`. The generated payload files stay outside `public/` so direct static downloads do not bypass the login screen.
 
 ### Category Logic
 
@@ -162,6 +184,10 @@ export LEVANTA_API_KEY="your_levanta_api_key"
 export TIER_MOVES_WEBHOOK_URL="your_apps_script_web_app_url"
 export TIER_MOVES_WEBHOOK_SECRET="your_shared_secret"
 export OFFER_DB_API_TOKEN="your_internal_db_api_token"
+export OI_AUTH_ENABLED=1
+export OI_ADMIN_USERNAME="admin"
+export OI_ADMIN_PASSWORD_HASH="your_pbkdf2_sha256_hash"
+export OI_SESSION_SECRET="your_random_session_secret"
 python3 server.py
 ```
 
@@ -172,6 +198,10 @@ $env:LEVANTA_API_KEY="your_levanta_api_key"
 $env:TIER_MOVES_WEBHOOK_URL="your_apps_script_web_app_url"
 $env:TIER_MOVES_WEBHOOK_SECRET="your_shared_secret"
 $env:OFFER_DB_API_TOKEN="your_internal_db_api_token"
+$env:OI_AUTH_ENABLED="1"
+$env:OI_ADMIN_USERNAME="admin"
+$env:OI_ADMIN_PASSWORD_HASH="your_pbkdf2_sha256_hash"
+$env:OI_SESSION_SECRET="your_random_session_secret"
 python server.py
 ```
 
@@ -181,12 +211,12 @@ Then open:
 http://127.0.0.1:8765
 ```
 
-The frontend can load from saved data without the Levanta key, but live payment sync requires `LEVANTA_API_KEY`.
+The frontend can load from saved protected data without the Levanta key, but live payment sync requires `LEVANTA_API_KEY`.
 DB APIs also require the `OFFER_DB_*` connection variables and `OFFER_DB_API_TOKEN`.
 
 ## Data Rebuild Scripts
 
-The repository is a Python-served static frontend, not a Node app. The generated data files are committed browser payloads.
+The repository is a Python-served static frontend, not a Node app. The generated data files are committed browser payloads under `protected_data/`.
 
 ```bash
 python scripts/build_sheet_report_data.py
@@ -197,10 +227,10 @@ DB-backed snapshot and migration validation:
 
 ```bash
 python scripts/validate_db_migration.py --output output/db_migration_status.json
-python scripts/build_db_static_snapshot.py --chatbot-output output/db_static_snapshot/chatbot_data.js
+python scripts/build_db_static_snapshot.py --chatbot-output protected_data/chatbot_data.js
 ```
 
-Product-name keyword data for Tier 1-3 offers is generated from the brand/ASIN workbook into `data/product_name_keywords_t1_t3.csv` and `public/product_keywords.js`.
+Product-name keyword data for Tier 1-3 offers is generated from the brand/ASIN workbook into `data/product_name_keywords_t1_t3.csv` and `protected_data/product_keywords.js`.
 
 ```bash
 python scripts/import_product_name_keywords.py --source "/path/to/brand and asins t1-t3.xlsx"
@@ -226,20 +256,24 @@ offers with highest revenue
 Run the same checks used by CI:
 
 ```bash
+node --check public/auth.js
 node --check public/app.js
 node --check public/chatbot_i18n.js
 node --check public/tier2_recommendation_rules.js
+python scripts/test_auth_helpers.py
 node scripts/test_chatbot_intent_flow.mjs
 node scripts/test_tier2_recommendation_rules.mjs
 node scripts/test_sheet_categories.mjs
 node scripts/test_tier_visual_status.mjs
 node scripts/test_zh_chatbot.mjs
 python -m scripts.test_payment_placeholders
-python -m py_compile offer_db.py api/db/status.py api/db/merchant.py api/db/search.py scripts/validate_db_migration.py scripts/build_db_static_snapshot.py
+python -m py_compile auth.py browser_payloads.py server.py offer_db.py api/protected_data.py api/auth/login.py api/auth/session.py api/auth/logout.py api/auth/data.py api/db/status.py api/db/merchant.py api/db/search.py scripts/validate_db_migration.py scripts/build_db_static_snapshot.py
 ```
 
 ## Security
 
 Do not commit `.env`, API keys, database passwords, logs, or PID files. Server secrets must stay in deployment environment variables only.
+
+Do not commit `OI_ADMIN_PASSWORD`, `OI_ADMIN_PASSWORD_HASH`, or `OI_SESSION_SECRET` outside deployment configuration. Prefer `OI_ADMIN_PASSWORD_HASH` over plaintext `OI_ADMIN_PASSWORD`.
 
 The production DB user for this app should be read-only and limited to `SELECT` on `oi_*` objects. Do not expose or migrate user, site, bank, login-log, payment-callback, link-tracking, or raw network integration tables into browser payloads or API responses.

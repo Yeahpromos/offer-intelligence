@@ -11,6 +11,8 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
+from browser_payloads import read_browser_payload
+
 
 ROOT = Path(__file__).resolve().parent
 IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
@@ -334,11 +336,10 @@ def clean_decimal(value: Any, places: int = 6) -> float:
 
 
 def read_static_chatbot_text() -> str:
-    source = ROOT / "public" / "chatbot_data.js"
-    if not source.exists():
-        source = ROOT / "chatbot_data.js"
-    if source.exists():
-        return source.read_text(encoding="utf-8")
+    try:
+        return read_browser_payload("chatbot_data.js")
+    except OSError:
+        pass
 
     candidates = []
     explicit_url = os.environ.get("OFFER_STATIC_DATA_URL", "").strip()
@@ -347,7 +348,9 @@ def read_static_chatbot_text() -> str:
     for key in ("VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
         host = os.environ.get(key, "").strip()
         if host:
-            candidates.append(f"https://{host.removeprefix('https://').removeprefix('http://')}/chatbot_data.js")
+            candidates.append(
+                f"https://{host.removeprefix('https://').removeprefix('http://')}/api/auth/data?file=chatbot_data.js"
+            )
 
     for url in candidates:
         try:

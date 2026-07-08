@@ -22,7 +22,7 @@ def assert_true(value, label):
 
 
 def load_static_payload():
-    text = (ROOT / "public" / "chatbot_data.js").read_text(encoding="utf-8")
+    text = (ROOT / "protected_data" / "chatbot_data.js").read_text(encoding="utf-8")
     match = re.match(r"window\.CHATBOT_DATA=(.*);\s*$", text, re.S)
     assert_true(match, "chatbot_data.js should expose window.CHATBOT_DATA")
     return json.loads(match.group(1))

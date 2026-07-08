@@ -16,6 +16,9 @@ from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from api.tier_moves import handle_tier_moves
+from api.protected_data import handle_protected_data
+from auth import handle_auth_login, handle_auth_logout, handle_auth_options, handle_auth_session, require_auth
+from browser_payloads import browser_payload_path
 from offer_db import (
     DIGITS_RE,
     first_query_value,
@@ -30,8 +33,9 @@ from offer_db import (
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "public"
-DATA_FILE = STATIC_DIR / "chatbot_data.js"
-SHEET_DATA_FILE = STATIC_DIR / "sheet_report_data.js"
+DATA_FILE = browser_payload_path("chatbot_data.js")
+SHEET_DATA_FILE = browser_payload_path("sheet_report_data.js")
+PROTECTED_STATIC_NAMES = {"chatbot_data.js", "sheet_report_data.js", "product_keywords.js"}
 LEVANTA_BASE = "https://app.levanta.io/api/creator/v1"
 DEFAULT_MONTHS = [
     ("February", 1, 2026),
@@ -757,10 +761,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/auth/session":
+            handle_auth_session(self)
+            return
+        if parsed.path == "/api/auth/data":
+            handle_protected_data(self)
+            return
         if parsed.path == "/api/levanta/payments":
+            if not require_auth(self):
+                return
             self.handle_payments_api(parsed)
             return
         if parsed.path.startswith("/api/ui/db/"):
+            if not require_auth(self):
+                return
             self.handle_db_ui_api(parsed)
             return
         if parsed.path == "/api/tier_moves":
@@ -770,6 +784,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/auth/"):
+            handle_auth_options(self)
+            return
         if parsed.path.startswith("/api/ui/db/"):
             self.send_response(204)
             self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
@@ -785,6 +802,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/auth/login":
+            handle_auth_login(self)
+            return
+        if parsed.path == "/api/auth/logout":
+            handle_auth_logout(self)
+            return
         if parsed.path == "/api/tier_moves":
             handle_tier_moves(self, "POST")
             return
@@ -879,6 +902,9 @@ class Handler(BaseHTTPRequestHandler):
     def handle_static(self, path):
         if path in ("", "/"):
             path = "/index.html"
+        if path.lstrip("/") in PROTECTED_STATIC_NAMES:
+            self.send_error(404)
+            return
         target = (STATIC_DIR / path.lstrip("/")).resolve()
         if not str(target).startswith(str(STATIC_DIR.resolve())) or not target.is_file():
             self.send_error(404)

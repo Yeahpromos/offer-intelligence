@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 INPUT = ROOT / "work" / "google_sheet_export" / "amazon_report.xlsx"
-OUTPUT = ROOT / "public" / "sheet_report_data.js"
+OUTPUT = ROOT / "protected_data" / "sheet_report_data.js"
 
 
 TIER_SHEETS = {"Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"}

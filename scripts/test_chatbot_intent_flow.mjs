@@ -72,9 +72,9 @@ const sandbox = {
 };
 sandbox.window.document = sandbox.document;
 
-runScript("public/chatbot_data.js", sandbox);
-runScript("public/product_keywords.js", sandbox);
-runScript("public/sheet_report_data.js", sandbox);
+runScript("protected_data/chatbot_data.js", sandbox);
+runScript("protected_data/product_keywords.js", sandbox);
+runScript("protected_data/sheet_report_data.js", sandbox);
 runScript("public/chatbot_i18n.js", sandbox);
 runScript("public/tier2_recommendation_rules.js", sandbox);
 runScript("public/app.js", sandbox);
@@ -396,3 +396,4 @@ assertEqual(dashboardGroups[1].summary.avgAov, 50, "category AOV should aggregat
 assertApprox(dashboardGroups[1].summary.avgCvr, 0.1, "category CVR should aggregate orders divided by clicks");
 
 console.log("Chatbot intent flow tests passed");
+process.exit(0);

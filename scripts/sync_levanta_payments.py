@@ -161,10 +161,10 @@ def reconcile_source_payment_record(record: dict) -> dict:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Fetch Levanta payments and update public/chatbot_data.js.")
+    parser = argparse.ArgumentParser(description="Fetch Levanta payments and update protected_data/chatbot_data.js.")
     parser.add_argument("--start", default="", help="Optional first report month, formatted YYYY-MM. Empty uses server/API default.")
     parser.add_argument("--end", default="", help="Optional last report month, formatted YYYY-MM. Empty uses server/API default.")
-    parser.add_argument("--data-file", default=str(ROOT / "public" / "chatbot_data.js"), help="Path to chatbot_data.js.")
+    parser.add_argument("--data-file", default=str(ROOT / "protected_data" / "chatbot_data.js"), help="Path to chatbot_data.js.")
     parser.add_argument(
         "--source-url",
         default=os.environ.get("PAYMENT_SYNC_SOURCE_URL", ""),

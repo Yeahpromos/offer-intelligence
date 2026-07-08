@@ -67,7 +67,7 @@ def main():
     failures = []
     static_ids = read_static_merchant_ids()
     if not static_ids:
-        failures.append("No numeric Merchant IDs were found in public/chatbot_data.js")
+        failures.append("No numeric Merchant IDs were found in protected_data/chatbot_data.js")
 
     with db_connection() as conn:
         latest = latest_dates(conn)

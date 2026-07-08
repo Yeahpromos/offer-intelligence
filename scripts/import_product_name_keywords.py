@@ -15,7 +15,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = Path("/Users/bryansaputra/Downloads/brand and asins t1-t3 (1).xlsx")
 DEFAULT_CSV = ROOT / "data" / "product_name_keywords_t1_t3.csv"
-DEFAULT_JS = ROOT / "public" / "product_keywords.js"
+DEFAULT_JS = ROOT / "protected_data" / "product_keywords.js"
 
 REQUIRED_COLUMNS = ["商家ID", "商家", "产品ASIN", "产品名称"]
 WORD_RE = re.compile(r"[a-z0-9]+")

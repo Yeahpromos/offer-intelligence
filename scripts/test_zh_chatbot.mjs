@@ -4,6 +4,7 @@ import vm from "node:vm";
 const source = fs.readFileSync("public/chatbot_i18n.js", "utf8");
 const html = fs.readFileSync("public/index.html", "utf8");
 const app = fs.readFileSync("public/app.js", "utf8");
+const authBootstrap = fs.readFileSync("public/auth.js", "utf8");
 const sandbox = { window: {} };
 vm.runInNewContext(source, sandbox, { filename: "public/chatbot_i18n.js" });
 
@@ -57,8 +58,12 @@ assertMatch(
   "Chinese chatbot copy should be available.",
 );
 
-if (!html.includes("chatbot_i18n.js") || html.indexOf("chatbot_i18n.js") > html.indexOf("app.js")) {
-  throw new Error("index.html should load chatbot_i18n.js before app.js.");
+if (!html.includes("chatbot_i18n.js") || html.indexOf("chatbot_i18n.js") > html.indexOf("auth.js")) {
+  throw new Error("index.html should load chatbot_i18n.js before auth.js.");
+}
+
+if (!authBootstrap.includes("APP_SCRIPT") || !authBootstrap.includes("app.js")) {
+  throw new Error("auth.js should load app.js after login.");
 }
 
 if (!app.includes("window.CHATBOT_I18N") || !app.includes("responseLanguageFor")) {
