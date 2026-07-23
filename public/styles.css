@@ -758,6 +758,37 @@ body.dashboard-mode .workspace {
   overflow: hidden;
 }
 
+body.tier-scroll-mode {
+  overflow: hidden;
+}
+
+body.tier-scroll-mode .app-shell {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.tier-scroll-mode .sidebar {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+body.tier-scroll-mode .workspace {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+body.tier-scroll-mode .tier-page {
+  align-content: start;
+  padding-bottom: 4px;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -1306,6 +1337,32 @@ body.dashboard-mode .insight-panel {
   flex-wrap: wrap;
 }
 
+.tier-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.tier-pagination .secondary-button {
+  min-height: 30px;
+  min-width: 82px;
+  padding: 5px 10px;
+}
+
+.tier-pagination .secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+#tierPageIndicator {
+  min-width: 96px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
 .column-picker {
   position: relative;
 }
@@ -1689,9 +1746,54 @@ body.dashboard-mode .insight-panel {
 .tier-sheet-filters,
 .sheet-target-filters {
   display: grid;
-  grid-template-columns: 2fr repeat(4, minmax(120px, 1fr));
+  grid-template-columns: minmax(180px, 1.35fr) minmax(330px, 1.8fr) repeat(4, minmax(100px, 1fr));
   gap: 10px;
   align-items: end;
+}
+
+.tier-date-range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tier-date-range-controls {
+  display: grid;
+  grid-template-columns: minmax(112px, 1fr) auto minmax(112px, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+}
+
+.tier-date-range-separator {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tier-sheet-filters .tier-date-apply {
+  min-height: 34px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+.tier-date-status {
+  min-height: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.tier-date-status.error {
+  color: var(--rose);
+}
+
+.tier-date-status.loading {
+  color: var(--teal);
 }
 
 .sheet-target-filters {
@@ -4311,6 +4413,22 @@ td strong {
 }
 
 @media (max-width: 1120px) {
+  body.tier-scroll-mode {
+    overflow: auto;
+  }
+
+  body.tier-scroll-mode .app-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  body.tier-scroll-mode .sidebar,
+  body.tier-scroll-mode .workspace {
+    height: auto;
+    overflow: visible;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -4325,6 +4443,10 @@ td strong {
   .tier-sheet-filters {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tier-date-range-field {
+    grid-column: span 2;
   }
 
   .sheet-target-filters {
@@ -4450,6 +4572,10 @@ td strong {
     width: 100%;
   }
 
+  .tier-pagination {
+    width: 100%;
+  }
+
   .column-picker-panel {
     left: 0;
     right: auto;
@@ -4502,6 +4628,10 @@ td strong {
   }
 
   .payment-filter-search {
+    grid-column: 1 / -1;
+  }
+
+  .tier-date-range-field {
     grid-column: 1 / -1;
   }
 
@@ -5535,6 +5665,18 @@ td strong {
 
 /* 小屏适配 */
 @media (max-width: 640px) {
+  .tier-date-range-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .tier-date-range-separator {
+    display: none;
+  }
+
+  .tier-sheet-filters .tier-date-apply {
+    grid-column: 1 / -1;
+  }
+
   .deep-analysis-fab {
     bottom: 100px;
     right: 20px;

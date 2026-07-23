@@ -151,6 +151,9 @@ def handle_ui_tier_sheet(target, query):
             tier_sheet_payload(
                 tier,
                 month=first_query_value(query, "month") or None,
+                start_date=first_query_value(query, "start_date") or None,
+                end_date=first_query_value(query, "end_date") or None,
+                compact=first_query_value(query, "compact").lower() in {"1", "true", "yes"},
             ),
         )
     except ValueError as error:

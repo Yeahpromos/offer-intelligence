@@ -61,7 +61,7 @@ jobs:
       - name: Validate payment records
         run: python scripts/test_payment_placeholders.py --records-file output/payment_records.json
 
-      - name: Sync data to other cnpscy_oi_* tables
+      - name: Sync non-manual cnpscy_oi_* tables
         if: ${{ vars.OFFER_DB_HOST != '' }}
         env:
           OFFER_DB_HOST: ${{ vars.OFFER_DB_HOST }}
@@ -69,4 +69,6 @@ jobs:
           OFFER_DB_USER: ${{ vars.OFFER_DB_USER }}
           OFFER_DB_PASSWORD: ${{ secrets.OFFER_DB_PASSWORD }}
           OFFER_DB_PORT: ${{ vars.OFFER_DB_PORT }}
+        # Tier assignments and visual colors are excluded by default so
+        # scheduled jobs cannot overwrite manual operator changes.
         run: python scripts/sync_oi_tables.py

@@ -82,10 +82,13 @@ def main():
             "route": "ui-offers",
             "month": month,
         }
-        module.tier_sheet_payload = lambda tier, month=None: {
+        module.tier_sheet_payload = lambda tier, month=None, start_date=None, end_date=None, compact=False: {
             "route": "ui-tier-sheet",
             "tier": tier,
             "month": month,
+            "startDate": start_date,
+            "endDate": end_date,
+            "compact": compact,
         }
 
         status = request(module.app, "status", "action=search&month=202607")
@@ -119,11 +122,14 @@ def main():
         tier_sheet = request(
             module.app,
             "ui-tier-sheet",
-            "tier=Tier+2&month=2026-07",
+            "tier=Tier+2&start_date=2026-07-21&end_date=2026-07-22&compact=1",
             token="",
         )
         assert_equal(tier_sheet["status"], 200, "UI tier sheet response code")
         assert b'"tier":"Tier 2"' in tier_sheet["body"], tier_sheet["body"]
+        assert b'"startDate":"2026-07-21"' in tier_sheet["body"], tier_sheet["body"]
+        assert b'"endDate":"2026-07-22"' in tier_sheet["body"], tier_sheet["body"]
+        assert b'"compact":true' in tier_sheet["body"], tier_sheet["body"]
 
         missing_tier = request(module.app, "ui-tier-sheet", token="")
         assert_equal(missing_tier["status"], 400, "missing tier response code")

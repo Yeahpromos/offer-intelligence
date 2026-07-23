@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Offer Intelligence Chat</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260707-category-redesign2" />
+    <link rel="stylesheet" href="./styles.css?v=20260723-tier-scroll1" />
   </head>
   <body class="auth-pending app-loading">
     <section class="auth-shell" id="authShell" aria-labelledby="authTitle">
@@ -56,7 +56,7 @@
         <div class="brand-mark">
           <div class="mark-grid" aria-hidden="true"></div>
           <div>
-            <h1>Offer Intelligence</h1>
+            <h1>YeahPromos</h1>
             <p data-i18n="brand.subtitle">Amazon tier analysis</p>
           </div>
         </div>
@@ -498,6 +498,16 @@
               <span data-i18n="label.Search">Search</span>
               <input id="tierSheetSearch" type="search" placeholder="Merchant, ID, reason, recommendation" data-i18n-placeholder="tier.searchPlaceholder" />
             </label>
+            <div class="tier-date-range-field">
+              <span>Date / range</span>
+              <div class="tier-date-range-controls">
+                <input id="tierStartDate" type="date" aria-label="Tier report start date" />
+                <span class="tier-date-range-separator" aria-hidden="true">–</span>
+                <input id="tierEndDate" type="date" aria-label="Tier report end date" />
+                <button class="secondary-button tier-date-apply" id="tierDateApply" type="button">Apply</button>
+              </div>
+              <small class="tier-date-status" id="tierDateStatus" aria-live="polite"></small>
+            </div>
             <label>
               <span data-i18n="tier.networkAgency">Network / Agency</span>
               <select id="tierSheetNetwork">
@@ -524,17 +534,22 @@
               <div>
                 <h3 id="tierTableTitle">Sheet Records</h3>
                 <p id="tierTableCount"></p>
+                <nav class="tier-pagination hidden" id="tierPagination" aria-label="Tier 4 pages">
+                  <button class="secondary-button" id="tierPagePrev" type="button" aria-label="Previous Tier 4 page">Previous</button>
+                  <span id="tierPageIndicator" aria-live="polite">Page 1 of 1</span>
+                  <button class="secondary-button" id="tierPageNext" type="button" aria-label="Next Tier 4 page">Next</button>
+                </nav>
               </div>
               <div class="table-toolbar-actions">
                 <div class="column-picker">
-                  <button class="icon-button table-select-button" id="tierColumnToggle" type="button" aria-expanded="false" data-i18n="action.select">Select</button>
+                  <button class="icon-button table-select-button" id="tierColumnToggle" type="button" aria-expanded="false" data-i18n="tier.columnsButton">Display</button>
                   <div class="column-picker-panel hidden" id="tierColumnPanel">
                     <div class="column-picker-header">
-                      <strong data-i18n="tier.columnsTitle">Information</strong>
-                      <span data-i18n="tier.columnsHint">Select fields to show</span>
+                      <strong data-i18n="tier.columnsTitle">Display columns</strong>
+                      <span data-i18n="tier.columnsHint">Choose fields to display</span>
                     </div>
                     <div class="column-picker-actions">
-                      <button type="button" id="tierColumnCore" data-i18n="tier.coreColumns">Core</button>
+                      <button type="button" id="tierColumnCore" data-i18n="tier.coreColumns">Default</button>
                       <button type="button" id="tierColumnAll" data-i18n="tier.allColumns">All</button>
                     </div>
                     <div class="column-picker-list" id="tierColumnList"></div>
@@ -581,6 +596,6 @@
     <script src="./chatbot_i18n.js?v=20260626-zh1"></script>
     <script src="./tier2_recommendation_rules.js?v=20260626-tier2pub1"></script>
     <script async src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-    <script src="./auth.js?v=20260708-auth1"></script>
+    <script src="./auth.js?v=20260723-tier-scroll1"></script>
   </body>
 </html>

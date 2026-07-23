@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import os
@@ -759,7 +760,31 @@ def sync_sheet_metadata(conn, sheets: list[dict], offers: list[dict]) -> int:
 
 # ── main ────────────────────────────────────────────────────────────
 
-def main():
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Sync non-manual Offer Intelligence support tables."
+    )
+    parser.add_argument(
+        "--sync-tier-assignments",
+        action="store_true",
+        help=(
+            "Manual-only override: copy snapshot tiers into "
+            "cnpscy_oi_tier_assignments. Omitted by scheduled automation."
+        ),
+    )
+    parser.add_argument(
+        "--sync-visual-status",
+        action="store_true",
+        help=(
+            "Manual-only override: recompute and store tier row colors. "
+            "Omitted by scheduled automation."
+        ),
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None):
+    args = parse_args(argv)
     print("=== sync_oi_tables ===\n")
 
     # 1. 加载数据源
@@ -787,11 +812,19 @@ def main():
 
     try:
         # 3. 同步各表
-        n1 = sync_tiers(conn, offers)
+        if args.sync_tier_assignments:
+            n1 = sync_tiers(conn, offers)
+        else:
+            n1 = None
+            print("[paused] cnpscy_oi_tier_assignments (manual changes only)")
         print()
         n2 = sync_categories(conn, offers, feishu_rows)
         print()
-        n3 = sync_visual_status(conn, sheets)
+        if args.sync_visual_status:
+            n3 = sync_visual_status(conn, sheets)
+        else:
+            n3 = None
+            print("[paused] cnpscy_oi_tier_visual_status (manual changes only)")
         print()
         n4 = sync_product_keywords(conn, keyword_rows)
         print()
@@ -800,9 +833,15 @@ def main():
 
         # 4. 汇总
         print("=== sync complete ===")
-        print(f"  cnpscy_oi_tier_assignments:      {n1} merchants")
+        print(
+            "  cnpscy_oi_tier_assignments:      "
+            f"{n1 if n1 is not None else 'paused (manual only)'}"
+        )
         print(f"  cnpscy_oi_category:              {n2} category rows (incl. merchant links)")
-        print(f"  cnpscy_oi_tier_visual_status:    {n3} merchants")
+        print(
+            "  cnpscy_oi_tier_visual_status:    "
+            f"{n3 if n3 is not None else 'paused (manual only)'}"
+        )
         print(f"  cnpscy_oi_product_keywords:      {n4} merchants")
         print(f"  cnpscy_oi_offer_sheet_metadata:  {n5} merchants")
         print(f"  cnpscy_oi_payment_records:       (handled by sync_levanta_payments.py)")

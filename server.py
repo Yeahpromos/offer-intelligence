@@ -998,12 +998,18 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, offers_payload(month=first_query_value(query, "month") or None, force_refresh=force))
                 return
 
-            if parsed.path == "/api/ui/db/tier-sheet":
+            if parsed.path in {"/api/ui/db/tier-sheet", "/api/ui/db/tier_sheet"}:
                 tier = first_query_value(query, "tier")
                 if not tier:
                     self.send_json(400, {"ok": False, "error": "tier is required (e.g. Tier+1, Tier+2, ...)"})
                     return
-                self.send_json(200, tier_sheet_payload(tier, month=first_query_value(query, "month") or None))
+                self.send_json(200, tier_sheet_payload(
+                    tier,
+                    month=first_query_value(query, "month") or None,
+                    start_date=first_query_value(query, "start_date") or None,
+                    end_date=first_query_value(query, "end_date") or None,
+                    compact=first_query_value(query, "compact").lower() in {"1", "true", "yes"},
+                ))
                 return
 
             if parsed.path == "/api/ui/db/keywords":

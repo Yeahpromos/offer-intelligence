@@ -30,6 +30,7 @@ REPORTING_TZ = dt.timezone(dt.timedelta(hours=8))
 DEFAULT_REPORTING_DELAY_DAYS = 2
 DEFAULT_DAILY_TREND_DAYS = 14
 DEFAULT_MONTHLY_TREND_MONTHS = 6
+MAX_TIER_REPORT_RANGE_DAYS = 366
 
 
 class OfferDbError(RuntimeError):
@@ -391,6 +392,56 @@ def parse_month_key(value: str | None) -> dt.date | None:
         return dt.date.fromisoformat(f"{text}-01")
     except ValueError:
         return None
+
+
+def parse_tier_report_date(value: str | None) -> dt.date | None:
+    text = str(value or "").strip().replace("/", "-")
+    if not text:
+        return None
+    try:
+        return dt.date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def resolve_tier_report_date_range(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    month: str | None = None,
+    reference_date: dt.date | None = None,
+) -> tuple[dt.date, dt.date]:
+    """Resolve an inclusive YeahPromos Amazon report date range."""
+    raw_start = str(start_date or "").strip()
+    raw_end = str(end_date or "").strip()
+    start = parse_tier_report_date(raw_start)
+    end = parse_tier_report_date(raw_end)
+    if raw_start and start is None:
+        raise ValueError("start_date must use YYYY-MM-DD format")
+    if raw_end and end is None:
+        raise ValueError("end_date must use YYYY-MM-DD format")
+
+    if start is None and end is None:
+        month_day = parse_month_key(month)
+        if str(month or "").strip() and month_day is None:
+            raise ValueError("month must use YYYY-MM format")
+        if month_day:
+            start = month_day
+            end = month_end(month_day)
+        else:
+            today = reference_date or reporting_today()
+            start = month_start(today)
+            end = today
+    elif start is None:
+        start = end
+    elif end is None:
+        end = start
+
+    if start > end:
+        raise ValueError("start_date cannot be after end_date")
+    range_days = (end - start).days + 1
+    if range_days > MAX_TIER_REPORT_RANGE_DAYS:
+        raise ValueError(f"date range cannot exceed {MAX_TIER_REPORT_RANGE_DAYS} days")
+    return start, end
 
 
 def bounded_int_env(key: str, default: int, minimum: int, maximum: int) -> int:
@@ -1308,7 +1359,7 @@ CACHE_TTL_SECONDS = int(os.environ.get("OFFER_DB_CACHE_TTL", "86400"))  # 24 hou
 MERCHANT_CACHE_TTL = int(os.environ.get("OFFER_DB_MERCHANT_CACHE_TTL", "3600"))  # 1 hour
 SEARCH_CACHE_TTL = int(os.environ.get("OFFER_DB_SEARCH_CACHE_TTL", "3600"))  # 1 hour
 STATUS_CACHE_TTL = int(os.environ.get("OFFER_DB_STATUS_CACHE_TTL", "600"))   # 10 min
-TIER_SHEET_CACHE_TTL = int(os.environ.get("OFFER_DB_CACHE_TTL", "21600"))    # 6 hours
+TIER_REPORT_CACHE_TTL = int(os.environ.get("OFFER_DB_TIER_REPORT_CACHE_TTL", "300"))
 PUBLISHERS_CACHE_TTL = int(os.environ.get("OFFER_DB_PUBLISHERS_CACHE_TTL", "3600"))  # 1 hour
 _bg_refresh_running: dict[str, bool] = {}
 _merchant_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -1936,8 +1987,6 @@ def _build_offers_payload(month: str | None = None) -> dict[str, Any]:
             ("completionRate", "Completion Rate"),
             ("recommendedLink", "Recommended Link"),
             ("bestSubCategoryBsr", "Best Sub Category BSR"),
-            ("mayRevenue", "May Revenue"),
-            ("juneRevenue", "June Revenue"),
             ("hasDiscount", "Has Discount"),
             ("discountInfo", "Discount Info"),
             ("dealInfo", "Deal Info"),
@@ -1984,81 +2033,119 @@ def _build_offers_payload(month: str | None = None) -> dict[str, Any]:
         return result
 
 
-def tier_sheet_payload(tier_name: str, month: str | None = None) -> dict[str, Any]:
-    """返回指定 tier 的 sheet 行数据，兼容 sheet_report_data.js 的 shape。
-    现在包含 sheet metadata（reason, phase, publisherCount 等），
-    历史 revenue 从月度指标表动态计算。"""
+def _tier_report_metric_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        str(row.get("merchantId") or "").strip(): row
+        for row in rows
+        if str(row.get("merchantId") or "").strip()
+    }
+
+
+def merge_tier_report_metrics(
+    base_rows: list[dict[str, Any]],
+    order_rows: list[dict[str, Any]],
+    click_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge metrics using the same advertiser click rule as YeahPromos."""
+    orders_by_merchant = _tier_report_metric_map(order_rows)
+    clicks_by_merchant = _tier_report_metric_map(click_rows)
+    merged: list[dict[str, Any]] = []
+    for base in base_rows:
+        row = dict(base)
+        merchant_id = str(row.get("Merchant ID") or "").strip()
+        order = orders_by_merchant.get(merchant_id, {})
+        tracked = clicks_by_merchant.get(merchant_id, {})
+        order_clicks = to_float(order.get("orderClicks"))
+        tracked_clicks = to_float(tracked.get("trackedClicks"))
+        clicks = order_clicks if order_clicks > 0 else tracked_clicks
+        orders = to_float(order.get("orders"))
+        revenue = to_float(order.get("revenue"))
+
+        row.update({
+            "Order count": clean_decimal(orders, 0),
+            "Revenue": clean_decimal(revenue, 2),
+            "Backend EPC": clean_decimal(revenue / clicks if clicks else 0, 6),
+            "AOV": clean_decimal(revenue / orders if orders else 0, 6),
+            "Conversion Rate": clean_decimal(orders / clicks if clicks else 0, 8),
+            "Clicks": clean_decimal(clicks, 0),
+            "DPV": clean_decimal(order.get("dpv"), 0),
+            "ATC": clean_decimal(order.get("atc"), 0),
+            "Payout": clean_decimal(order.get("payout"), 2),
+            "Affiliate Payout": clean_decimal(order.get("affiliatePayout"), 2),
+        })
+        merged.append(row)
+    return merged
+
+
+def tier_sheet_payload(
+    tier_name: str,
+    month: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    compact: bool = False,
+) -> dict[str, Any]:
+    """Return a tier sheet backed by the YeahPromos Amazon report tables."""
     valid_tiers = {"Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"}
     if tier_name not in valid_tiers:
         raise ValueError(f"Invalid tier: {tier_name}. Must be one of {sorted(valid_tiers)}")
-    cache_key = f"tiersheet:{tier_name}:{month or ''}"
+
+    range_start, range_end = resolve_tier_report_date_range(start_date, end_date, month)
+    start_key = range_start.isoformat()
+    end_key = range_end.isoformat()
+    start_day = int(range_start.strftime("%Y%m%d"))
+    end_day = int(range_end.strftime("%Y%m%d"))
+    cache_key = f"tiersheet:{tier_name}:{start_key}:{end_key}:{'compact' if compact else 'full'}"
     now = time.time()
     cached = _tier_sheet_cache.get(cache_key)
-    if cached is not None and now - cached[0] < TIER_SHEET_CACHE_TTL:
+    if cached is not None and now - cached[0] < TIER_REPORT_CACHE_TTL:
         return cached[1]
 
     with db_connection() as conn:
-        if month is None:
-            row = fetch_one(conn, "SELECT MAX(month) AS m FROM cnpscy_oi_offer_monthly_amazon_metrics")
-            month = str(row["m"]) if row and row.get("m") else ""
-
-        # Derive two prior months
-        prev_month1 = ""
-        prev_month2 = ""
-        if month and len(month) == 7 and month[4] == "-":
-            try:
-                y, m_val = int(month[:4]), int(month[5:7])
-                if m_val == 1:
-                    prev_month1 = f"{y-1}-12"; prev_month2 = f"{y-1}-11"
-                elif m_val == 2:
-                    prev_month1 = f"{y}-01"; prev_month2 = f"{y-1}-12"
-                else:
-                    prev_month1 = f"{y}-{m_val-1:02d}"; prev_month2 = f"{y}-{m_val-2:02d}"
-            except (ValueError, IndexError):
-                pass
-
-        # Prior month revenues (single query)
-        prior_rev: dict[str, dict] = {}
-        if prev_month1 or prev_month2:
-            pr_rows = fetch_all(
+        if compact:
+            base_rows = fetch_all(
                 conn,
-                "SELECT merchantId, month, revenue FROM cnpscy_oi_offer_monthly_amazon_metrics WHERE month IN (%s, %s)",
-                (prev_month1 or None, prev_month2 or None),
+                """
+                SELECT
+                    MAX(COALESCE(CAST(a.advert_id AS CHAR), t.merchantId)) AS `Merchant ID`,
+                    MAX(a.advert_name) AS `Merchant Name`,
+                    MAX(a.advert_name) AS `Brand`,
+                    MAX(COALESCE(NULLIF(TRIM(at.advert_type_name), ''), 'Unknown')) AS `Network`,
+                    MAX(a.advert_money) AS `Commission Rate`
+                FROM cnpscy_oi_tier_assignments t
+                LEFT JOIN cnpscy_advert a
+                    ON a.advert_id = CAST(t.merchantId AS UNSIGNED) AND a.advert_isdel = 1
+                LEFT JOIN cnpscy_advert_type at
+                    ON a.advert_advertiser = at.advert_type_id AND at.advert_type_parent_id = 53
+                WHERE t.tier = %s
+                GROUP BY t.merchantId
+                ORDER BY CAST(t.merchantId AS UNSIGNED)
+                """,
+                (tier_name,),
             )
-            for pr in pr_rows:
-                mid = str(pr["merchantId"])
-                prior_rev.setdefault(mid, {})[str(pr["month"])] = pr["revenue"]
-
-        rows = fetch_all(
+        else:
+            base_rows = fetch_all(
             conn,
             """
             SELECT
-                MAX(CAST(a.advert_id AS CHAR)) AS `Merchant ID`,
-                MAX(a.advert_name)    AS `Merchant Name`,
-                MAX(a.advert_name)    AS `Brand`,
+                MAX(COALESCE(CAST(a.advert_id AS CHAR), t.merchantId)) AS `Merchant ID`,
+                MAX(a.advert_name) AS `Merchant Name`,
+                MAX(a.advert_name) AS `Brand`,
                 MAX(COALESCE(NULLIF(TRIM(at.advert_type_name), ''), pr_net.network, 'Unknown')) AS `Network`,
-                MAX(a.advert_money)   AS `Commission Rate`,
-                MAX(m.orders)          AS `Order count`,
-                MAX(m.revenue)         AS `Revenue`,
-                MAX(m.epc)             AS `Backend EPC`,
-                MAX(m.aov)             AS `AOV`,
-                MAX(m.conversionRate)  AS `Conversion Rate`,
-                MAX(m.clicks)          AS `Clicks`,
-                MAX(m.dpv)             AS `DPV`,
-                MAX(m.atc)             AS `ATC`,
-                MAX(vs.color)          AS `Color`,
-                MAX(vs.reason_code)    AS `Visual Status Code`,
-                MAX(vs.reason_text)    AS `Visual Status Reason`,
+                MAX(a.advert_money) AS `Commission Rate`,
+                MAX(vs.color) AS `Color`,
+                MAX(vs.reason_code) AS `Visual Status Code`,
+                MAX(vs.reason_text) AS `Visual Status Reason`,
+                MAX(vs.source) AS `Visual Status Source`,
                 MAX(cat.mainCategory) AS `Category`,
-                MAX(sm.region)         AS `COUNTRY`,
-                MAX(sm.reason)         AS `Tier Reason`,
+                MAX(sm.region) AS `COUNTRY`,
+                MAX(sm.reason) AS `Tier Reason`,
                 MAX(sm.recommendation) AS `Recommendation`,
-                MAX(sm.phase)          AS `Phase`,
+                MAX(sm.phase) AS `Phase`,
                 MAX(sm.publisherCount) AS `Publisher Count`,
-                MAX(sm.successRate)    AS `Success Rate`,
+                MAX(sm.successRate) AS `Success Rate`,
                 MAX(sm.publisherCountJune) AS `Publisher Count June`,
                 MAX(sm.successRateJune) AS `Success Rate June`,
-                MAX(sm.paymentCycle)   AS `Payment Cycle`,
+                MAX(sm.paymentCycle) AS `Payment Cycle`,
                 MAX(sm.completionRate) AS `Completion Rate`,
                 MAX(sm.recommendedLink) AS `Recommended Link`,
                 MAX(sm.bestSubCategoryBsr) AS `Best Sub Category BSR`
@@ -2073,44 +2160,75 @@ def tier_sheet_payload(tier_name: str, month: str | None = None) -> dict[str, An
             LEFT JOIN cnpscy_advert_type at
                 ON a.advert_advertiser = at.advert_type_id AND at.advert_type_parent_id = 53
             LEFT JOIN cnpscy_oi_tier_visual_status vs ON t.merchantId = vs.merchantId
-            LEFT JOIN cnpscy_oi_offer_monthly_amazon_metrics m
-                ON t.merchantId = m.merchantId AND m.month = %s
             LEFT JOIN (
-                SELECT mc2.merchantId,
-                       MAX(c2_main.categoryName) AS mainCategory,
-                       MAX(c2_sub.categoryName) AS subCategory,
-                       MAX(c2_main.categoryNameCn) AS mainCategoryCn,
-                       MAX(c2_sub.categoryNameCn) AS subCategoryCn
+                SELECT mc2.merchantId, MAX(c2_main.categoryName) AS mainCategory
                 FROM cnpscy_oi_merchant_category mc2
                 LEFT JOIN cnpscy_oi_category c2_main
                     ON mc2.categoryId = c2_main.categoryId AND c2_main.level = 1
-                LEFT JOIN cnpscy_oi_category c2_sub
-                    ON mc2.categoryId = c2_sub.categoryId AND c2_sub.level = 2
                 GROUP BY mc2.merchantId
             ) cat ON t.merchantId = cat.merchantId
             LEFT JOIN cnpscy_oi_offer_sheet_metadata sm ON t.merchantId = sm.merchantId
             WHERE t.tier = %s
             GROUP BY t.merchantId
+            ORDER BY CAST(t.merchantId AS UNSIGNED)
             """,
-            (month, tier_name),
+            (tier_name,),
+            )
+        order_rows = fetch_all(
+            conn,
+            """
+            SELECT
+                CAST(o.advert_id AS CHAR) AS merchantId,
+                SUM(COALESCE(o.total_purchases, 0)) AS orders,
+                SUM(COALESCE(o.amount, 0)) AS revenue,
+                SUM(COALESCE(o.payout, 0)) AS payout,
+                SUM(COALESCE(o.aff_payout, 0)) AS affiliatePayout,
+                SUM(COALESCE(o.detail_page_views, 0)) AS dpv,
+                SUM(COALESCE(o.add_to_carts, 0)) AS atc,
+                SUM(COALESCE(o.total_clicks, 0)) AS orderClicks
+            FROM cnpscy_amazon_order o
+            INNER JOIN cnpscy_oi_tier_assignments t
+                ON o.advert_id = CAST(t.merchantId AS UNSIGNED)
+            WHERE t.tier = %s AND o.order_time_day BETWEEN %s AND %s
+            GROUP BY o.advert_id
+            """,
+            (tier_name, start_day, end_day),
+        )
+        click_rows = fetch_all(
+            conn,
+            """
+            SELECT
+                CAST(c.advert_id AS CHAR) AS merchantId,
+                SUM(COALESCE(c.click, 0)) AS trackedClicks
+            FROM cnpscy_amazon_click c
+            INNER JOIN cnpscy_oi_tier_assignments t
+                ON c.advert_id = CAST(t.merchantId AS UNSIGNED)
+            WHERE t.tier = %s AND c.time_day BETWEEN %s AND %s
+            GROUP BY c.advert_id
+            """,
+            (tier_name, start_day, end_day),
         )
 
-        # Merge prior month revenues
-        for r in rows:
-            mid = str(r["Merchant ID"])
-            pr = prior_rev.get(mid, {})
-            r["May Revenue"] = str(float(pr[prev_month1])) if prev_month1 and prev_month1 in pr else ""
-            r["June Revenue"] = str(float(pr[prev_month2])) if prev_month2 and prev_month2 in pr else ""
-
-        headers = list(rows[0].keys()) if rows else []
-        return {
-            "ok": True,
-            "checkedAt": utc_now_iso(),
-            "tier": tier_name,
-            "month": month,
-            "headers": headers,
-            "rows": [{k: str(v) if v is not None else "" for k, v in r.items()} for r in rows],
-        }
+    rows = merge_tier_report_metrics(base_rows, order_rows, click_rows)
+    headers = list(rows[0].keys()) if rows else []
+    result = {
+        "ok": True,
+        "checkedAt": utc_now_iso(),
+        "tier": tier_name,
+        "month": range_start.strftime("%Y-%m") if range_start.year == range_end.year and range_start.month == range_end.month else "",
+        "startDate": start_key,
+        "endDate": end_key,
+        "compact": compact,
+        "headers": headers,
+        "rows": [{key: str(value) if value is not None else "" for key, value in row.items()} for row in rows],
+        "source": {
+            "report": "YeahPromos Amazon Report",
+            "dimension": "advert_id",
+            "metricsTables": ["cnpscy_amazon_order", "cnpscy_amazon_click"],
+            "merchantTables": ["cnpscy_advert", "cnpscy_advert_type"],
+            "tierTable": "cnpscy_oi_tier_assignments",
+        },
+    }
     _tier_sheet_cache[cache_key] = (now, result)
     return result
 

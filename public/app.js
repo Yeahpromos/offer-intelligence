@@ -11,7 +11,7 @@
   const TIER_VISUAL_STATUS_REASON_KEYS = ["visualStatusReason", "visual_status_reason", "Visual Status Reason", "Reason Text"];
   const TIER_VISUAL_STATUS_SOURCE_KEYS = ["visualStatusSource", "visual_status_source", "Visual Status Source", "Source"];
   const TIER_OVERRIDE_KEY = "offerTierOverrides";
-  const TIER_COLUMN_KEY = "offerTierVisibleColumns";
+  const TIER_COLUMN_KEY = "offerTierVisibleColumns.v4";
   const offersByMerchantId = new Map();
   const offerGroupsByMerchantId = new Map();
   const originalOfferTiers = [];
@@ -40,6 +40,30 @@
   const AUTO_PAYMENT_SYNC_KEY = "offerPaymentLastAutoSync";
   const AUTO_PAYMENT_SYNC_INTERVAL_MS = 60 * 60 * 1000;
   const STANDARD_CATEGORY_REPORT_TIERS = ["Tier 1", "Tier 2", "Tier 3", "Tier 4"];
+  const REMOVED_TIER_REVENUE_HEADERS = new Set(["May", "June"].map((month) => `${month} Revenue`));
+  const LIVE_TIER_METRIC_HEADERS = new Set([
+    "Order count", "Revenue", "Backend EPC", "AOV", "Conversion", "Conversion Rate",
+    "Clicks", "DPV", "ATC", "Payout", "Affiliate Payout"
+  ]);
+  const DEFAULT_TIER_VISIBLE_COLUMNS = [
+    "Merchant ID",
+    "Merchant Name",
+    "Brand",
+    "Network",
+    "Commission Rate",
+    "Category",
+    "Clicks",
+    "DPV",
+    "ATC",
+    "AOV",
+    "Conversion Rate",
+    "Revenue"
+  ];
+  const DEFAULT_TIER_COLUMN_ALIASES = {
+    "Network": ["Network", "Agency"],
+    "Conversion Rate": ["Conversion Rate", "Conversion", "CVR"]
+  };
+  const TIER_TABLE_PAGE_SIZE = 500;
   const CATEGORY_REPORT_TIER_OPTIONS = [...STANDARD_CATEGORY_REPORT_TIERS, "BLACK TIER"];
   const TIER_SHEET_EXPANDABLE_TIERS = new Set(STANDARD_CATEGORY_REPORT_TIERS);
   const TIER_SHEET_MOVE_TARGETS = CATEGORY_REPORT_TIER_OPTIONS.slice();
@@ -64,8 +88,11 @@
   const DB_MERCHANT_UI_API = "/api/ui/db/merchant";
   const DB_SEARCH_UI_API = "/api/ui/db/search";
   const DB_TIER_SUMMARY_API = "/api/ui/db/tier-summary";
+  const DB_TIER_SHEET_UI_API = "/api/ui/db/tier_sheet";
   const DB_STATUS_AUTO_REFRESH_MS = 5 * 60 * 1000;
   const PAYMENT_TODAY = new Date(`${localDateKey(new Date())}T00:00:00`);
+  const DEFAULT_TIER_REPORT_END_DATE = localDateKey(new Date());
+  const DEFAULT_TIER_REPORT_START_DATE = `${DEFAULT_TIER_REPORT_END_DATE.slice(0, 7)}-01`;
   const originalTierSheetRows = new Map();
   const originalTierSheetRowIndex = new Map();
   const dbMerchantCache = new Map();
@@ -115,6 +142,7 @@
     expandedTierSheet: false,
     selectedTierRowKeys: new Set(),
     visibleTierRowKeys: [],
+    tierTablePages: { "Tier 4": 1 },
     manualTierMoves: loadManualTierMoves(),
     sharedTierMovesConfigured: false,
     sharedTierMovesLoading: false,
@@ -126,6 +154,14 @@
       country: "all",
       minEpc: "",
       minRevenue: ""
+    },
+    tierReport: {
+      startDate: DEFAULT_TIER_REPORT_START_DATE,
+      endDate: DEFAULT_TIER_REPORT_END_DATE,
+      payloads: new Map(),
+      activeKeys: new Map(),
+      loadingKeys: new Set(),
+      errors: new Map()
     },
     tierColumnPanelOpen: false,
     tierVisibleColumns: loadTierVisibleColumns(),
@@ -263,6 +299,10 @@
     tierCategorySummary: document.getElementById("tierCategorySummary"),
     tierTableTitle: document.getElementById("tierTableTitle"),
     tierTableCount: document.getElementById("tierTableCount"),
+    tierPagination: document.getElementById("tierPagination"),
+    tierPagePrev: document.getElementById("tierPagePrev"),
+    tierPageIndicator: document.getElementById("tierPageIndicator"),
+    tierPageNext: document.getElementById("tierPageNext"),
     tierTablePanel: document.getElementById("tierTablePanel"),
     tierExpand: document.getElementById("expandTierSheet"),
     tierOverlayClose: document.getElementById("closeTierSheetOverlay"),
@@ -280,6 +320,10 @@
     tierSheetHead: document.getElementById("tierSheetHead"),
     tierSheetRows: document.getElementById("tierSheetRows"),
     tierSheetSearch: document.getElementById("tierSheetSearch"),
+    tierStartDate: document.getElementById("tierStartDate"),
+    tierEndDate: document.getElementById("tierEndDate"),
+    tierDateApply: document.getElementById("tierDateApply"),
+    tierDateStatus: document.getElementById("tierDateStatus"),
     tierSheetNetwork: document.getElementById("tierSheetNetwork"),
     tierSheetCountry: document.getElementById("tierSheetCountry"),
     tierSheetMinEpc: document.getElementById("tierSheetMinEpc"),
@@ -546,9 +590,10 @@
       "tier.imported": "从 Google Sheets 导入",
       "tier.notFound": "未找到 Google Sheet 标签页",
       "tier.noMatch": "当前导出中没有找到匹配的 Sheet 标签页。",
-      "tier.columnsTitle": "信息字段",
+      "tier.columnsButton": "显示",
+      "tier.columnsTitle": "显示字段",
       "tier.columnsHint": "选择要显示的字段",
-      "tier.coreColumns": "核心",
+      "tier.coreColumns": "默认",
       "tier.allColumns": "全部",
       "language.button.zh": "中文简体",
       "language.button.en": "English",
@@ -2487,6 +2532,7 @@
       return;
     }
     updateReportSort(state.tierSheetSort, key);
+    state.tierTablePages[state.selectedTierPage] = 1;
     renderTierPage(state.selectedTierPage);
   }
 
@@ -8889,9 +8935,10 @@
 
   function tierRowBaseKey(row, tierName, index) {
     const merchantId = tierRowMerchantId(row);
-    if (merchantId) return `merchant:${merchantId}:${tierName}:${index}`;
+    if (merchantId) return `merchant:${merchantId}:${tierName}`;
     const merchantName = normalize(tierRowMerchantName(row));
-    return `row:${tierName}:${index}:${merchantName || "unknown"}`;
+    if (merchantName) return `row:${tierName}:${merchantName}`;
+    return `row:${tierName}:${index}:unknown`;
   }
 
   function cloneTierRow(row, key, sourceTier, currentTier) {
@@ -8912,6 +8959,163 @@
     });
   }
 
+  function tierReportRange(startDate, endDate) {
+    const start = String(startDate || "").trim();
+    const end = String(endDate || "").trim();
+    const first = start || end;
+    const last = end || start;
+    const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (!first || !last) return { ok: false, error: "Choose a date or date range." };
+    if (!isoDatePattern.test(first) || !isoDatePattern.test(last)) {
+      return { ok: false, error: "Use a valid date." };
+    }
+    const firstDate = new Date(`${first}T00:00:00`);
+    const lastDate = new Date(`${last}T00:00:00`);
+    if (Number.isNaN(firstDate.getTime()) || Number.isNaN(lastDate.getTime())) {
+      return { ok: false, error: "Use a valid date." };
+    }
+    if (firstDate > lastDate) return { ok: false, error: "Start date must be before end date." };
+    const days = Math.round((lastDate - firstDate) / 86400000) + 1;
+    if (days > 366) return { ok: false, error: "Date range cannot exceed 366 days." };
+    return { ok: true, startDate: first, endDate: last, days };
+  }
+
+  function tierReportKey(tierName, startDate = state.tierReport.startDate, endDate = state.tierReport.endDate) {
+    return `${tierName}:${startDate}:${endDate}`;
+  }
+
+  function tierReportDependencyTiers(tierName, moves = state.manualTierMoves) {
+    const dependencies = new Set([tierName]);
+    Object.values(moves || {}).forEach((move) => {
+      const sourceTier = canonicalTierName(move && move.sourceTier);
+      const targetTier = canonicalTierName(move && move.targetTier);
+      if (targetTier === tierName && isTierMoveTarget(sourceTier)) dependencies.add(sourceTier);
+    });
+    return Array.from(dependencies);
+  }
+
+  function tierReportRangeLabel(startDate, endDate) {
+    return startDate === endDate ? startDate : `${startDate} – ${endDate}`;
+  }
+
+  function cacheOriginalTierSheetRowsForTier(tierName, rows) {
+    Array.from(originalTierSheetRowIndex.entries()).forEach(([key, value]) => {
+      if (value && value.sourceTier === tierName) originalTierSheetRowIndex.delete(key);
+    });
+    const cachedRows = (rows || []).map((row, index) => {
+      const key = tierRowBaseKey(row, tierName, index);
+      const copy = cloneTierRow(row, key, tierName, tierName);
+      originalTierSheetRowIndex.set(key, { sourceTier: tierName, row: copy });
+      return copy;
+    });
+    originalTierSheetRows.set(tierName, cachedRows);
+  }
+
+  function activateTierReportPayload(tierName, key, payload) {
+    if (!payload || state.tierReport.activeKeys.get(tierName) === key) return;
+    let sheet = sheetByName(tierName);
+    if (!sheet) {
+      sheet = { name: tierName, title: tierName, headers: [], rows: [] };
+      sheetReport.sheets = sheetReport.sheets || [];
+      sheetReport.sheets.push(sheet);
+    }
+    sheetReport.tierSheets = sheetReport.tierSheets || [];
+    if (!sheetReport.tierSheets.includes(tierName)) sheetReport.tierSheets.push(tierName);
+    sheet.title = tierName;
+    const existingRows = originalTierSheetRows.get(tierName) || sheet.rows || [];
+    const existingByMerchant = new Map(existingRows.map((row) => [tierRowMerchantId(row), row]));
+    sheet.rows = Array.isArray(payload.rows)
+      ? payload.rows.map((row) => ({ ...(existingByMerchant.get(tierRowMerchantId(row)) || {}), ...row }))
+      : [];
+    sheet.headers = Array.from(new Set([
+      ...((sheet.headers || []).filter((header) => !REMOVED_TIER_REVENUE_HEADERS.has(header) && !LIVE_TIER_METRIC_HEADERS.has(header))),
+      ...(payload.headers || [])
+    ]));
+    sheet.reportRange = { startDate: payload.startDate, endDate: payload.endDate };
+    sheet.reportSource = payload.source || {};
+    cacheOriginalTierSheetRowsForTier(tierName, sheet.rows);
+    applyManualTierMoves();
+    state.tierReport.activeKeys.set(tierName, key);
+  }
+
+  async function loadTierReport(tierName, startDate, endDate) {
+    const key = tierReportKey(tierName, startDate, endDate);
+    if (state.tierReport.payloads.has(key) || state.tierReport.loadingKeys.has(key)) return;
+    state.tierReport.loadingKeys.add(key);
+    state.tierReport.errors.delete(key);
+    if (state.page === "tier" && state.selectedTierPage === tierName) renderTierPage(tierName);
+    try {
+      const params = new URLSearchParams({ tier: tierName, start_date: startDate, end_date: endDate, compact: "1" });
+      const response = await fetch(`${DB_TIER_SHEET_UI_API}?${params.toString()}`, {
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload || payload.ok === false) {
+        throw new Error(payload && payload.error ? payload.error : `Request failed (${response.status})`);
+      }
+      if (payload.startDate !== startDate || payload.endDate !== endDate) {
+        throw new Error("Database returned a different date range.");
+      }
+      state.tierReport.payloads.set(key, payload);
+    } catch (error) {
+      state.tierReport.errors.set(key, error && error.message ? error.message : String(error));
+    } finally {
+      state.tierReport.loadingKeys.delete(key);
+      const selectedTier = state.selectedTierPage;
+      if (
+        state.page === "tier"
+        && key === tierReportKey(tierName)
+        && tierReportDependencyTiers(selectedTier).includes(tierName)
+      ) {
+        renderTierPage(selectedTier);
+      }
+    }
+  }
+
+  function setTierReportControls(tierName) {
+    const isLiveTier = STANDARD_CATEGORY_REPORT_TIERS.includes(tierName);
+    const key = tierReportKey(tierName);
+    const loading = state.tierReport.loadingKeys.has(key);
+    const error = state.tierReport.errors.get(key) || "";
+    els.tierStartDate.value = state.tierReport.startDate;
+    els.tierEndDate.value = state.tierReport.endDate;
+    els.tierStartDate.disabled = !isLiveTier || loading;
+    els.tierEndDate.disabled = !isLiveTier || loading;
+    els.tierDateApply.disabled = !isLiveTier || loading;
+    els.tierDateStatus.classList.toggle("loading", loading);
+    els.tierDateStatus.classList.toggle("error", Boolean(error));
+    if (!isLiveTier) {
+      els.tierDateStatus.textContent = "Date range is available for Tier 1–4.";
+    } else if (loading) {
+      els.tierDateStatus.textContent = "Loading YeahPromos data…";
+    } else if (error) {
+      els.tierDateStatus.textContent = error;
+    } else if (state.tierReport.payloads.has(key)) {
+      els.tierDateStatus.textContent = `${tierReportRangeLabel(state.tierReport.startDate, state.tierReport.endDate)} · YeahPromos DB`;
+    } else {
+      els.tierDateStatus.textContent = "Choose one date or an inclusive range.";
+    }
+  }
+
+  function applyTierReportDateRange() {
+    const range = tierReportRange(els.tierStartDate.value, els.tierEndDate.value);
+    if (!range.ok) {
+      els.tierDateStatus.textContent = range.error;
+      els.tierDateStatus.classList.add("error");
+      return;
+    }
+    state.tierReport.startDate = range.startDate;
+    state.tierReport.endDate = range.endDate;
+    resetTierTablePage("Tier 4");
+    state.tierReport.errors.delete(tierReportKey(state.selectedTierPage));
+    els.tierStartDate.value = range.startDate;
+    els.tierEndDate.value = range.endDate;
+    state.selectedTierRowKeys.clear();
+    setTierMoveStatus("");
+    renderTierPage(state.selectedTierPage);
+  }
+
   function addTierRowToBucket(rowsByTier, keysByTier, tierName, row) {
     const key = row.__tierRowKey || tierRowBaseKey(row, tierName, rowsByTier.get(tierName).length);
     const keys = keysByTier.get(tierName);
@@ -8921,10 +9125,35 @@
     return true;
   }
 
+  function rekeyManualTierMoves() {
+    const currentMoves = state.manualTierMoves || {};
+    const nextMoves = {};
+    let changed = false;
+    Object.entries(currentMoves).forEach(([key, move]) => {
+      const resolvedKey = originalTierSheetRowIndex.has(key)
+        ? key
+        : originalMoveKeyForRecord({ ...move, key: "" });
+      if (!resolvedKey) {
+        changed = true;
+        return;
+      }
+      const original = originalTierSheetRowIndex.get(resolvedKey);
+      nextMoves[resolvedKey] = {
+        ...move,
+        sourceTier: original.sourceTier,
+        merchantId: String(move.merchantId || tierRowMerchantId(original.row) || "").trim(),
+        merchantName: String(move.merchantName || tierRowMerchantName(original.row) || "").trim()
+      };
+      if (resolvedKey !== key) changed = true;
+    });
+    state.manualTierMoves = nextMoves;
+    return changed;
+  }
+
   function applyManualTierMoves() {
     const rowsByTier = new Map(TIER_SHEET_MOVE_TARGETS.map((tierName) => [tierName, []]));
     const keysByTier = new Map(TIER_SHEET_MOVE_TARGETS.map((tierName) => [tierName, new Set()]));
-    let movesChanged = false;
+    let movesChanged = rekeyManualTierMoves();
 
     originalTierSheetRows.forEach((rows, tierName) => {
       rows.forEach((row) => {
@@ -9028,7 +9257,7 @@
     return `<div class="logic-summary">
       <div>
         <strong>${escapeHtml(logic.title)}</strong>
-        <p>${escapeHtml(logic.description || "Tier logic is imported from the Google Sheet.")}</p>
+        <p>${escapeHtml(logic.description || "Tier assignments and metadata are loaded from the offer database.")}</p>
       </div>
       ${detailHtml}
     </div>`;
@@ -9130,14 +9359,59 @@
     }
   }
 
-  function renderSheetTable(sheet, titleEl, countEl, headEl, rowsEl, customRows = null) {
+  function tierTablePagination(rows, page, pageSize = TIER_TABLE_PAGE_SIZE) {
+    const allRows = Array.isArray(rows) ? rows : [];
+    const safePageSize = Math.max(1, Number(pageSize) || TIER_TABLE_PAGE_SIZE);
+    const totalPages = Math.max(1, Math.ceil(allRows.length / safePageSize));
+    const currentPage = Math.min(totalPages, Math.max(1, Number(page) || 1));
+    const startIndex = (currentPage - 1) * safePageSize;
+    const endIndex = Math.min(allRows.length, startIndex + safePageSize);
+    return {
+      page: currentPage,
+      pageSize: safePageSize,
+      totalPages,
+      totalRows: allRows.length,
+      startIndex,
+      endIndex,
+      rows: allRows.slice(startIndex, endIndex)
+    };
+  }
+
+  function renderTierPagination(tierName, pagination) {
+    const visible = tierName === "Tier 4" && Boolean(pagination);
+    els.tierPagination.classList.toggle("hidden", !visible);
+    if (!visible) return;
+    els.tierPageIndicator.textContent = `Page ${pagination.page.toLocaleString()} of ${pagination.totalPages.toLocaleString()}`;
+    els.tierPagePrev.disabled = pagination.page <= 1;
+    els.tierPageNext.disabled = pagination.page >= pagination.totalPages;
+  }
+
+  function changeTierTablePage(delta) {
+    const tierName = state.selectedTierPage;
+    if (tierName !== "Tier 4") return;
+    const currentPage = Number(state.tierTablePages[tierName]) || 1;
+    state.tierTablePages[tierName] = Math.max(1, currentPage + delta);
+    state.selectedTierRowKeys.clear();
+    setTierMoveStatus("");
+    renderTierPage(tierName);
+  }
+
+  function resetTierTablePage(tierName = state.selectedTierPage) {
+    state.tierTablePages[tierName] = 1;
+  }
+
+  function renderSheetTable(sheet, titleEl, countEl, headEl, rowsEl, customRows = null, paginationOptions = null) {
     const headers = sheet.headers || [];
     const allDisplayHeaders = displayHeadersForSheet(sheet, headers);
     const displayHeaders = visibleHeadersForSheet(sheet, allDisplayHeaders);
     const sourceRows = customRows || sheet.rows || [];
-    const rows = headers.length
+    const sortedRows = headers.length
       ? sortReportRows(sourceRows, state.tierSheetSort, (row, key) => row[key])
       : sourceRows;
+    const pagination = paginationOptions
+      ? tierTablePagination(sortedRows, paginationOptions.page, paginationOptions.pageSize)
+      : null;
+    const rows = pagination ? pagination.rows : sortedRows;
     const grid = sheet.grid || [];
     const selectable = isTierDataSheet(sheet);
     titleEl.textContent = `${sheet.name} ${t("sheet.targetRecords", "Sheet Records")}`;
@@ -9151,7 +9425,12 @@
       }
       state.visibleTierRowKeys = selectable ? rows.map(tierRowSelectionKey) : [];
       if (selectable) pruneTierSelectionToVisible();
-      countEl.textContent = `${rows.length.toLocaleString()} rows / ${displayHeaders.length.toLocaleString()} of ${allDisplayHeaders.length.toLocaleString()} columns`;
+      if (pagination) state.tierTablePages[sheet.name] = pagination.page;
+      renderTierPagination(sheet.name, pagination);
+      const renderedLabel = pagination
+        ? ` / showing ${pagination.totalRows ? pagination.startIndex + 1 : 0}–${pagination.endIndex} on page ${pagination.page}`
+        : "";
+      countEl.textContent = `${sortedRows.length.toLocaleString()} rows${renderedLabel} / ${displayHeaders.length.toLocaleString()} of ${allDisplayHeaders.length.toLocaleString()} columns`;
       headEl.innerHTML = `<tr>${selectable ? tierSelectionHeaderHtml() : ""}${displayHeaders.map((header) => sortableHeaderHtml(header, state.tierSheetSort, "tier")).join("")}</tr>`;
       rowsEl.innerHTML = rows.map((row) => (
         `<tr class="${escapeHtml(tierRowClass(sheet, row))}" data-tier-row-key="${escapeHtml(tierRowSelectionKey(row))}">${selectable ? tierSelectionCellHtml(row) : ""}${displayHeaders.map((header) => `<td>${sheetCellHtml(sheet, row, header)}</td>`).join("")}</tr>`
@@ -9161,6 +9440,7 @@
     }
 
     renderTierColumnPanel(sheet, [], []);
+    renderTierPagination(sheet.name, null);
     state.visibleTierRowKeys = [];
     state.selectedTierRowKeys.clear();
     renderTierColumnPanel(sheet, [], []);
@@ -9230,7 +9510,7 @@
   function displayHeadersForSheet(sheet, headers) {
     if (!sheet || !(sheetReport.tierSheets || []).includes(sheet.name)) return headers || [];
     if (sheet.name !== "Tier 1") return headers || [];
-    const desired = ["May Revenue", "June Revenue", "Completion Rate"];
+    const desired = ["Completion Rate"];
     const output = [];
     (headers || []).forEach((header) => {
       if (desired.includes(header)) return;
@@ -9250,17 +9530,28 @@
     return saved.filter((header) => headers.includes(header));
   }
 
+  function defaultTierHeadersForSheet(sheet, headers) {
+    const allHeaders = headers || [];
+    if (!sheet || !(sheetReport.tierSheets || []).includes(sheet.name)) return allHeaders;
+    const available = new Set(allHeaders);
+    const selected = [];
+    DEFAULT_TIER_VISIBLE_COLUMNS.forEach((preferredHeader) => {
+      const candidates = DEFAULT_TIER_COLUMN_ALIASES[preferredHeader] || [preferredHeader];
+      const matchedHeader = candidates.find((header) => available.has(header));
+      if (matchedHeader && !selected.includes(matchedHeader)) selected.push(matchedHeader);
+    });
+    return selected.length ? selected : allHeaders;
+  }
+
   function visibleHeadersForSheet(sheet, headers) {
     const allHeaders = headers || [];
     if (!sheet || !(sheetReport.tierSheets || []).includes(sheet.name)) return allHeaders;
     const selected = selectedHeadersForTierSheet(sheet.name, allHeaders);
-    return selected.length ? allHeaders.filter((header) => selected.includes(header)) : allHeaders;
+    return selected.length ? selected : defaultTierHeadersForSheet(sheet, allHeaders);
   }
 
   function coreHeadersForSheet(sheet, headers) {
-    const preferred = ["Merchant ID", "Merchant Name", "Network", "Agency", "Backend EPC", "EPC"];
-    const selected = preferred.filter((header) => headers.includes(header));
-    return selected.length ? selected : headers.slice(0, Math.min(6, headers.length));
+    return defaultTierHeadersForSheet(sheet, headers);
   }
 
   function setTierVisibleHeaders(sheet, headers) {
@@ -9286,7 +9577,11 @@
       return;
     }
     const visible = new Set(visibleHeaders);
-    els.tierColumnList.innerHTML = allHeaders.map((header) => {
+    const pickerHeaders = [
+      ...visibleHeaders,
+      ...allHeaders.filter((header) => !visible.has(header))
+    ];
+    els.tierColumnList.innerHTML = pickerHeaders.map((header) => {
       const id = `tier-column-${safeFilePart(sheet.name)}-${safeFilePart(header)}`;
       return `<label class="column-check" for="${escapeHtml(id)}">
         <input id="${escapeHtml(id)}" type="checkbox" value="${escapeHtml(header)}"${visible.has(header) ? " checked" : ""} />
@@ -9324,8 +9619,6 @@
       else if (header === "Order count") row[header] = number(offer.orders).toLocaleString();
       else if (header === "Backend EPC" || header === "EPC") row[header] = shortEpc(offer.epc);
       else if (header === "Revenue") row[header] = shortMoney(offer.salesAmount);
-      else if (header === "May Revenue") row[header] = shortMoney(offer.mayRevenue);
-      else if (header === "June Revenue") row[header] = shortMoney(offer.juneRevenue);
       else if (header === "Completion Rate") row[header] = shortPct(offer.completionRate);
       else if (header === "Payment Cycle") row[header] = offer.paymentCycle ? `${offer.paymentCycle}` : "";
       else if (header === "Asins") row[header] = offer.asinsText || (offer.topAsins || []).join(", ");
@@ -9606,7 +9899,7 @@
       .filter((row) => state.tierSheetFilters.network === "all" || String(rowValue(row, ["Network", "Agency"])) === state.tierSheetFilters.network)
       .filter((row) => state.tierSheetFilters.country === "all" || String(rowValue(row, ["COUNTRY", "Country"])) === state.tierSheetFilters.country)
       .filter((row) => parseSheetNumber(rowValue(row, ["Backend EPC", "EPC"])) >= minEpc)
-      .filter((row) => parseSheetNumber(rowValue(row, ["Revenue", "June Revenue", "May Revenue"])) >= minRevenue);
+      .filter((row) => parseSheetNumber(rowValue(row, ["Revenue", "Sales Amount", "Sales"])) >= minRevenue);
   }
 
   function tierRowMerchantId(row) {
@@ -9638,7 +9931,7 @@
   }
 
   function tierRowRevenue(row) {
-    return tierRowNumber(row, ["Revenue", "June Revenue", "May Revenue", "Sales Amount", "Sales"]);
+    return tierRowNumber(row, ["Revenue", "Sales Amount", "Sales"]);
   }
 
   function tierRowOrders(row) {
@@ -9815,17 +10108,69 @@
     }));
   }
 
+  function renderTierReportPending(tierName, message) {
+    els.tierPageTitle.textContent = tierName;
+    els.tierPageSubtitle.textContent = `${tierReportRangeLabel(state.tierReport.startDate, state.tierReport.endDate)} / YeahPromos Amazon report database`;
+    els.tierPageSummary.innerHTML = "";
+    els.tierPageNotes.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    els.tierCategorySummary.innerHTML = "";
+    els.tierSheetHead.innerHTML = "";
+    els.tierSheetRows.innerHTML = `<tr><td>${escapeHtml(message)}</td></tr>`;
+    els.tierTableTitle.textContent = "Amazon report records";
+    els.tierTableCount.textContent = "";
+    renderTierPagination(tierName, null);
+    renderTierColumnPanel(null, [], []);
+    state.visibleTierRowKeys = [];
+    state.selectedTierRowKeys.clear();
+    syncTierBulkControls();
+    closeTierSheetOverlay({ restoreFocus: false });
+    syncTierSheetOverlay();
+  }
+
   function renderTierPage(tierName) {
+    setTierReportControls(tierName);
+    if (STANDARD_CATEGORY_REPORT_TIERS.includes(tierName)) {
+      const dependencies = tierReportDependencyTiers(tierName);
+      const missing = dependencies.filter((dependencyTier) => (
+        !state.tierReport.payloads.has(tierReportKey(dependencyTier))
+      ));
+      if (missing.length) {
+        const failedTier = missing.find((dependencyTier) => state.tierReport.errors.has(tierReportKey(dependencyTier)));
+        const error = failedTier ? state.tierReport.errors.get(tierReportKey(failedTier)) : "";
+        renderTierReportPending(
+          tierName,
+          error
+            ? `Could not load ${failedTier} for the selected range: ${error}`
+            : "Loading the selected YeahPromos report range…"
+        );
+        missing.forEach((dependencyTier) => {
+          const dependencyKey = tierReportKey(dependencyTier);
+          if (!state.tierReport.errors.has(dependencyKey)) {
+            loadTierReport(dependencyTier, state.tierReport.startDate, state.tierReport.endDate);
+          }
+        });
+        return;
+      }
+      dependencies.forEach((dependencyTier) => {
+        const dependencyKey = tierReportKey(dependencyTier);
+        activateTierReportPayload(dependencyTier, dependencyKey, state.tierReport.payloads.get(dependencyKey));
+      });
+    }
     const sheet = sheetByName(tierName);
     els.tierPageTitle.textContent = tierName;
-    els.tierPageSubtitle.textContent = sheet ? `${sheet.title} / ${t("tier.imported", "imported from Google Sheets")}` : t("tier.notFound", "Google Sheet tab not found");
+    els.tierPageSubtitle.textContent = sheet
+      ? (STANDARD_CATEGORY_REPORT_TIERS.includes(tierName)
+        ? `${tierReportRangeLabel(state.tierReport.startDate, state.tierReport.endDate)} / YeahPromos Amazon report database`
+        : `${sheet.title} / database snapshot`)
+      : "Tier data not found";
     if (!sheet) {
       els.tierPageSummary.innerHTML = "";
-      els.tierPageNotes.innerHTML = `<p>${escapeHtml(t("tier.noMatch", "No matching sheet tab was found in the current export."))}</p>`;
+      els.tierPageNotes.innerHTML = `<p>${escapeHtml(t("tier.noMatch", "No matching tier data was found."))}</p>`;
       els.tierCategorySummary.innerHTML = "";
       els.tierSheetHead.innerHTML = "";
       els.tierSheetRows.innerHTML = "";
       els.tierTableCount.textContent = "";
+      renderTierPagination(tierName, null);
       renderTierColumnPanel(null, [], []);
       state.visibleTierRowKeys = [];
       state.selectedTierRowKeys.clear();
@@ -9839,7 +10184,10 @@
     els.tierPageNotes.innerHTML = renderTierLogicSummary(sheet);
     const filteredRows = getFilteredTierSheetRows(sheet);
     renderTierCategorySummary(sheet, filteredRows);
-    renderSheetTable(sheet, els.tierTableTitle, els.tierTableCount, els.tierSheetHead, els.tierSheetRows, filteredRows);
+    const pagination = tierName === "Tier 4"
+      ? { page: state.tierTablePages[tierName] || 1, pageSize: TIER_TABLE_PAGE_SIZE }
+      : null;
+    renderSheetTable(sheet, els.tierTableTitle, els.tierTableCount, els.tierSheetHead, els.tierSheetRows, filteredRows, pagination);
     syncTierSheetOverlay();
   }
 
@@ -11411,7 +11759,9 @@
   }
 
   function updatePageModeClass(page = state.page) {
-    if (document.body) document.body.classList.toggle("dashboard-mode", page === "dashboard");
+    if (!document.body) return;
+    document.body.classList.toggle("dashboard-mode", page === "dashboard");
+    document.body.classList.toggle("tier-scroll-mode", page === "tier");
   }
 
   function switchPage(page) {
@@ -11543,11 +11893,19 @@
         switchPage("tier");
       });
     });
-    els.tierSheetSearch.addEventListener("input", () => { state.tierSheetFilters.search = els.tierSheetSearch.value; renderTierPage(state.selectedTierPage); });
-    els.tierSheetNetwork.addEventListener("change", () => { state.tierSheetFilters.network = els.tierSheetNetwork.value; renderTierPage(state.selectedTierPage); });
-    els.tierSheetCountry.addEventListener("change", () => { state.tierSheetFilters.country = els.tierSheetCountry.value; renderTierPage(state.selectedTierPage); });
-    els.tierSheetMinEpc.addEventListener("input", () => { state.tierSheetFilters.minEpc = els.tierSheetMinEpc.value; renderTierPage(state.selectedTierPage); });
-    els.tierSheetMinRevenue.addEventListener("input", () => { state.tierSheetFilters.minRevenue = els.tierSheetMinRevenue.value; renderTierPage(state.selectedTierPage); });
+    els.tierSheetSearch.addEventListener("input", () => { state.tierSheetFilters.search = els.tierSheetSearch.value; resetTierTablePage(); renderTierPage(state.selectedTierPage); });
+    els.tierDateApply.addEventListener("click", applyTierReportDateRange);
+    [els.tierStartDate, els.tierEndDate].forEach((input) => {
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") applyTierReportDateRange();
+      });
+    });
+    els.tierSheetNetwork.addEventListener("change", () => { state.tierSheetFilters.network = els.tierSheetNetwork.value; resetTierTablePage(); renderTierPage(state.selectedTierPage); });
+    els.tierSheetCountry.addEventListener("change", () => { state.tierSheetFilters.country = els.tierSheetCountry.value; resetTierTablePage(); renderTierPage(state.selectedTierPage); });
+    els.tierSheetMinEpc.addEventListener("input", () => { state.tierSheetFilters.minEpc = els.tierSheetMinEpc.value; resetTierTablePage(); renderTierPage(state.selectedTierPage); });
+    els.tierSheetMinRevenue.addEventListener("input", () => { state.tierSheetFilters.minRevenue = els.tierSheetMinRevenue.value; resetTierTablePage(); renderTierPage(state.selectedTierPage); });
+    els.tierPagePrev.addEventListener("click", () => changeTierTablePage(-1));
+    els.tierPageNext.addEventListener("click", () => changeTierTablePage(1));
     els.tierColumnToggle.addEventListener("click", () => {
       state.tierColumnPanelOpen = !state.tierColumnPanelOpen;
       renderTierPage(state.selectedTierPage);
@@ -11573,7 +11931,9 @@
       setTierVisibleHeaders(sheet, coreHeadersForSheet(sheet, allHeaders));
     });
     els.tierColumnAll.addEventListener("click", () => {
-      resetTierVisibleHeaders(sheetByName(state.selectedTierPage));
+      const sheet = sheetByName(state.selectedTierPage);
+      if (!sheet) return;
+      setTierVisibleHeaders(sheet, displayHeadersForSheet(sheet, sheet.headers || []));
     });
     els.sheetPageNotes.addEventListener("click", handleTargetReportClick);
     els.sheetPageNotes.addEventListener("submit", handleTargetReportSubmit);
@@ -11914,6 +12274,26 @@
       setCategoryReportFocusKey: (key) => { state.categoryReportFocusKey = String(key || ""); },
       categoryReportFocusKey: () => state.categoryReportFocusKey,
       tierSheetRowsForDisplay: (sheetName) => tierSheetRowsForDisplay(sheetByName(sheetName)),
+      tierReportRange,
+      tierReportDependencyTiers,
+      tierRowBaseKey,
+      tierTablePagination,
+      defaultTierHeadersForSheet: (sheetName, headers) => defaultTierHeadersForSheet(
+        sheetByName(sheetName) || { name: sheetName },
+        headers
+      ),
+      visibleTierHeadersForSheet: (sheetName, headers) => visibleHeadersForSheet(
+        sheetByName(sheetName) || { name: sheetName },
+        headers
+      ),
+      rekeyManualTierMovesForTest: (moves) => {
+        const previousMoves = state.manualTierMoves;
+        state.manualTierMoves = { ...(moves || {}) };
+        const changed = rekeyManualTierMoves();
+        const normalizedMoves = JSON.parse(JSON.stringify(state.manualTierMoves));
+        state.manualTierMoves = previousMoves;
+        return { changed, moves: normalizedMoves };
+      },
       tierRowHighlightKind: (sheetName, row) => tierRowHighlightKind(sheetByName(sheetName) || { name: sheetName }, row || {}),
       visualStatusForTierRow: (sheetName, row) => visualStatusForTierRow(sheetByName(sheetName) || { name: sheetName }, row || {}),
       targetRecords,

@@ -159,6 +159,15 @@ The bottom offer list is grouped by main category instead of being a flat previe
 
 Dashboard filters and exports continue to operate on the same filtered offer set.
 
+### Manual Tier and Color Control
+
+Scheduled synchronization preserves operator-managed tier assignments and row
+colors. `scripts/sync_oi_tables.py` skips
+`cnpscy_oi_tier_assignments` and `cnpscy_oi_tier_visual_status` unless a manual
+operator explicitly passes `--sync-tier-assignments` or
+`--sync-visual-status`. The dashboard's manual Tier Move controls remain
+available.
+
 ### Shared Tier Moves
 
 The tier pages include move controls for changing merchant tier placement. By default, moves are applied immediately in the current browser so the operator can preview the result. To make tier moves visible to everyone, configure the shared write path:
