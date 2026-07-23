@@ -138,6 +138,7 @@ def test_frontend_contract():
     assert 'id="tierStartDate"' in html
     assert 'id="tierEndDate"' in html
     assert 'id="tierDateApply"' in html
+    assert html.index('id="tierDateStatus"') < html.index('class="tier-date-range-controls"')
     assert "start_date" in app and "end_date" in app
     for removed in ("May Revenue", "June Revenue"):
         assert removed not in app, f"{removed} still present in app.js"
