@@ -106,6 +106,8 @@ const sampleStatus = {
   },
   dailyTrend: {
     month: "2026-07",
+    aggregation: "calendar_day",
+    cumulative: false,
     delayDays: 2,
     currentDate: "2026-07-08",
     observedThrough: "2026-07-06",
@@ -175,9 +177,11 @@ assertMatch(chartHtml, /orders \//, "tooltip separators should remain ASCII-safe
 
 assertTruthy(hooks.targetTrendHtml, "targetTrendHtml hook should be exposed");
 assertTruthy(hooks.targetTrendPlotHtml, "targetTrendPlotHtml hook should be exposed");
+assertTruthy(hooks.targetProgressHtml, "targetProgressHtml hook should be exposed");
 assertTruthy(hooks.setTargetFilters, "target filter setter hook should be exposed");
 assertTruthy(hooks.setTargetTrendView, "trend view setter hook should be exposed");
 assertTruthy(hooks.setDbStatusData, "DB status data setter hook should be exposed");
+assertTruthy(hooks.setDbTierSummaryData, "DB tier summary setter hook should be exposed");
 assertTruthy(hooks.demoDbStatusPayload, "demo DB status payload hook should be exposed");
 assertTruthy(hooks.dbMonthlyTrendRows, "monthly database trend hook should be exposed");
 
@@ -206,8 +210,58 @@ const dailyTargetTrend = hooks.targetTrendPlotHtml(hooks.targetRecords());
 assertMatch(dailyTargetTrend, /Day Revenue trend/, "daily trend plot should use day-view aria labeling");
 assertMatch(dailyTargetTrend, /data-trend-aggregation="daily-independent"/, "daily trend should explicitly declare independent calendar-day aggregation");
 assertMatch(dailyTargetTrend, /target-daily-bar/, "daily trend should use independent bars instead of an accumulating line");
+assertMatch(dailyTargetTrend, /target-trend-tooltip/, "daily trend bars should render visible hover and keyboard-focus tooltips");
+assertMatch(dailyTargetTrend, /Jul 6/, "daily trend tooltip should include the calendar date");
 assertMatch(dailyTargetTrend, /Jul 6: \$4\.9K/, "daily trend plot should show API revenue data");
 assertMatch(dailyTargetTrend, /Pending/, "daily trend plot should mark delay-window values as pending");
+assertNoMatch(dailyTargetTrend, /single day|partial day/i, "daily trend tooltips should not add extra day-type labels");
+
+const progressHtml = hooks.targetProgressHtml(hooks.targetRecords());
+assertMatch(progressHtml, /Tier 1[\s\S]*GMV target/, "Tier 1 should reserve a GMV target card");
+assertMatch(progressHtml, /Tier 2[\s\S]*Commission target/, "Tier 2 should reserve a commission target card");
+assertMatch(progressHtml, /Tier 3[\s\S]*Merchant removal target/, "Tier 3 should reserve a merchant removal target card");
+assertMatch(progressHtml, /Tier 4[\s\S]*Merchant removal target/, "Tier 4 should reserve a merchant removal target card");
+assertMatch(progressHtml, /Target needed/, "unconfigured tier goals should stay visible as placeholders");
+
+hooks.setTargetFilters({ month: "June 2026", tier: "all" });
+const juneRecords = hooks.targetRecords().filter((row) => row.__monthKey === "2026-06");
+const juneProgressHtml = hooks.targetProgressHtml(juneRecords);
+assertMatch(juneProgressHtml, /Tier 1[\s\S]*GMV target[\s\S]*131\.1%[\s\S]*\$500K[\s\S]*\$655\.4K/, "June Tier 1 should use the written GMV target and verified tier actual");
+assertMatch(juneProgressHtml, /Tier 2[\s\S]*Commission target[\s\S]*Target needed[\s\S]*\$196\.7K/, "June Tier 2 should show verified payout without inventing a commission target");
+assertMatch(juneProgressHtml, /Tier 3[\s\S]*Merchant removal target[\s\S]*1,400\.0%[\s\S]*10 merchants[\s\S]*140 removed/, "June Tier 3 should use the written removal target and tier exit count");
+assertMatch(juneProgressHtml, /Tier 4[\s\S]*Merchant removal target[\s\S]*706\.7%[\s\S]*30 merchants[\s\S]*212 removed/, "June Tier 4 should use the written removal target and tier exit count");
+
+hooks.setDbTierSummaryData({
+  ok: true,
+  month: "2026-06",
+  tiers: [
+    { tier: "Tier 1", brandCount: 42, clicks: 75000, orders: 47000, revenue: 600000, payout: 100000, conversionRate: 0.6267 },
+    { tier: "Tier 2", brandCount: 52, clicks: 360000, orders: 130000, revenue: 1100000, payout: 210000, conversionRate: 0.3611 },
+    { tier: "Tier 3", brandCount: 370, clicks: 108000, orders: 68000, revenue: 570000, payout: 77000, conversionRate: 0.6296 },
+    { tier: "Tier 4", brandCount: 5807, clicks: 8500, orders: 4300, revenue: 6400, payout: 1000, conversionRate: 0.5059 }
+  ],
+  total: { brandCount: 6271, clicks: 551500, orders: 249300, revenue: 2276400, payout: 388000, conversionRate: 0.452 }
+});
+const liveJuneRecords = hooks.targetRecords().filter((row) => row.__monthKey === "2026-06");
+const liveJuneProgressHtml = hooks.targetProgressHtml(liveJuneRecords);
+assertMatch(liveJuneProgressHtml, /Tier 1[\s\S]*120\.0%[\s\S]*\$600K/, "live Tier 1 database values should replace the fallback snapshot");
+assertMatch(liveJuneProgressHtml, /Tier 2[\s\S]*Commission target[\s\S]*\$210K/, "live Tier 2 payout should drive the displayed commission actual");
+
+hooks.setDbStatusData({
+  ...sampleStatus,
+  dailyTrend: {
+    ...sampleStatus.dailyTrend,
+    cumulative: true,
+    rows: [
+      { date: "2026-07-01", revenue: 1200, orders: 20, clicks: 200, state: "observed", isComplete: true },
+      { date: "2026-07-02", revenue: 1650, orders: 28, clicks: 260, state: "observed", isComplete: true }
+    ]
+  }
+});
+const normalizedSingleDayRows = hooks.targetDailyTrendRows({ key: "revenue", label: "Revenue" });
+assertEqual(normalizedSingleDayRows[0].value, 1200, "the first cumulative snapshot should remain the first day's value");
+assertEqual(normalizedSingleDayRows[1].value, 450, "cumulative payloads should be converted to the second day's increment");
+hooks.setDbStatusData(sampleStatus);
 
 hooks.setTargetFilters({ month: "June 2026", tier: "all" });
 const staleMonthTrend = hooks.targetTrendPlotHtml(hooks.targetRecords());

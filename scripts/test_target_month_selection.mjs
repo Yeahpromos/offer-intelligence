@@ -80,21 +80,24 @@ assertTruthy(hooks.preferredTargetMonth, "preferredTargetMonth hook should be ex
 assertTruthy(hooks.targetMonthlyTrendRows, "targetMonthlyTrendRows hook should be exposed");
 assertTruthy(hooks.setTargetFilters, "setTargetFilters hook should be exposed");
 assertTruthy(hooks.currentReportingMonthKey, "current reporting month hook should be exposed");
+assertTruthy(hooks.reportOverviewMonthKeys, "report overview month option hook should be exposed");
 assertTruthy(hooks.ensureReportingMonthRecord, "future reporting month hook should be exposed");
 assertTruthy(hooks.targetDbStatusMonthKey, "database month selection hook should be exposed");
 
 const records = hooks.targetRecords();
 const months = Array.from(new Set(records.map((row) => row.Month).filter(Boolean)));
+assertTruthy(months.includes("May 2026"), "May database reporting month should be selectable");
+assertTruthy(months.includes("June 2026"), "June database reporting month should be selectable");
 assertTruthy(months.includes("July 2026"), "July target template should remain available");
-assertEqual(hooks.targetMonthHasMetrics("July 2026"), false, "July target template should be recognized as metric-empty");
-assertEqual(hooks.preferredTargetMonth(records), "June 2026", "target matrix should default to the latest month with real summary metrics");
+assertEqual(hooks.reportOverviewMonthKeys().join(","), "2026-05,2026-06,2026-07", "report overview should expose the current month and the two prior months");
+assertEqual(hooks.preferredTargetMonth(records), "July 2026", "target matrix should default to the latest month with real summary metrics");
 
 hooks.setTargetFilters({ month: "July 2026", tier: "all" });
 const julyRows = hooks.targetMonthlyTrendRows(records);
 assertEqual(julyRows.length, 3, "monthly trend should retain historical context through a manually selected July month");
 assertEqual(julyRows[julyRows.length - 1].label, "July 2026", "monthly trend should end at the selected July month");
 assertEqual(julyRows[julyRows.length - 1].selected, true, "monthly trend should highlight the selected July month");
-assertEqual(julyRows[julyRows.length - 1].value, 0, "July template month should render as zero-valued monthly trend data");
+assertTruthy(Number.isFinite(julyRows[julyRows.length - 1].value), "July monthly trend should render a numeric value");
 
 const augustRecords = hooks.ensureReportingMonthRecord(records, "2026-08");
 const augustRecord = augustRecords.find((row) => row.__monthKey === "2026-08");

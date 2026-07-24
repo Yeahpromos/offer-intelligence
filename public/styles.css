@@ -2123,6 +2123,38 @@ body.dashboard-mode .insight-panel {
   color: #b46b16;
 }
 
+.target-status-pill.placeholder {
+  border: 1px solid rgba(91, 110, 139, 0.18);
+  background: #f2f5f9;
+  color: #5b6e8b;
+}
+
+.target-progress-placeholder {
+  border-style: dashed;
+  background:
+    linear-gradient(135deg, rgba(246, 249, 253, 0.98), rgba(255, 255, 255, 0.98)),
+    var(--panel);
+}
+
+.target-progress-placeholder .target-placeholder-value {
+  color: var(--target-blue);
+}
+
+.target-progress-bar.placeholder {
+  background: repeating-linear-gradient(
+    90deg,
+    #e7edf5 0,
+    #e7edf5 8px,
+    #f7f9fc 8px,
+    #f7f9fc 14px
+  );
+}
+
+.target-progress-bar.placeholder span {
+  width: 0;
+  animation: none;
+}
+
 .target-progress-values strong {
   display: block;
   margin-top: 5px;
@@ -2475,6 +2507,38 @@ body.dashboard-mode .insight-panel {
   fill: rgba(217, 135, 31, 0.12);
   stroke: rgba(217, 135, 31, 0.7);
   stroke-dasharray: 3 3;
+}
+
+.target-trend-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, visibility 140ms ease;
+}
+
+.target-trend-point:hover .target-trend-tooltip,
+.target-trend-point:focus .target-trend-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.target-trend-tooltip rect {
+  fill: #14233b;
+  stroke: rgba(255, 255, 255, 0.24);
+  stroke-width: 1;
+  filter: drop-shadow(0 8px 14px rgba(20, 35, 59, 0.24));
+}
+
+.target-trend-plot .target-trend-tooltip-date {
+  fill: #b9c7dc;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.target-trend-plot .target-trend-tooltip-value {
+  fill: #fff;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .target-trend-plot text {

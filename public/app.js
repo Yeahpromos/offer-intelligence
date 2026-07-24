@@ -84,6 +84,42 @@
     { key: "month", label: "Monthly report" },
     { key: "day", label: "Daily report" }
   ];
+  const REPORT_OVERVIEW_MONTH_OFFSETS = [-2, -1, 0];
+  const REPORT_OVERVIEW_REQUIRED_MONTH_KEYS = ["2026-05", "2026-06"];
+  const TARGET_PROGRESS_DEFINITIONS = [
+    { tier: "Tier 1", type: "gmv", label: "GMV target" },
+    { tier: "Tier 2", type: "commission", label: "Commission target" },
+    { tier: "Tier 3", type: "removal", label: "Merchant removal target" },
+    { tier: "Tier 4", type: "removal", label: "Merchant removal target" }
+  ];
+  const TARGET_MONTH_PRESETS = {
+    "2026-06": {
+      "Tier 1": {
+        target: "Revenue Target: $500K+",
+        actuals: { brandCount: 42, clicks: 75460, orders: 47854, revenue: 655419.44, payout: 106170.6, conversion: 0.634164 }
+      },
+      "Tier 2": {
+        target: "Revenue Target:$800K+; Brand Target: 60+",
+        actuals: { brandCount: 52, clicks: 368157, orders: 130672, revenue: 1163175.35, payout: 196701.35, conversion: 0.354936 }
+      },
+      "Tier 3": {
+        target: "Revenue Target:$250K+; Brand Target: Promote 10 Brands to Tier 2",
+        actuals: { brandCount: 370, clicks: 108203, orders: 68965, revenue: 578972.2, payout: 77950.96, conversion: 0.637367, tierExits: 140 }
+      },
+      "Tier 4": {
+        target: "Brand Target: Promote 30 Brands to Tier 3",
+        actuals: { brandCount: 5807, clicks: 8513, orders: 4337, revenue: 6415.42, payout: 1011.87, conversion: 0.509456, tierExits: 212 }
+      },
+      "BLACK TIER": {
+        target: "",
+        actuals: { brandCount: 8, clicks: 9298, orders: 4305, revenue: 21843.58, payout: 2102.77, conversion: 0.463003 }
+      },
+      Total: {
+        target: "",
+        actuals: { brandCount: 6279, clicks: 569631, orders: 256133, revenue: 2425825.99, payout: 383937.55, conversion: 0.449647 }
+      }
+    }
+  };
   const DB_STATUS_UI_API = "/api/ui/db/status";
   const DB_MERCHANT_UI_API = "/api/ui/db/merchant";
   const DB_SEARCH_UI_API = "/api/ui/db/search";
@@ -199,7 +235,8 @@
     dbTierSummary: {
       data: null,
       loading: false,
-      monthKey: ""
+      monthKey: "",
+      error: ""
     },
     tierSheetSort: {
       key: "",
@@ -10025,6 +10062,14 @@
     return tierRowNumber(row, ["Clicks", "Total Clicks"]);
   }
 
+  function tierRowPayout(row) {
+    const payout = rowValue(row, ["Payout", "Total Commission", "Commission Made"]);
+    if (payout !== undefined && payout !== null && String(payout).trim() !== "") {
+      return parseSheetNumber(payout);
+    }
+    return tierRowNumber(row, ["Affiliate Payout"]);
+  }
+
   function tierRowEpc(row) {
     return tierRowNumber(row, ["Backend EPC", "EPC"]);
   }
@@ -10297,6 +10342,24 @@
     return localDateKey(referenceDate).slice(0, 7);
   }
 
+  function shiftMonthKey(monthKey, offset) {
+    const normalizedMonthKey = monthKeyFromText(monthKey);
+    if (!normalizedMonthKey) return "";
+    const date = new Date(`${normalizedMonthKey}-01T00:00:00`);
+    if (Number.isNaN(date.getTime())) return "";
+    date.setMonth(date.getMonth() + Number(offset || 0));
+    return localDateKey(date).slice(0, 7);
+  }
+
+  function reportOverviewMonthKeys(referenceMonthKey = currentReportingMonthKey()) {
+    return Array.from(new Set([
+      ...REPORT_OVERVIEW_REQUIRED_MONTH_KEYS,
+      ...REPORT_OVERVIEW_MONTH_OFFSETS.map((offset) => shiftMonthKey(referenceMonthKey, offset))
+    ]))
+      .filter(Boolean)
+      .sort();
+  }
+
   function ensureReportingMonthRecord(records, monthKey = currentReportingMonthKey()) {
     const normalizedMonthKey = monthKeyFromText(monthKey);
     const normalizedRecords = Array.isArray(records) ? records.slice() : [];
@@ -10319,6 +10382,67 @@
     }));
   }
 
+  function ensureReportOverviewMonthRecords(records, referenceMonthKey = currentReportingMonthKey()) {
+    return reportOverviewMonthKeys(referenceMonthKey)
+      .reduce((monthRecords, monthKey) => ensureReportingMonthRecord(monthRecords, monthKey), Array.isArray(records) ? records : []);
+  }
+
+  function targetPresetRecord(monthKey, tier, preset) {
+    const actuals = preset.actuals || {};
+    return {
+      Month: monthAxisLabel(monthKey),
+      __monthKey: monthKey,
+      __databaseOnly: true,
+      __source: "verified-tier-snapshot",
+      Tier: tier,
+      "Brand Count": actuals.brandCount || 0,
+      "Total Clicks": actuals.clicks || 0,
+      "Order Count": actuals.orders || 0,
+      Revenue: actuals.revenue || 0,
+      Payout: actuals.payout,
+      "Avg Conversion": actuals.conversion || 0,
+      "New Tier Entries": actuals.newTierEntries || 0,
+      "Tier Exits": actuals.tierExits || 0,
+      Target: preset.target || ""
+    };
+  }
+
+  function withTargetMonthPresets(records) {
+    const merged = Array.isArray(records) ? records.map((record) => ({ ...record })) : [];
+    Object.entries(TARGET_MONTH_PRESETS).forEach(([monthKey, tiers]) => {
+      Object.entries(tiers).forEach(([tier, preset]) => {
+        const index = merged.findIndex((record) => (
+          monthKeyFromText(record.__monthKey || record.Month) === monthKey &&
+          String(record.Tier || "").trim().toLowerCase() === tier.toLowerCase()
+        ));
+        if (index < 0) {
+          merged.push(targetPresetRecord(monthKey, tier, preset));
+          return;
+        }
+        const record = merged[index];
+        const fallback = targetPresetRecord(monthKey, tier, preset);
+        const hasDatabaseMetrics = record.__source === "database";
+        const hasSheetMetrics = !record.__databaseOnly && (
+          parseSheetNumber(record["Brand Count"]) > 0 ||
+          parseSheetNumber(record["Total Clicks"]) > 0 ||
+          parseSheetNumber(record["Order Count"]) > 0 ||
+          parseSheetNumber(record.Revenue) > 0
+        );
+        const hydrated = (hasDatabaseMetrics || hasSheetMetrics) ? { ...record } : { ...record, ...fallback };
+        if (!String(hydrated.Target || "").trim()) hydrated.Target = preset.target || "";
+        if (
+          preset.actuals &&
+          preset.actuals.tierExits !== undefined &&
+          (record.__databaseOnly || String(record["Tier Exits"] ?? "").trim() === "")
+        ) {
+          hydrated["Tier Exits"] = preset.actuals.tierExits;
+        }
+        merged[index] = hydrated;
+      });
+    });
+    return merged.map((record) => applyTargetOverride(record));
+  }
+
   function dbTargetRecordsFromTierSummary() {
     const dbData = state.dbTierSummary && state.dbTierSummary.data;
     if (!dbData || !dbData.ok || !dbData.month || !dbData.tiers || !dbData.tiers.length) return null;
@@ -10338,6 +10462,7 @@
         "Total Clicks": t.clicks,
         "Order Count": t.orders,
         Revenue: t.revenue,
+        Payout: t.payout,
         "Avg Conversion": t.conversionRate,
         "New Tier Entries": 0,
         "Tier Exits": 0,
@@ -10356,13 +10481,14 @@
         "Total Clicks": total.clicks,
         "Order Count": total.orders,
         Revenue: total.revenue,
+        Payout: total.payout,
         "Avg Conversion": total.conversionRate,
         "New Tier Entries": 0,
         "Tier Exits": 0,
         Target: ""
       }));
     }
-    return ensureReportingMonthRecord(records);
+    return withTargetMonthPresets(ensureReportOverviewMonthRecords(records));
   }
 
   function targetRecords() {
@@ -10398,7 +10524,7 @@
       record.__sourceTarget = record.Target || "";
       if (record.Tier) records.push(applyTargetOverride(record));
     });
-    return ensureReportingMonthRecord(records.length ? records : derivedTargetRecordsFromTierSheets());
+    return withTargetMonthPresets(ensureReportOverviewMonthRecords(records.length ? records : derivedTargetRecordsFromTierSheets()));
   }
 
   function derivedTargetRecordsFromTierSheets() {
@@ -10411,6 +10537,7 @@
       const clicks = rows.reduce((sum, row) => sum + tierRowClicks(row), 0);
       const orders = rows.reduce((sum, row) => sum + tierRowOrders(row), 0);
       const revenue = rows.reduce((sum, row) => sum + tierRowRevenue(row), 0);
+      const payout = rows.reduce((sum, row) => sum + tierRowPayout(row), 0);
       const conversion = clicks ? orders / clicks : 0;
       return applyTargetOverride({
         Month: month,
@@ -10421,6 +10548,7 @@
         "Total Clicks": clicks,
         "Order Count": orders,
         Revenue: revenue,
+        Payout: payout,
         "Avg Conversion": conversion,
         "New Tier Entries": 0,
         "Tier Exits": 0,
@@ -10432,8 +10560,9 @@
       acc.clicks += parseSheetNumber(record["Total Clicks"]);
       acc.orders += parseSheetNumber(record["Order Count"]);
       acc.revenue += parseSheetNumber(record.Revenue);
+      acc.payout += parseSheetNumber(record.Payout);
       return acc;
-    }, { brands: 0, clicks: 0, orders: 0, revenue: 0 });
+    }, { brands: 0, clicks: 0, orders: 0, revenue: 0, payout: 0 });
     records.push(applyTargetOverride({
       Month: month,
       __monthKey: monthKey,
@@ -10443,6 +10572,7 @@
       "Total Clicks": total.clicks,
       "Order Count": total.orders,
       Revenue: total.revenue,
+      Payout: total.payout,
       "Avg Conversion": total.clicks ? total.orders / total.clicks : 0,
       "New Tier Entries": 0,
       "Tier Exits": 0,
@@ -10491,7 +10621,6 @@
     if ((!state.targetFilters.month || (state.targetFilters.month !== "all" && !months.includes(state.targetFilters.month))) && monthOptions.length) {
       state.targetFilters.month = preferredTargetMonth(records);
     }
-    if (!state.targetFilters.compareMonth && monthOptions.length > 1) state.targetFilters.compareMonth = monthOptions[Math.max(0, monthOptions.length - 2)].value;
     if (state.targetFilters.compareMonth === state.targetFilters.month) {
       const currentIndex = months.indexOf(state.targetFilters.month);
       state.targetFilters.compareMonth = months[currentIndex - 1] || months[currentIndex + 1] || "";
@@ -10849,9 +10978,9 @@
     while (cursor && compareDateKeys(cursor, currentDate) <= 0) {
       const day = cursor;
       const state = compareDateKeys(day, expectedCompleteThrough) > 0 ? "delay" : "observed";
-      const orders = state === "delay" ? null : 72 + completeIndex * 9 + (completeIndex % 3) * 6;
-      const revenue = state === "delay" ? null : 3200 + completeIndex * 420;
-      const clicks = state === "delay" ? null : 820 + completeIndex * 55;
+      const orders = state === "delay" ? null : 72 + (completeIndex % 7) * 9 + (completeIndex % 3) * 6;
+      const revenue = state === "delay" ? null : 3200 + ((completeIndex * 7) % 11) * 420;
+      const clicks = state === "delay" ? null : 820 + ((completeIndex * 5) % 9) * 55;
       rows.push({
         date: day,
         state,
@@ -11060,6 +11189,7 @@
     if (state.dbTierSummary.monthKey === normalizedMonthKey && state.dbTierSummary.data) return;
     state.dbTierSummary.loading = true;
     state.dbTierSummary.monthKey = normalizedMonthKey;
+    state.dbTierSummary.error = "";
     try {
       const url = `${DB_TIER_SUMMARY_API}?month=${encodeURIComponent(normalizedMonthKey)}`;
       const response = await fetch(url, { cache: "no-store" });
@@ -11068,8 +11198,10 @@
         throw new Error((payload && payload.error) || `HTTP ${response.status}`);
       }
       state.dbTierSummary.data = payload;
+      state.dbTierSummary.error = "";
     } catch (error) {
       state.dbTierSummary.data = null;
+      state.dbTierSummary.error = error && error.message ? error.message : "Tier summary unavailable";
     } finally {
       state.dbTierSummary.loading = false;
       renderSheetPage();
@@ -11173,18 +11305,48 @@
 
   function targetGoal(record) {
     const text = String(record.Target || "");
-    const revenue = text.match(/Revenue Target:\s*\$?\s*([\d,.]+)\s*([KMB])?\+?/i);
-    if (revenue) {
+    const tierDefinition = targetProgressDefinition(record.Tier);
+    const revenueGoal = () => {
+      const revenue = text.match(/(?:GMV|Revenue) Target:\s*\$?\s*([\d,.]+)\s*([KMB])?\+?/i);
+      if (!revenue) return null;
       const scale = { K: 1000, M: 1000000, B: 1000000000 }[String(revenue[2] || "").toUpperCase()] || 1;
       const target = parseSheetNumber(revenue[1]) * scale;
-      return { type: "revenue", label: "Revenue target", target, actual: parseSheetNumber(record.Revenue), targetText: compactMoney(target), actualText: compactMoney(parseSheetNumber(record.Revenue)) };
-    }
-    const promote = text.match(/Brand Target:\s*Promote\s*([\d,.]+)\s*Brands?/i);
-    if (promote) {
+      return { type: "gmv", label: tierDefinition?.type === "gmv" ? tierDefinition.label : "Revenue target", target, actual: parseSheetNumber(record.Revenue), targetText: compactMoney(target), actualText: compactMoney(parseSheetNumber(record.Revenue)) };
+    };
+    const commissionGoal = () => {
+      const commission = text.match(/Commission Target:\s*\$?\s*([\d,.]+)\s*([KMB])?\+?/i);
+      if (!commission) return null;
+      const scale = { K: 1000, M: 1000000, B: 1000000000 }[String(commission[2] || "").toUpperCase()] || 1;
+      const target = parseSheetNumber(commission[1]) * scale;
+      const actual = targetOptionalMetricValue(record, ["Payout", "Total Commission", "Commission Made", "Affiliate Payout"]);
+      return { type: "commission", label: "Commission target", target, actual, targetText: compactMoney(target), actualText: actual === null ? "Awaiting data" : compactMoney(actual) };
+    };
+    const removalGoal = () => {
+      const removal = text.match(/Merchant Removal Target:\s*([\d,.]+)\+?/i);
+      if (removal) {
+        const target = parseSheetNumber(removal[1]);
+        const actual = parseSheetNumber(record["Tier Exits"]);
+        return { type: "removal", label: "Merchant removal target", target, actual, targetText: `${target.toLocaleString()} merchants`, actualText: `${actual.toLocaleString()} removed` };
+      }
+      const promote = text.match(/Brand Target:\s*Promote\s*([\d,.]+)\s*Brands?/i);
+      if (!promote) return null;
       const target = parseSheetNumber(promote[1]);
       const actual = parseSheetNumber(record["Tier Exits"]);
-      return { type: "promotion", label: "Promotion target", target, actual, targetText: `${target.toLocaleString()} brands`, actualText: `${actual.toLocaleString()} moved` };
-    }
+      const isRemovalTier = tierDefinition?.type === "removal";
+      return {
+        type: isRemovalTier ? "removal" : "promotion",
+        label: isRemovalTier ? tierDefinition.label : "Promotion target",
+        target,
+        actual,
+        targetText: `${target.toLocaleString()} ${isRemovalTier ? "merchants" : "brands"}`,
+        actualText: `${actual.toLocaleString()} ${isRemovalTier ? "removed" : "moved"}`
+      };
+    };
+    if (tierDefinition?.type === "gmv") return revenueGoal();
+    if (tierDefinition?.type === "commission") return commissionGoal();
+    if (tierDefinition?.type === "removal") return removalGoal();
+    const primaryGoal = revenueGoal() || commissionGoal() || removalGoal();
+    if (primaryGoal) return primaryGoal;
     const brand = text.match(/Brand Target:\s*([\d,.]+)\+?/i);
     if (brand) {
       const target = parseSheetNumber(brand[1]);
@@ -11194,11 +11356,37 @@
     return null;
   }
 
+  function targetProgressDefinition(tier) {
+    const normalizedTier = String(tier || "").trim().toLowerCase();
+    return TARGET_PROGRESS_DEFINITIONS.find((item) => item.tier.toLowerCase() === normalizedTier) || null;
+  }
+
+  function targetOptionalMetricValue(record, headers) {
+    for (const header of headers) {
+      const raw = record && record[header];
+      if (raw !== undefined && raw !== null && String(raw).trim() !== "") return parseSheetNumber(raw);
+    }
+    return null;
+  }
+
+  function targetGoalMatchesDefinition(goal, definition) {
+    if (!goal || !definition) return false;
+    return goal.type === definition.type;
+  }
+
   function targetEditValue(record, goal) {
     const text = String(record.Target || "");
-    if (goal && goal.type === "revenue") {
-      const match = text.match(/Revenue Target:\s*([^;]+)/i);
+    if (goal && goal.type === "gmv") {
+      const match = text.match(/(?:GMV|Revenue) Target:\s*([^;]+)/i);
       return match ? match[1].trim() : goal.targetText;
+    }
+    if (goal && goal.type === "commission") {
+      const match = text.match(/Commission Target:\s*([^;]+)/i);
+      return match ? match[1].trim() : goal.targetText;
+    }
+    if (goal && goal.type === "removal") {
+      const match = text.match(/(?:Merchant Removal Target:\s*|Brand Target:\s*Promote\s*)([\d,.]+)/i);
+      return match ? match[1].trim().replace(/,/g, "") : String(goal.target || "");
     }
     if (goal && goal.type === "promotion") {
       const match = text.match(/Brand Target:\s*Promote\s*([\d,.]+)\s*Brands?/i);
@@ -11212,7 +11400,7 @@
   }
 
   function targetEditInputAttributes(goal) {
-    if (goal && (goal.type === "promotion" || goal.type === "brand")) {
+    if (goal && (goal.type === "removal" || goal.type === "promotion" || goal.type === "brand")) {
       return `type="number" inputmode="numeric" min="0" step="1"`;
     }
     return `type="text"`;
@@ -11229,8 +11417,15 @@
     const clean = String(value || "").trim();
     if (!clean || !goal) return clean;
     const current = String(record.Target || "").trim();
-    if (goal.type === "revenue") {
-      return replaceTargetClause(current, /Revenue Target:\s*[^;]+/i, `Revenue Target: ${clean}`);
+    if (goal.type === "gmv") {
+      return replaceTargetClause(current, /(?:GMV|Revenue) Target:\s*[^;]+/i, `GMV Target: ${clean}`);
+    }
+    if (goal.type === "commission") {
+      return replaceTargetClause(current, /Commission Target:\s*[^;]+/i, `Commission Target: ${clean}`);
+    }
+    if (goal.type === "removal") {
+      const count = (clean.match(/[\d,.]+/) || [""])[0] || clean;
+      return replaceTargetClause(current, /(?:Merchant Removal Target:\s*|Brand Target:\s*Promote\s*)[^;]+/i, `Merchant Removal Target: ${count}`);
     }
     if (goal.type === "promotion") {
       const count = (clean.match(/[\d,.]+/) || [""])[0] || clean;
@@ -11244,13 +11439,17 @@
     return clean;
   }
 
-  function targetGoalCardHtml(record, index) {
-    const goal = targetGoal(record);
+  function targetGoalCardHtml(record, index, resolvedGoal = null) {
+    const goal = resolvedGoal || targetGoal(record);
     if (!goal || !goal.target) return "";
-    const progress = goal.actual / goal.target;
+    const hasActual = Number.isFinite(goal.actual);
+    const progress = hasActual ? goal.actual / goal.target : 0;
     const capped = Math.max(0, Math.min(100, progress * 100));
-    const delta = goal.actual - goal.target;
-    const met = delta >= 0;
+    const delta = hasActual ? goal.actual - goal.target : null;
+    const met = hasActual && delta >= 0;
+    const progressText = hasActual
+      ? `${(progress * 100).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+      : "Awaiting data";
     const editKey = record.__targetOverrideKey || targetOverrideKey(record);
     const targetControl = state.targetEditingKey === editKey
       ? `<form class="target-edit-form" data-target-edit-form data-target-edit-key="${escapeHtml(editKey)}">
@@ -11268,7 +11467,7 @@
           <strong>${escapeHtml(record.Tier)}</strong>
           <span>${escapeHtml(goal.label)}</span>
         </div>
-        <span class="target-status-pill ${met ? "met" : "miss"}">${met ? "On track" : "Watch"}</span>
+        <span class="target-status-pill ${hasActual ? (met ? "met" : "miss") : "placeholder"}">${escapeHtml(progressText)}</span>
       </div>
       <div class="target-progress-values">
         <div>
@@ -11278,21 +11477,79 @@
         <div><span>Actual</span><strong>${escapeHtml(goal.actualText)}</strong></div>
       </div>
       <div class="target-progress-bar" aria-hidden="true"><span style="width:${capped.toFixed(2)}%"></span></div>
-      <p class="${met ? "positive" : "negative"}">${met ? "+" : "-"} ${escapeHtml(delta >= 0 ? `${compactNumber(delta)} above target` : `${compactNumber(Math.abs(delta))} to target`)}</p>
+      <p class="${hasActual ? (met ? "positive" : "negative") : ""}">${hasActual ? `${met ? "+" : "-"} ${escapeHtml(delta >= 0 ? `${compactNumber(delta)} above target` : `${compactNumber(Math.abs(delta))} to target`)}` : "Actual commission data is not available yet."}</p>
+    </article>`;
+  }
+
+  function targetPlaceholderActualText(definition, record) {
+    if (!record) return "Awaiting data";
+    if (definition.type === "gmv") return compactMoney(parseSheetNumber(record.Revenue));
+    if (definition.type === "commission") {
+      const actual = targetOptionalMetricValue(record, ["Payout", "Total Commission", "Commission Made", "Affiliate Payout"]);
+      return actual === null ? "Awaiting data" : compactMoney(actual);
+    }
+    if (definition.type === "removal") {
+      if (record.__databaseOnly) return "Awaiting data";
+      return `${parseSheetNumber(record["Tier Exits"]).toLocaleString()} removed`;
+    }
+    return "Awaiting data";
+  }
+
+  function targetPlaceholderCardHtml(definition, record, index) {
+    const monthLabel = state.targetFilters.month === "all" ? "the selected month" : state.targetFilters.month;
+    return `<article class="target-progress-card target-progress-placeholder target-card-enter" style="--i:${index}">
+      <div class="target-progress-card-head">
+        <div>
+          <strong>${escapeHtml(definition.tier)}</strong>
+          <span>${escapeHtml(definition.label)}</span>
+        </div>
+        <span class="target-status-pill placeholder">Target needed</span>
+      </div>
+      <div class="target-progress-values">
+        <div><span>Target</span><strong class="target-placeholder-value">Set target</strong></div>
+        <div><span>Actual</span><strong>${escapeHtml(targetPlaceholderActualText(definition, record))}</strong></div>
+      </div>
+      <div class="target-progress-bar placeholder" aria-hidden="true"><span></span></div>
+      <p>Set the ${escapeHtml(definition.label.toLowerCase())} for ${escapeHtml(monthLabel)}.</p>
     </article>`;
   }
 
   function targetProgressHtml(records) {
-    const cards = targetMetricRows(records).map(targetGoalCardHtml).filter(Boolean);
+    const metricRows = targetMetricRows(records);
+    const selectedTier = state.targetFilters.tier;
+    const definitions = TARGET_PROGRESS_DEFINITIONS.filter((definition) => (
+      selectedTier === "all" || definition.tier.toLowerCase() === String(selectedTier).toLowerCase()
+    ));
+    let activeCount = 0;
+    const cards = definitions.map((definition, index) => {
+      const record = metricRows.find((row) => String(row.Tier).toLowerCase() === definition.tier.toLowerCase()) || null;
+      const goal = record ? targetGoal(record) : null;
+      if (record && targetGoalMatchesDefinition(goal, definition)) {
+        activeCount += 1;
+        return targetGoalCardHtml(record, index, goal);
+      }
+      return targetPlaceholderCardHtml(definition, record, index);
+    });
+    const standardTiers = new Set(TARGET_PROGRESS_DEFINITIONS.map((definition) => definition.tier.toLowerCase()));
+    metricRows
+      .filter((record) => !standardTiers.has(String(record.Tier).toLowerCase()))
+      .forEach((record) => {
+        const card = targetGoalCardHtml(record, cards.length);
+        if (card) {
+          cards.push(card);
+          activeCount += 1;
+        }
+      });
+    const countLabel = `${activeCount.toLocaleString()} active targets`;
     return `<section class="target-progress-section target-card-enter" style="--i:6">
       <div class="target-section-header">
         <div>
           <h3>Tier target progress</h3>
           <p>${escapeHtml(state.targetFilters.month === "all" ? "All months" : state.targetFilters.month)} targets by tier</p>
         </div>
-        <span>${cards.length.toLocaleString()} active targets</span>
+        <span>${escapeHtml(countLabel)}</span>
       </div>
-      <div class="target-progress-grid">${cards.length ? cards.join("") : `<div class="target-empty-state">No written targets match the selected month and tier.</div>`}</div>
+      <div class="target-progress-grid">${cards.length ? cards.join("") : `<div class="target-empty-state">No target configuration is available for this tier.</div>`}</div>
     </section>`;
   }
 
@@ -11305,7 +11562,7 @@
       const monthKey = targetDbStatusMonthKey() || state.dbStatus.monthKey || monthKeyFromText(state.dbStatus.data?.dailyTrend?.month || "");
       const monthLabel = monthLabelFromKey(monthKey);
       const prefix = monthLabel === "Reporting" ? "Latest daily" : `${monthLabel} daily`;
-      return `${prefix} ${metric.label.toLowerCase()} by calendar day. Each bar is independent, not cumulative`;
+      return `${prefix} ${metric.label.toLowerCase()}`;
     }
     const tier = state.targetFilters.tier;
     return tier === "all" ? `${metric.label} across the six-month window ending at the selected month` : `${tier} ${metric.label.toLowerCase()} trajectory from the tier snapshot`;
@@ -11375,8 +11632,16 @@
   }
 
   function targetDailyTrendRows(metric = targetMetricConfig()) {
-    return dbDailyTrendRows(state.dbStatus.data).map((row) => {
-      const rawValue = targetDailyMetricValue(row, metric.key);
+    const rows = dbDailyTrendRows(state.dbStatus.data);
+    const cumulative = state.dbStatus.data?.dailyTrend?.cumulative === true;
+    const additiveMetric = ["revenue", "orders", "clicks"].includes(metric.key);
+    let previousCumulativeValue = null;
+    return rows.map((row) => {
+      const sourceValue = targetDailyMetricValue(row, metric.key);
+      const rawValue = cumulative && additiveMetric && previousCumulativeValue !== null
+        ? Math.max(0, sourceValue - previousCumulativeValue)
+        : sourceValue;
+      if (cumulative && additiveMetric && row.state !== "delay") previousCumulativeValue = sourceValue;
       const hasPartialValue = row.state === "delay" && Math.abs(rawValue) > 0.000001;
       const hasValue = row.state !== "delay" || hasPartialValue;
       const value = hasValue ? rawValue : null;
@@ -11423,14 +11688,30 @@
         return `<g class="trend-grid"><line x1="${pad.left}" y1="${y.toFixed(2)}" x2="${width - pad.right}" y2="${y.toFixed(2)}"></line><text x="${pad.left - 12}" y="${(y + 4).toFixed(2)}" text-anchor="end">${escapeHtml(formatTargetMetricValue(metric.key, value))}</text></g>`;
       }).join("")}
       ${isDaily ? "" : `<polyline points="${polyline}" class="trend-line"></polyline>`}
-      ${points.map((point, index) => `<g class="target-trend-point ${escapeHtml(point.state || "")}${point.selected ? " selected" : ""}" tabindex="0" role="img" aria-label="${escapeHtml(point.detail || point.label)}">
-        <title>${escapeHtml(point.detail || point.label)}</title>
-        ${isDaily
-          ? `<rect x="${(point.x - dailyBarWidth / 2).toFixed(2)}" y="${point.hasValue ? point.y.toFixed(2) : (height - pad.bottom - 4).toFixed(2)}" width="${dailyBarWidth.toFixed(2)}" height="${point.hasValue ? Math.max(4, height - pad.bottom - point.y).toFixed(2) : "4"}" rx="2.5" class="target-daily-bar ${point.hasValue ? "" : "muted"} ${escapeHtml(point.state || "")}"></rect>`
-          : `<circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="${point.selected ? "6" : "4.5"}" class="trend-dot ${point.hasValue ? "" : "muted"} ${escapeHtml(point.state || "")}"></circle>`}
-        ${point.hasValue && (point.selected || (viewLabel === "Day" && index === points.length - 1)) ? `<text x="${point.x.toFixed(2)}" y="${Math.max(18, point.y - 14).toFixed(2)}" text-anchor="middle" class="trend-value-label">${escapeHtml(formatTargetMetricValue(metric.key, point.value))}</text>` : ""}
-        ${(index === 0 || index === points.length - 1 || index % labelEvery === 0) ? `<text x="${point.x.toFixed(2)}" y="${height - 12}" text-anchor="middle" class="trend-month">${escapeHtml(point.shortLabel || point.label)}</text>` : ""}
-      </g>`).join("")}
+      ${points.map((point, index) => {
+        const lastPointIndex = points.length - 1;
+        const showAxisLabel = index === 0 ||
+          index === lastPointIndex ||
+          (index % labelEvery === 0 && lastPointIndex - index >= Math.max(2, labelEvery - 1));
+        const tooltipWidth = 156;
+        const tooltipHeight = 48;
+        const tooltipX = Math.max(4, Math.min(width - tooltipWidth - 4, point.x - tooltipWidth / 2));
+        const tooltipY = point.y < pad.top + tooltipHeight + 8 ? point.y + 12 : point.y - tooltipHeight - 12;
+        const tooltipValue = point.hasValue ? formatTargetMetricValue(metric.key, point.value) : "Pending";
+        return `<g class="target-trend-point ${escapeHtml(point.state || "")}${point.selected ? " selected" : ""}" tabindex="0" role="img" aria-label="${escapeHtml(point.detail || point.label)}">
+          <title>${escapeHtml(point.detail || point.label)}</title>
+          ${isDaily
+            ? `<rect x="${(point.x - dailyBarWidth / 2).toFixed(2)}" y="${point.hasValue ? point.y.toFixed(2) : (height - pad.bottom - 4).toFixed(2)}" width="${dailyBarWidth.toFixed(2)}" height="${point.hasValue ? Math.max(4, height - pad.bottom - point.y).toFixed(2) : "4"}" rx="2.5" class="target-daily-bar ${point.hasValue ? "" : "muted"} ${escapeHtml(point.state || "")}"></rect>`
+            : `<circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="${point.selected ? "6" : "4.5"}" class="trend-dot ${point.hasValue ? "" : "muted"} ${escapeHtml(point.state || "")}"></circle>`}
+          ${point.hasValue && (point.selected || (viewLabel === "Day" && index === points.length - 1)) ? `<text x="${point.x.toFixed(2)}" y="${Math.max(18, point.y - 14).toFixed(2)}" text-anchor="middle" class="trend-value-label">${escapeHtml(formatTargetMetricValue(metric.key, point.value))}</text>` : ""}
+          ${showAxisLabel ? `<text x="${point.x.toFixed(2)}" y="${height - 12}" text-anchor="middle" class="trend-month">${escapeHtml(point.shortLabel || point.label)}</text>` : ""}
+          ${isDaily ? `<g class="target-trend-tooltip" transform="translate(${tooltipX.toFixed(2)} ${tooltipY.toFixed(2)})" aria-hidden="true">
+            <rect width="${tooltipWidth}" height="${tooltipHeight}" rx="7"></rect>
+            <text x="11" y="18" class="target-trend-tooltip-date">${escapeHtml(point.label)}</text>
+            <text x="11" y="36" class="target-trend-tooltip-value">${escapeHtml(tooltipValue)}</text>
+          </g>` : ""}
+        </g>`;
+      }).join("")}
     </svg>`;
   }
 
@@ -11475,8 +11756,7 @@
       return `<span class="target-source-status ${escapeHtml(model.health)}"><i aria-hidden="true"></i>${escapeHtml(status)}</span>
         <span>Orders and revenue: cnpscy_order_new_aggregate</span>
         <span>Clicks: cnpscy_amazon_click</span>
-        <span>Complete through ${escapeHtml(shortDateLabel(completeThrough))}</span>
-        ${targetTrendView() === "day" ? `<span>One bar equals one calendar day</span>` : ""}`;
+        <span>Complete through ${escapeHtml(shortDateLabel(completeThrough))}</span>`;
     }
     if (tierIsDatabaseEligible && state.dbStatus.loading) {
       return `<span class="target-source-status syncing"><i aria-hidden="true"></i>Syncing database</span><span>Loading verified monthly and daily totals</span>`;
@@ -11705,7 +11985,11 @@
     els.sheetPageNotes.innerHTML = `${targetTrendHtml(allRecords)}${targetProgressHtml(rows)}${targetMatrixHtml(rows, comparisonRows)}`;
     ensureDbStatusForSelectedMonth();
     const tierSummaryMonthKey = targetDbStatusMonthKey();
-    if (tierSummaryMonthKey && !state.dbTierSummary.data && !state.dbTierSummary.loading) {
+    const tierSummaryNeedsLoad = tierSummaryMonthKey && (
+      state.dbTierSummary.monthKey !== tierSummaryMonthKey ||
+      (!state.dbTierSummary.data && !state.dbTierSummary.error)
+    );
+    if (tierSummaryNeedsLoad && !state.dbTierSummary.loading) {
       window.setTimeout(() => loadDbTierSummary(tierSummaryMonthKey), 0);
     }
   }
@@ -12382,9 +12666,11 @@
       targetRecords,
       preferredTargetMonth,
       currentReportingMonthKey,
+      reportOverviewMonthKeys,
       ensureReportingMonthRecord,
       targetDbStatusMonthKey,
       targetMonthHasMetrics: (month) => targetMonthHasMetrics(targetRecords(), month),
+      targetProgressHtml,
       targetTrendHtml,
       targetTrendPlotHtml,
       targetMonthlyTrendRows,
@@ -12394,6 +12680,7 @@
       setTargetFilters: (filters = {}) => { state.targetFilters = { ...state.targetFilters, ...filters }; },
       setTargetTrendView: (view) => { state.targetTrendView = view === "day" ? "day" : "month"; },
       setDbStatusData: (payload) => { state.dbStatus.data = payload; state.dbStatus.error = ""; state.dbStatus.loading = false; state.dbStatus.monthKey = monthKeyFromText(payload?.dailyTrend?.month || ""); },
+      setDbTierSummaryData: (payload) => { state.dbTierSummary.data = payload; state.dbTierSummary.error = ""; state.dbTierSummary.loading = false; state.dbTierSummary.monthKey = monthKeyFromText(payload?.month || ""); },
       demoDbStatusPayload,
       dbStatusViewModel,
       dbDailyTrendRows,
