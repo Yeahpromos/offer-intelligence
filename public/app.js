@@ -45,6 +45,11 @@
     "Order count", "Revenue", "Backend EPC", "AOV", "Conversion", "Conversion Rate",
     "Clicks", "DPV", "ATC", "Payout", "Affiliate Payout"
   ]);
+  const TIER_INTEGER_METRIC_HEADERS = new Set([
+    "clicks", "total clicks", "dpv", "atc", "order count", "orders",
+    "brand count", "publisher count", "publisher count june",
+    "new tier entries", "tier exits"
+  ]);
   const DEFAULT_TIER_VISIBLE_COLUMNS = [
     "Merchant ID",
     "Merchant Name",
@@ -2469,6 +2474,53 @@
     const percentage = percentageNumberForHeader(header, text);
     const minimumFractionDigits = /commission rate/i.test(String(header || "")) ? 2 : 0;
     return percentage === null ? text : formatPercentNumber(percentage, minimumFractionDigits);
+  }
+
+  function tierCurrencySymbol(row = {}) {
+    const currency = String(row.Currency || row.currency || "").trim().toUpperCase();
+    const country = String(row.COUNTRY || row.Country || row.country || row.countryCode || "").trim().toUpperCase();
+    const currencySymbols = {
+      USD: "$",
+      GBP: "£",
+      EUR: "€",
+      CAD: "C$",
+      AUD: "A$",
+      JPY: "¥"
+    };
+    if (currencySymbols[currency]) return currencySymbols[currency];
+    if (["UK", "GB", "UNITED KINGDOM"].includes(country)) return "£";
+    if (["DE", "FR", "EU", "GERMANY", "FRANCE"].includes(country)) return "€";
+    if (["CA", "CANADA"].includes(country)) return "C$";
+    if (["AU", "AUSTRALIA"].includes(country)) return "A$";
+    if (["JP", "JAPAN"].includes(country)) return "¥";
+    return "$";
+  }
+
+  function numericSheetCellValue(value) {
+    const text = String(value ?? "").trim();
+    if (!text) return null;
+    const numeric = Number(text.replace(/[^\d.+-]/g, ""));
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  function formatTierSheetCell(sheet, row, header) {
+    const value = row ? row[header] : "";
+    const text = String(value ?? "").trim();
+    if (!sheet || !TIER_SHEET_MOVE_TARGETS.includes(sheet.name) || !text) {
+      return formatSheetCell(header, value);
+    }
+    const normalizedHeader = String(header || "").trim().toLowerCase();
+    const numeric = numericSheetCellValue(value);
+    if (TIER_INTEGER_METRIC_HEADERS.has(normalizedHeader) && numeric !== null) {
+      return numeric.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    }
+    if (normalizedHeader === "aov" && numeric !== null) {
+      return `${tierCurrencySymbol(row)}${numeric.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })}`;
+    }
+    return formatSheetCell(header, value);
   }
 
   function sortableReportValue(header, value) {
@@ -9797,7 +9849,7 @@
   }
 
   function sheetCellHtml(sheet, row, header) {
-    const value = formatSheetCell(header, row[header]);
+    const value = formatTierSheetCell(sheet, row, header);
     if (header === "Visual Status Color" || header === "visualStatusColor") {
       const color = normalizeVisualStatusColor(value);
       if (!color || !value) return escapeHtml(value);
@@ -12634,6 +12686,11 @@
       chatOverviewColumnLabels: () => chatOverviewColumns.map((column) => column.label),
       contextColumnLabels: () => contextColumnsFor().map((column) => column.label),
       formatSheetCell,
+      formatTierSheetCell: (sheetName, row, header) => formatTierSheetCell(
+        sheetByName(sheetName) || { name: sheetName },
+        row || {},
+        header
+      ),
       displayCategory,
       dashboardCategoryGroups,
       dashboardCategoryFocusedGroups,

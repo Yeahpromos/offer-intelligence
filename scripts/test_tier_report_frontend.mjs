@@ -180,4 +180,58 @@ assertEqual(
   "default tier fields should support legacy Network and Conversion header aliases"
 );
 
+for (const tierName of ["Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"]) {
+  assertEqual(
+    hooks.formatTierSheetCell(tierName, { Clicks: "18.0" }, "Clicks"),
+    "18",
+    `${tierName} clicks should display without decimals`
+  );
+  assertEqual(
+    hooks.formatTierSheetCell(tierName, { DPV: "14.0" }, "DPV"),
+    "14",
+    `${tierName} DPV should display without decimals`
+  );
+  assertEqual(
+    hooks.formatTierSheetCell(tierName, { ATC: "0.0" }, "ATC"),
+    "0",
+    `${tierName} ATC should display without decimals`
+  );
+  assertEqual(
+    hooks.formatTierSheetCell(tierName, { "Order count": "6.0" }, "Order count"),
+    "6",
+    `${tierName} order count should display without decimals`
+  );
+}
+
+assertEqual(
+  hooks.formatTierSheetCell("Tier 1", { AOV: "154.489751", COUNTRY: "US" }, "AOV"),
+  "$154.49",
+  "US tier AOV should show dollars with two decimal places"
+);
+assertEqual(
+  hooks.formatTierSheetCell("Tier 2", { AOV: "99.9", COUNTRY: "UK" }, "AOV"),
+  "£99.90",
+  "UK tier AOV should show pounds with two decimal places"
+);
+assertEqual(
+  hooks.formatTierSheetCell("Tier 3", { AOV: "325.2175", COUNTRY: "DE" }, "AOV"),
+  "€325.22",
+  "German tier AOV should show euros with two decimal places"
+);
+assertEqual(
+  hooks.formatTierSheetCell("Tier 4", { AOV: "0.0", COUNTRY: "FR" }, "AOV"),
+  "€0.00",
+  "French tier AOV should retain zero with two decimal places"
+);
+assertEqual(
+  hooks.formatTierSheetCell("Tier 4", { AOV: "20", COUNTRY: "US", Currency: "GBP" }, "AOV"),
+  "£20.00",
+  "explicit tier currency should take precedence over country"
+);
+assertEqual(
+  hooks.formatTierSheetCell("Tier 4", { AOV: "", COUNTRY: "US" }, "AOV"),
+  "",
+  "missing tier AOV should remain blank"
+);
+
 console.log("Tier report frontend checks passed");
