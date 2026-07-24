@@ -930,11 +930,10 @@ def status_payload(
 def tier_summary_payload(month: str | None = None) -> dict[str, Any]:
     """Return per-tier aggregated metrics for a given month.
 
-    Queries cnpscy_oi_tier_assignments joined with
-    cnpscy_oi_offer_monthly_amazon_metrics to produce per-tier
-    brand count, orders, revenue, clicks, payout, and conversion rate.
-    Falls back to cnpscy_order_new_aggregate if the monthly metrics
-    view is unavailable.
+    Tier membership comes from cnpscy_oi_tier_assignments. Orders, revenue,
+    payout, and active merchants use cnpscy_order_new_aggregate; clicks use
+    cnpscy_amazon_click. These are the same sources used by Report Overview,
+    so the tier matrix reconciles with its headline metrics.
     """
     cache_key = f"tier_summary:{month or ''}"
     now = time.time()
@@ -943,111 +942,194 @@ def tier_summary_payload(month: str | None = None) -> dict[str, Any]:
         return cached[1]
 
     with db_connection() as conn:
-        if month is None:
-            row = fetch_one(conn, "SELECT MAX(month) AS m FROM cnpscy_oi_offer_monthly_amazon_metrics")
-            month = str(row["m"]) if row and row.get("m") else ""
+        start, end = resolve_tier_report_date_range(month=month)
+        month = start.strftime("%Y-%m")
+        start_key = start.strftime("%Y%m%d")
+        end_key = end.strftime("%Y%m%d")
 
-        metrics_columns = table_columns(conn, "cnpscy_oi_offer_monthly_amazon_metrics")
-        has_metrics = bool(pick_column(metrics_columns, ["merchantId"]))
+        aggregate_columns = table_columns(conn, "cnpscy_order_new_aggregate")
+        aggregate_id = pick_column(aggregate_columns, ["advert_id", "merchant_id"])
+        aggregate_date = pick_column(aggregate_columns, ["order_time_day", "time_day"])
+        click_columns = table_columns(conn, "cnpscy_amazon_click")
+        click_id = pick_column(click_columns, ["advert_id", "merchant_id"])
+        click_date = pick_column(click_columns, ["time_day", "click_time_day"])
+        click_metric = pick_column(click_columns, ["click", "clicks", "click_num"])
 
-        if has_metrics:
+        if aggregate_id and aggregate_date:
+            aggregate_subquery = f"""
+                SELECT
+                    CAST(a.{q(aggregate_id)} AS CHAR) AS merchantId,
+                    {sum_expr("a", aggregate_columns, ["order_num", "orders"], "orders")},
+                    {sum_expr("a", aggregate_columns, ["amount", "sales_amount", "revenue"], "revenue")},
+                    {sum_expr("a", aggregate_columns, ["payout", "commission"], "payout")}
+                FROM {q("cnpscy_order_new_aggregate")} a
+                WHERE a.{q(aggregate_date)} BETWEEN %s AND %s
+                GROUP BY a.{q(aggregate_id)}
+            """
+            click_join = ""
+            click_select = "0 AS clicks"
+            params: tuple[Any, ...] = (start_key, end_key)
+            if click_id and click_date and click_metric:
+                click_join = f"""
+                    LEFT JOIN (
+                        SELECT
+                            CAST(c.{q(click_id)} AS CHAR) AS merchantId,
+                            SUM(COALESCE(c.{q(click_metric)}, 0)) AS clicks
+                        FROM {q("cnpscy_amazon_click")} c
+                        WHERE c.{q(click_date)} BETWEEN %s AND %s
+                        GROUP BY c.{q(click_id)}
+                    ) c ON t.merchantId = c.merchantId
+                """
+                click_select = "COALESCE(SUM(c.clicks), 0) AS clicks"
+                params += (start_key, end_key)
+
             rows = fetch_all(
                 conn,
                 f"""
                 SELECT
                     t.tier,
-                    COUNT(DISTINCT t.merchantId) AS brandCount,
+                    COUNT(DISTINCT t.merchantId) AS assignedBrandCount,
+                    COUNT(DISTINCT a.merchantId) AS brandCount,
+                    COALESCE(SUM(a.orders), 0) AS orders,
+                    COALESCE(SUM(a.revenue), 0) AS revenue,
+                    {click_select},
+                    COALESCE(SUM(a.payout), 0) AS payout
+                FROM cnpscy_oi_tier_assignments t
+                LEFT JOIN ({aggregate_subquery}) a
+                    ON t.merchantId = a.merchantId
+                {click_join}
+                GROUP BY t.tier
+                ORDER BY FIELD(t.tier, 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4', 'BLACK TIER')
+                """,
+                params,
+            )
+        else:
+            metrics_columns = table_columns(conn, "cnpscy_oi_offer_monthly_amazon_metrics")
+            metrics_id = pick_column(metrics_columns, ["merchantId"])
+            if not metrics_id:
+                _status_cache[cache_key] = (now, {"ok": False, "month": month, "tiers": [], "total": None})
+                return _status_cache[cache_key][1]
+
+            rows = fetch_all(
+                conn,
+                f"""
+                SELECT
+                    t.tier,
+                    COUNT(DISTINCT t.merchantId) AS assignedBrandCount,
+                    COUNT(DISTINCT CASE
+                        WHEN COALESCE(m.orders, 0) > 0 OR COALESCE(m.revenue, 0) > 0 OR COALESCE(m.clicks, 0) > 0
+                        THEN t.merchantId END
+                    ) AS brandCount,
                     COALESCE(SUM(m.orders), 0) AS orders,
                     COALESCE(SUM(m.revenue), 0) AS revenue,
                     COALESCE(SUM(m.clicks), 0) AS clicks,
                     COALESCE(SUM(m.payout), 0) AS payout
                 FROM cnpscy_oi_tier_assignments t
                 LEFT JOIN cnpscy_oi_offer_monthly_amazon_metrics m
-                    ON t.merchantId = m.merchantId AND m.month = %s
+                    ON t.merchantId = m.{q(metrics_id)} AND m.month = %s
                 GROUP BY t.tier
                 ORDER BY FIELD(t.tier, 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4', 'BLACK TIER')
                 """,
                 (month,),
             )
-        else:
-            # Fallback: use cnpscy_order_new_aggregate
-            agg_cols = table_columns(conn, "cnpscy_order_new_aggregate")
-            agg_id = pick_column(agg_cols, ["advert_id", "merchant_id"])
-            if not agg_id:
-                _status_cache[cache_key] = (now, {"ok": False, "month": month, "tiers": [], "total": None})
-                return _status_cache[cache_key][1]
 
-            agg_month_col = pick_column(agg_cols, ["order_time_day", "time_day"])
-            month_cond = ""
-            agg_params: tuple[Any, ...] = ()
-            if agg_month_col and month:
-                month_start_key = month.replace("-", "") + "01"
-                month_end = parse_month_key(month)
-                if month_end:
-                    import calendar
-                    last_day = calendar.monthrange(month_end.year, month_end.month)[1]
-                    month_end_key = month.replace("-", "") + str(last_day)
-                    month_cond = f"AND a.{q(agg_month_col)} BETWEEN %s AND %s"
-                    agg_params = (month_start_key, month_end_key)
-
-            rows = fetch_all(
+        tier_columns = table_columns(conn, "cnpscy_oi_tier_assignments")
+        moved_from_column = pick_column(tier_columns, ["movedFromTier", "moved_from_tier"])
+        moved_at_column = pick_column(tier_columns, ["movedAt", "moved_at"])
+        move_counts: dict[str, dict[str, int]] = {}
+        if moved_from_column and moved_at_column:
+            start_timestamp = f"{start.isoformat()} 00:00:00"
+            end_timestamp = f"{(end + dt.timedelta(days=1)).isoformat()} 00:00:00"
+            exit_rows = fetch_all(
                 conn,
                 f"""
-                SELECT
-                    t.tier,
-                    COUNT(DISTINCT CAST(t.merchantId AS UNSIGNED)) AS brandCount,
-                    COALESCE(SUM(a.{q(pick_column(agg_cols, ['order_num', 'orders']))}), 0) AS orders,
-                    COALESCE(SUM(a.{q(pick_column(agg_cols, ['amount', 'sales_amount', 'revenue']))}), 0) AS revenue,
-                    0 AS clicks,
-                    COALESCE(SUM(a.{q(pick_column(agg_cols, ['payout', 'commission']))}), 0) AS payout
-                FROM cnpscy_oi_tier_assignments t
-                INNER JOIN cnpscy_order_new_aggregate a
-                    ON CAST(t.merchantId AS UNSIGNED) = a.{q(agg_id)}
-                    {month_cond}
-                GROUP BY t.tier
-                ORDER BY FIELD(t.tier, 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4', 'BLACK TIER')
+                SELECT {q(moved_from_column)} AS tier,
+                       COUNT(DISTINCT merchantId) AS tierExits
+                FROM cnpscy_oi_tier_assignments
+                WHERE {q(moved_at_column)} >= %s
+                  AND {q(moved_at_column)} < %s
+                  AND {q(moved_from_column)} IS NOT NULL
+                  AND {q(moved_from_column)} <> tier
+                GROUP BY {q(moved_from_column)}
                 """,
-                agg_params,
+                (start_timestamp, end_timestamp),
             )
+            entry_rows = fetch_all(
+                conn,
+                f"""
+                SELECT tier,
+                       COUNT(DISTINCT merchantId) AS newEntries
+                FROM cnpscy_oi_tier_assignments
+                WHERE {q(moved_at_column)} >= %s
+                  AND {q(moved_at_column)} < %s
+                  AND {q(moved_from_column)} IS NOT NULL
+                  AND {q(moved_from_column)} <> tier
+                GROUP BY tier
+                """,
+                (start_timestamp, end_timestamp),
+            )
+            for row in exit_rows:
+                tier_name = str(row.get("tier") or "")
+                move_counts.setdefault(tier_name, {})["tierExits"] = int(to_float(row.get("tierExits")))
+            for row in entry_rows:
+                tier_name = str(row.get("tier") or "")
+                move_counts.setdefault(tier_name, {})["newEntries"] = int(to_float(row.get("newEntries")))
 
         tiers = []
         total_brands = 0
+        total_assigned_brands = 0
         total_orders = 0
         total_revenue = 0.0
         total_clicks = 0.0
         total_payout = 0.0
+        total_new_entries = 0
+        total_tier_exits = 0
 
         for row in rows:
             brands = int(to_float(row.get("brandCount")))
+            assigned_brands = int(to_float(row.get("assignedBrandCount")))
             orders = int(to_float(row.get("orders")))
             revenue = to_float(row.get("revenue"))
             clicks = to_float(row.get("clicks"))
             payout = to_float(row.get("payout"))
             conversion = orders / clicks if clicks > 0 else 0.0
+            tier_name = str(row["tier"])
+            tier_moves = move_counts.get(tier_name, {})
+            new_entries = int(tier_moves.get("newEntries", 0))
+            tier_exits = int(tier_moves.get("tierExits", 0))
 
             tiers.append({
-                "tier": str(row["tier"]),
+                "tier": tier_name,
                 "brandCount": brands,
+                "assignedBrandCount": assigned_brands,
                 "orders": orders,
                 "revenue": round(revenue, 2),
                 "clicks": int(clicks),
                 "payout": round(payout, 2),
                 "conversionRate": round(conversion, 6),
+                "newEntries": new_entries,
+                "tierExits": tier_exits,
             })
             total_brands += brands
+            total_assigned_brands += assigned_brands
             total_orders += orders
             total_revenue += revenue
             total_clicks += clicks
             total_payout += payout
+            total_new_entries += new_entries
+            total_tier_exits += tier_exits
 
         total_conversion = total_orders / total_clicks if total_clicks > 0 else 0.0
         total = {
             "brandCount": total_brands,
+            "assignedBrandCount": total_assigned_brands,
             "orders": total_orders,
             "revenue": round(total_revenue, 2),
             "clicks": int(total_clicks),
             "payout": round(total_payout, 2),
             "conversionRate": round(total_conversion, 6),
+            "newEntries": total_new_entries,
+            "tierExits": total_tier_exits,
         }
 
         payload = {
@@ -1056,6 +1138,12 @@ def tier_summary_payload(month: str | None = None) -> dict[str, Any]:
             "month": month,
             "tiers": tiers,
             "total": total,
+            "source": {
+                "tierAssignments": "cnpscy_oi_tier_assignments",
+                "ordersRevenuePayout": "cnpscy_order_new_aggregate" if aggregate_id and aggregate_date else "cnpscy_oi_offer_monthly_amazon_metrics",
+                "clicks": "cnpscy_amazon_click" if click_id and click_date and click_metric else None,
+                "tierMoves": "cnpscy_oi_tier_assignments.movedAt" if moved_from_column and moved_at_column else None,
+            },
         }
 
     _status_cache[cache_key] = (now, payload)

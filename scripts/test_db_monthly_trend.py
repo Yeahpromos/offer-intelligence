@@ -124,5 +124,68 @@ class RecentMonthSummaryTests(unittest.TestCase):
         self.assertEqual(rows_by_date["2026-07-12"]["state"], "delay")
 
 
+class TierSummaryPayloadTests(unittest.TestCase):
+    def test_tier_summary_uses_report_overview_sources_and_database_moves(self) -> None:
+        columns = {
+            "cnpscy_order_new_aggregate": {"order_time_day", "advert_id", "amount", "payout", "order_num"},
+            "cnpscy_amazon_click": {"time_day", "advert_id", "click"},
+            "cnpscy_oi_tier_assignments": {"merchantId", "tier", "movedFromTier", "movedAt"},
+        }
+        calls: list[tuple[str, tuple[str, ...]]] = []
+
+        def fake_fetch_all(_conn, sql, params=()):
+            calls.append((sql, params))
+            if "AS tierExits" in sql:
+                return [{"tier": "Tier 3", "tierExits": 12}]
+            if "AS newEntries" in sql:
+                return [{"tier": "Tier 2", "newEntries": 7}]
+            return [
+                {
+                    "tier": "Tier 1",
+                    "assignedBrandCount": 42,
+                    "brandCount": 31,
+                    "orders": 1200,
+                    "revenue": 250000,
+                    "clicks": 20000,
+                    "payout": 25000,
+                },
+                {
+                    "tier": "Tier 3",
+                    "assignedBrandCount": 370,
+                    "brandCount": 160,
+                    "orders": 800,
+                    "revenue": 150000,
+                    "clicks": 10000,
+                    "payout": 12000,
+                },
+            ]
+
+        offer_db._status_cache.clear()
+        with (
+            patch.object(offer_db, "db_connection") as mocked_connection,
+            patch.object(offer_db, "table_columns", side_effect=lambda _conn, table: columns.get(table, set())),
+            patch.object(offer_db, "fetch_all", side_effect=fake_fetch_all),
+        ):
+            mocked_connection.return_value.__enter__.return_value = object()
+            result = offer_db.tier_summary_payload("2026-06")
+        offer_db._status_cache.clear()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"]["ordersRevenuePayout"], "cnpscy_order_new_aggregate")
+        self.assertEqual(result["source"]["clicks"], "cnpscy_amazon_click")
+        self.assertEqual(result["tiers"][0]["brandCount"], 31)
+        self.assertEqual(result["tiers"][0]["assignedBrandCount"], 42)
+        self.assertEqual(result["tiers"][1]["tierExits"], 12)
+        self.assertEqual(result["total"]["revenue"], 400000)
+        self.assertEqual(result["total"]["clicks"], 30000)
+        self.assertEqual(result["total"]["brandCount"], 191)
+
+        summary_sql, summary_params = calls[0]
+        self.assertIn("FROM `cnpscy_order_new_aggregate` a", summary_sql)
+        self.assertIn("FROM `cnpscy_amazon_click` c", summary_sql)
+        self.assertIn("COUNT(DISTINCT a.merchantId) AS brandCount", summary_sql)
+        self.assertEqual(summary_params, ("20260601", "20260630", "20260601", "20260630"))
+
+
 if __name__ == "__main__":
     unittest.main()

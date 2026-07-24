@@ -10485,6 +10485,7 @@
         if (
           preset.actuals &&
           preset.actuals.tierExits !== undefined &&
+          !record.__tierExitsAvailable &&
           (record.__databaseOnly || String(record["Tier Exits"] ?? "").trim() === "")
         ) {
           hydrated["Tier Exits"] = preset.actuals.tierExits;
@@ -10516,8 +10517,9 @@
         Revenue: t.revenue,
         Payout: t.payout,
         "Avg Conversion": t.conversionRate,
-        "New Tier Entries": 0,
-        "Tier Exits": 0,
+        "New Tier Entries": t.newEntries || 0,
+        "Tier Exits": t.tierExits || 0,
+        __tierExitsAvailable: t.tierExits !== undefined && t.tierExits !== null,
         Target: ""
       })
     );
@@ -10535,8 +10537,9 @@
         Revenue: total.revenue,
         Payout: total.payout,
         "Avg Conversion": total.conversionRate,
-        "New Tier Entries": 0,
-        "Tier Exits": 0,
+        "New Tier Entries": total.newEntries || 0,
+        "Tier Exits": total.tierExits || 0,
+        __tierExitsAvailable: total.tierExits !== undefined && total.tierExits !== null,
         Target: ""
       }));
     }
@@ -11413,6 +11416,29 @@
     return TARGET_PROGRESS_DEFINITIONS.find((item) => item.tier.toLowerCase() === normalizedTier) || null;
   }
 
+  function targetEditableRecord(definition, record = null, month = state.targetFilters.month) {
+    if (record) return record;
+    const monthLabel = String(month || "").trim();
+    const monthKey = monthKeyFromText(monthLabel);
+    if (!definition || !monthLabel || monthLabel === "all" || !monthKey) return null;
+    return applyTargetOverride({
+      Month: monthLabel,
+      __monthKey: monthKey,
+      __databaseOnly: true,
+      __targetPlaceholderOnly: true,
+      __source: "target-placeholder",
+      Tier: definition.tier,
+      "Brand Count": 0,
+      "Total Clicks": 0,
+      "Order Count": 0,
+      Revenue: 0,
+      "Avg Conversion": 0,
+      "New Tier Entries": 0,
+      "Tier Exits": 0,
+      Target: ""
+    });
+  }
+
   function targetOptionalMetricValue(record, headers) {
     for (const header of headers) {
       const raw = record && record[header];
@@ -11430,11 +11456,11 @@
     const text = String(record.Target || "");
     if (goal && goal.type === "gmv") {
       const match = text.match(/(?:GMV|Revenue) Target:\s*([^;]+)/i);
-      return match ? match[1].trim() : goal.targetText;
+      return match ? match[1].trim() : (goal.targetText || "");
     }
     if (goal && goal.type === "commission") {
       const match = text.match(/Commission Target:\s*([^;]+)/i);
-      return match ? match[1].trim() : goal.targetText;
+      return match ? match[1].trim() : (goal.targetText || "");
     }
     if (goal && goal.type === "removal") {
       const match = text.match(/(?:Merchant Removal Target:\s*|Brand Target:\s*Promote\s*)([\d,.]+)/i);
@@ -11453,7 +11479,7 @@
 
   function targetEditInputAttributes(goal) {
     if (goal && (goal.type === "removal" || goal.type === "promotion" || goal.type === "brand")) {
-      return `type="number" inputmode="numeric" min="0" step="1"`;
+      return `type="number" inputmode="numeric" min="1" step="1"`;
     }
     return `type="text"`;
   }
@@ -11464,37 +11490,55 @@
     return pattern.test(current) ? current.replace(pattern, replacement) : `${current}; ${replacement}`;
   }
 
-  function targetTextFromEditValue(record, value) {
+  function targetTextFromEditValue(record, value, definition = targetProgressDefinition(record && record.Tier)) {
     const goal = targetGoal(record);
     const clean = String(value || "").trim();
-    if (!clean || !goal) return clean;
+    if (!clean) return clean;
+    const goalType = (goal && goal.type) || (definition && definition.type);
+    if (!goalType) return clean;
     const current = String(record.Target || "").trim();
-    if (goal.type === "gmv") {
+    if (goalType === "gmv") {
       return replaceTargetClause(current, /(?:GMV|Revenue) Target:\s*[^;]+/i, `GMV Target: ${clean}`);
     }
-    if (goal.type === "commission") {
+    if (goalType === "commission") {
       return replaceTargetClause(current, /Commission Target:\s*[^;]+/i, `Commission Target: ${clean}`);
     }
-    if (goal.type === "removal") {
+    if (goalType === "removal") {
       const count = (clean.match(/[\d,.]+/) || [""])[0] || clean;
       return replaceTargetClause(current, /(?:Merchant Removal Target:\s*|Brand Target:\s*Promote\s*)[^;]+/i, `Merchant Removal Target: ${count}`);
     }
-    if (goal.type === "promotion") {
+    if (goalType === "promotion") {
       const count = (clean.match(/[\d,.]+/) || [""])[0] || clean;
       const suffixMatch = current.match(/Brand Target:\s*Promote\s*[\d,.]+\s*Brands?([^;]*)/i);
       const suffix = suffixMatch && suffixMatch[1] ? suffixMatch[1].trim() : "";
       return replaceTargetClause(current, /Brand Target:\s*Promote\s*[^;]+/i, `Brand Target: Promote ${count} Brands${suffix ? ` ${suffix}` : ""}`);
     }
-    if (goal.type === "brand") {
+    if (goalType === "brand") {
       return replaceTargetClause(current, /Brand Target:\s*(?!Promote)[^;]+/i, `Brand Target: ${clean}`);
     }
     return clean;
   }
 
+  function targetEditFormHtml(record, goal, definition) {
+    const editKey = record.__targetOverrideKey || targetOverrideKey(record);
+    return `<form class="target-edit-form" data-target-edit-form data-target-edit-key="${escapeHtml(editKey)}" data-target-tier="${escapeHtml(definition.tier)}" data-target-type="${escapeHtml(definition.type)}" data-target-month="${escapeHtml(record.Month)}">
+      <input name="target" ${targetEditInputAttributes(goal || definition)} value="${escapeHtml(targetEditValue(record, goal || definition))}" aria-label="Target value for ${escapeHtml(definition.tier)}" />
+      <button type="submit">Save</button>
+      <button type="button" data-target-edit-cancel>Cancel</button>
+    </form>`;
+  }
+
+  function targetActualAvailable(record, goal) {
+    if (!record || record.__targetPlaceholderOnly || !goal || !Number.isFinite(goal.actual)) return false;
+    if (goal.type === "removal" && record.__source === "database" && !record.__tierExitsAvailable) return false;
+    return true;
+  }
+
   function targetGoalCardHtml(record, index, resolvedGoal = null) {
     const goal = resolvedGoal || targetGoal(record);
     if (!goal || !goal.target) return "";
-    const hasActual = Number.isFinite(goal.actual);
+    const definition = targetProgressDefinition(record.Tier) || { tier: record.Tier, type: goal.type };
+    const hasActual = targetActualAvailable(record, goal);
     const progress = hasActual ? goal.actual / goal.target : 0;
     const capped = Math.max(0, Math.min(100, progress * 100));
     const delta = hasActual ? goal.actual - goal.target : null;
@@ -11504,11 +11548,7 @@
       : "Awaiting data";
     const editKey = record.__targetOverrideKey || targetOverrideKey(record);
     const targetControl = state.targetEditingKey === editKey
-      ? `<form class="target-edit-form" data-target-edit-form data-target-edit-key="${escapeHtml(editKey)}">
-          <input name="target" ${targetEditInputAttributes(goal)} value="${escapeHtml(targetEditValue(record, goal))}" aria-label="Target value for ${escapeHtml(record.Tier)}" />
-          <button type="submit">Save</button>
-          <button type="button" data-target-edit-cancel>Cancel</button>
-        </form>`
+      ? targetEditFormHtml(record, goal, definition)
       : `<span class="target-value-line">
           <strong>${escapeHtml(goal.targetText)}</strong>
           <button class="target-edit-button" type="button" data-target-edit-key="${escapeHtml(editKey)}" aria-label="Edit target for ${escapeHtml(record.Tier)}">Edit</button>
@@ -11526,10 +11566,10 @@
           <span>Target</span>
           ${targetControl}
         </div>
-        <div><span>Actual</span><strong>${escapeHtml(goal.actualText)}</strong></div>
+        <div><span>Actual</span><strong>${escapeHtml(hasActual ? goal.actualText : "Awaiting data")}</strong></div>
       </div>
       <div class="target-progress-bar" aria-hidden="true"><span style="width:${capped.toFixed(2)}%"></span></div>
-      <p class="${hasActual ? (met ? "positive" : "negative") : ""}">${hasActual ? `${met ? "+" : "-"} ${escapeHtml(delta >= 0 ? `${compactNumber(delta)} above target` : `${compactNumber(Math.abs(delta))} to target`)}` : "Actual commission data is not available yet."}</p>
+      <p class="${hasActual ? (met ? "positive" : "negative") : ""}">${hasActual ? `${met ? "+" : "-"} ${escapeHtml(delta >= 0 ? `${compactNumber(delta)} above target` : `${compactNumber(Math.abs(delta))} to target`)}` : "Awaiting actual data."}</p>
     </article>`;
   }
 
@@ -11541,7 +11581,7 @@
       return actual === null ? "Awaiting data" : compactMoney(actual);
     }
     if (definition.type === "removal") {
-      if (record.__databaseOnly) return "Awaiting data";
+      if (record.__source === "database" && !record.__tierExitsAvailable) return "Awaiting data";
       return `${parseSheetNumber(record["Tier Exits"]).toLocaleString()} removed`;
     }
     return "Awaiting data";
@@ -11549,6 +11589,13 @@
 
   function targetPlaceholderCardHtml(definition, record, index) {
     const monthLabel = state.targetFilters.month === "all" ? "the selected month" : state.targetFilters.month;
+    const editableRecord = targetEditableRecord(definition, record);
+    const editKey = editableRecord && (editableRecord.__targetOverrideKey || targetOverrideKey(editableRecord));
+    const targetControl = editableRecord && state.targetEditingKey === editKey
+      ? targetEditFormHtml(editableRecord, null, definition)
+      : editKey
+        ? `<button class="target-edit-button target-set-button" type="button" data-target-edit-key="${escapeHtml(editKey)}" aria-label="Set target for ${escapeHtml(definition.tier)}">Set target</button>`
+        : `<strong class="target-placeholder-value">Set target</strong>`;
     return `<article class="target-progress-card target-progress-placeholder target-card-enter" style="--i:${index}">
       <div class="target-progress-card-head">
         <div>
@@ -11558,7 +11605,7 @@
         <span class="target-status-pill placeholder">Target needed</span>
       </div>
       <div class="target-progress-values">
-        <div><span>Target</span><strong class="target-placeholder-value">Set target</strong></div>
+        <div><span>Target</span>${targetControl}</div>
         <div><span>Actual</span><strong>${escapeHtml(targetPlaceholderActualText(definition, record))}</strong></div>
       </div>
       <div class="target-progress-bar placeholder" aria-hidden="true"><span></span></div>
@@ -11575,10 +11622,11 @@
     let activeCount = 0;
     const cards = definitions.map((definition, index) => {
       const record = metricRows.find((row) => String(row.Tier).toLowerCase() === definition.tier.toLowerCase()) || null;
-      const goal = record ? targetGoal(record) : null;
-      if (record && targetGoalMatchesDefinition(goal, definition)) {
+      const editableRecord = targetEditableRecord(definition, record);
+      const goal = editableRecord ? targetGoal(editableRecord) : null;
+      if (editableRecord && targetGoalMatchesDefinition(goal, definition)) {
         activeCount += 1;
-        return targetGoalCardHtml(record, index, goal);
+        return targetGoalCardHtml(editableRecord, index, goal);
       }
       return targetPlaceholderCardHtml(definition, record, index);
     });
@@ -12151,11 +12199,16 @@
     const input = form.querySelector("input[name='target']");
     if (!key || !input) return;
     const value = input.value.trim();
-    const currentRecord = targetRecords().find((record) => record.__targetOverrideKey === key);
-    const targetText = currentRecord ? targetTextFromEditValue(currentRecord, value) : value;
+    const definition = targetProgressDefinition(form.dataset.targetTier) || {
+      tier: form.dataset.targetTier || "",
+      type: form.dataset.targetType || ""
+    };
+    const currentRecord = targetRecords().find((record) => record.__targetOverrideKey === key) ||
+      targetEditableRecord(definition, null, form.dataset.targetMonth);
+    const targetText = currentRecord ? targetTextFromEditValue(currentRecord, value, definition) : value;
     if (value) {
       const candidate = currentRecord ? { ...currentRecord, Target: targetText } : { Target: targetText };
-      if (!targetGoal(candidate)) {
+      if (!targetGoalMatchesDefinition(targetGoal(candidate), definition)) {
         input.setCustomValidity("Enter a valid target value.");
         input.reportValidity();
         return;
@@ -12728,6 +12781,8 @@
       targetDbStatusMonthKey,
       targetMonthHasMetrics: (month) => targetMonthHasMetrics(targetRecords(), month),
       targetProgressHtml,
+      targetProgressDefinition,
+      targetTextFromEditValue,
       targetTrendHtml,
       targetTrendPlotHtml,
       targetMonthlyTrendRows,

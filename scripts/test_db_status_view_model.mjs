@@ -178,6 +178,8 @@ assertMatch(chartHtml, /orders \//, "tooltip separators should remain ASCII-safe
 assertTruthy(hooks.targetTrendHtml, "targetTrendHtml hook should be exposed");
 assertTruthy(hooks.targetTrendPlotHtml, "targetTrendPlotHtml hook should be exposed");
 assertTruthy(hooks.targetProgressHtml, "targetProgressHtml hook should be exposed");
+assertTruthy(hooks.targetProgressDefinition, "targetProgressDefinition hook should be exposed");
+assertTruthy(hooks.targetTextFromEditValue, "target target-text formatter hook should be exposed");
 assertTruthy(hooks.setTargetFilters, "target filter setter hook should be exposed");
 assertTruthy(hooks.setTargetTrendView, "trend view setter hook should be exposed");
 assertTruthy(hooks.setDbStatusData, "DB status data setter hook should be exposed");
@@ -222,6 +224,32 @@ assertMatch(progressHtml, /Tier 2[\s\S]*Commission target/, "Tier 2 should reser
 assertMatch(progressHtml, /Tier 3[\s\S]*Merchant removal target/, "Tier 3 should reserve a merchant removal target card");
 assertMatch(progressHtml, /Tier 4[\s\S]*Merchant removal target/, "Tier 4 should reserve a merchant removal target card");
 assertMatch(progressHtml, /Target needed/, "unconfigured tier goals should stay visible as placeholders");
+assertMatch(progressHtml, /data-target-edit-key="2026-07::Tier 1"[\s\S]*Set target/, "an unconfigured monthly goal should expose the PR 29 inline target editor");
+
+const tierOneDefinition = hooks.targetProgressDefinition("Tier 1");
+const tierTwoDefinition = hooks.targetProgressDefinition("Tier 2");
+const tierThreeDefinition = hooks.targetProgressDefinition("Tier 3");
+const tierFourDefinition = hooks.targetProgressDefinition("Tier 4");
+assertEqual(
+  hooks.targetTextFromEditValue({ Tier: "Tier 1", Target: "" }, "$600K", tierOneDefinition),
+  "GMV Target: $600K",
+  "Tier 1 target editing should preserve the current GMV business rule"
+);
+assertEqual(
+  hooks.targetTextFromEditValue({ Tier: "Tier 2", Target: "Revenue Target: $800K+" }, "$200K", tierTwoDefinition),
+  "Revenue Target: $800K+; Commission Target: $200K",
+  "Tier 2 target editing should add a commission target without reviving the old revenue goal"
+);
+assertEqual(
+  hooks.targetTextFromEditValue({ Tier: "Tier 3", Target: "Brand Target: Promote 10 Brands to Tier 2" }, "12", tierThreeDefinition),
+  "Merchant Removal Target: 12",
+  "Tier 3 target editing should use the latest merchant-removal rule"
+);
+assertEqual(
+  hooks.targetTextFromEditValue({ Tier: "Tier 4", Target: "" }, "30", tierFourDefinition),
+  "Merchant Removal Target: 30",
+  "Tier 4 target editing should use the latest merchant-removal rule"
+);
 
 hooks.setTargetFilters({ month: "June 2026", tier: "all" });
 const juneRecords = hooks.targetRecords().filter((row) => row.__monthKey === "2026-06");
@@ -237,8 +265,8 @@ hooks.setDbTierSummaryData({
   tiers: [
     { tier: "Tier 1", brandCount: 42, clicks: 75000, orders: 47000, revenue: 600000, payout: 100000, conversionRate: 0.6267 },
     { tier: "Tier 2", brandCount: 52, clicks: 360000, orders: 130000, revenue: 1100000, payout: 210000, conversionRate: 0.3611 },
-    { tier: "Tier 3", brandCount: 370, clicks: 108000, orders: 68000, revenue: 570000, payout: 77000, conversionRate: 0.6296 },
-    { tier: "Tier 4", brandCount: 5807, clicks: 8500, orders: 4300, revenue: 6400, payout: 1000, conversionRate: 0.5059 }
+    { tier: "Tier 3", brandCount: 370, clicks: 108000, orders: 68000, revenue: 570000, payout: 77000, conversionRate: 0.6296, newEntries: 4, tierExits: 12 },
+    { tier: "Tier 4", brandCount: 5807, clicks: 8500, orders: 4300, revenue: 6400, payout: 1000, conversionRate: 0.5059, newEntries: 3, tierExits: 31 }
   ],
   total: { brandCount: 6271, clicks: 551500, orders: 249300, revenue: 2276400, payout: 388000, conversionRate: 0.452 }
 });
@@ -246,6 +274,8 @@ const liveJuneRecords = hooks.targetRecords().filter((row) => row.__monthKey ===
 const liveJuneProgressHtml = hooks.targetProgressHtml(liveJuneRecords);
 assertMatch(liveJuneProgressHtml, /Tier 1[\s\S]*120\.0%[\s\S]*\$600K/, "live Tier 1 database values should replace the fallback snapshot");
 assertMatch(liveJuneProgressHtml, /Tier 2[\s\S]*Commission target[\s\S]*\$210K/, "live Tier 2 payout should drive the displayed commission actual");
+assertMatch(liveJuneProgressHtml, /Tier 3[\s\S]*120\.0%[\s\S]*12 removed/, "live Tier 3 database exits should replace the fallback snapshot");
+assertMatch(liveJuneProgressHtml, /Tier 4[\s\S]*103\.3%[\s\S]*31 removed/, "live Tier 4 database exits should replace the fallback snapshot");
 
 hooks.setDbStatusData({
   ...sampleStatus,
