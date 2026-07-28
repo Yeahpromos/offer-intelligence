@@ -10603,6 +10603,7 @@ var _NUMERIC_COL_PATTERNS = [
   function _showManagerDropdown() {
     var dd = document.getElementById("publisherManagerDropdown");
     if (!dd || !els.publisherManagerSearch) return;
+    var filters = dd.closest(".publishers-filters");
     var q = (els.publisherManagerSearch.value || "").toLowerCase().trim();
     var html = "";
     var matched = 0;
@@ -10617,11 +10618,15 @@ var _NUMERIC_COL_PATTERNS = [
     }
     dd.innerHTML = html;
     dd.classList.add("show");
+    if (filters) filters.classList.add("combobox-open");
   }
 
   function _hideManagerDropdown() {
     var dd = document.getElementById("publisherManagerDropdown");
-    if (dd) dd.classList.remove("show");
+    if (!dd) return;
+    dd.classList.remove("show");
+    var filters = dd.closest(".publishers-filters");
+    if (filters) filters.classList.remove("combobox-open");
   }
 
   function loadPublishersData(forceRefresh) {

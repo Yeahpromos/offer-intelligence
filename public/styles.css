@@ -7717,6 +7717,12 @@ td strong {
   z-index: 2;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
+
+/* Lift the complete filter stacking context while its custom menu is open. */
+.publishers-page > .publishers-filters.combobox-open {
+  z-index: 30;
+}
+
 .publishers-filters::before {
   content: "";
   position: absolute;
