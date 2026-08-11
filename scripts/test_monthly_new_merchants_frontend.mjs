@@ -289,16 +289,22 @@ assert(!indexHtml.includes('id="monthlyNewMerchantsRefresh"'), "database auto-di
 
 const publishersNavIndex = indexHtml.indexOf('id="publishersNav"');
 const monthlyNewMerchantsNavIndex = indexHtml.indexOf('id="monthlyNewMerchantsNav"');
+const targetsNavIndex = indexHtml.indexOf('id="targetNav"');
 const reportsNavIndex = indexHtml.indexOf('id="sheetsNav"');
 assert(
   publishersNavIndex < monthlyNewMerchantsNavIndex
-    && monthlyNewMerchantsNavIndex < reportsNavIndex,
-  "monthly new merchants should be a top-level page between Publishers and Reports"
+    && monthlyNewMerchantsNavIndex < targetsNavIndex
+    && targetsNavIndex < reportsNavIndex,
+  "monthly new merchants and Targets should be top-level pages before Reports"
 );
 const reportsSubnavMatch = indexHtml.match(/<div class="nav-subnav" id="reportsSubnav"[\s\S]*?<\/div>/);
 assert(
   reportsSubnavMatch && !reportsSubnavMatch[0].includes('id="monthlyNewMerchantsNav"'),
   "monthly new merchants should not be nested inside the Reports submenu"
+);
+assert(
+  reportsSubnavMatch && !reportsSubnavMatch[0].includes('id="targetNav"'),
+  "Targets should not be nested inside the Reports submenu"
 );
 assertEqual(
   [
@@ -307,8 +313,8 @@ assertEqual(
     hooks.pageBelongsToReports("tier"),
     hooks.pageBelongsToReports("monthly-new-merchants")
   ],
-  [true, true, true, false],
-  "monthly new merchants should not activate the Reports parent"
+  [false, true, true, false],
+  "Targets and monthly new merchants should not activate the Reports parent"
 );
 
 const formMatch = indexHtml.match(/<form id="monthlyNewMerchantForm">([\s\S]*?)<\/form>/);

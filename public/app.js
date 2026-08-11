@@ -190,6 +190,19 @@
   const paymentRecordsByMerchant = new Map();
   rebuildPaymentIndex();
 
+  const OFFER_TRACKER_RULES_KEY = "offerListTrackerRulesV1";
+  const OFFER_TRACKER_COLUMNS_KEY = "offerListTrackerColumnsV1";
+  const OFFER_TRACKER_SAVED_VIEWS_KEY = "offerListTrackerSavedViewsV1";
+  const DEFAULT_OFFER_TRACKER_RULES = Object.freeze({ highScore: 8, lowAovMax: 100 });
+  const DEFAULT_OFFER_TRACKER_COLUMNS = Object.freeze({
+    tier: true,
+    commission: true,
+    aov: true,
+    category: true,
+    asins: true,
+    recommendation: true
+  });
+
   const state = {
     page: "dashboard",
     tier: "all",
@@ -271,6 +284,36 @@
       importRows: [],
       importFileName: "",
       importRestoreFocus: null
+    },
+    offerListTracker: {
+      draftFilters: {
+        tier: "all",
+        category: "all",
+        minAov: "",
+        maxAov: "",
+        minCommission: "",
+        maxCommission: "",
+        network: "all"
+      },
+      filters: {
+        tier: "all",
+        category: "all",
+        minAov: "",
+        maxAov: "",
+        minCommission: "",
+        maxCommission: "",
+        network: "all"
+      },
+      search: "",
+      view: "offers",
+      page: 1,
+      pageSize: 25,
+      selectedKeys: new Set(),
+      visibleColumns: loadOfferTrackerVisibleColumns(),
+      rules: loadOfferTrackerRules(),
+      savedViews: loadOfferTrackerSavedViews(),
+      controlsReady: false,
+      animated: false
     },
     tierSheetFilters: {
       search: "",
@@ -375,6 +418,7 @@
     paymentsNav: document.getElementById("paymentsNav"),
     sheetsNav: document.getElementById("sheetsNav"),
     targetNav: document.getElementById("targetNav"),
+    offerListTrackerNav: document.getElementById("offerListTrackerNav"),
     reportsSubnav: document.getElementById("reportsSubnav"),
     categoryNav: document.getElementById("categoryNav"),
     monthlyNewMerchantsNav: document.getElementById("monthlyNewMerchantsNav"),
@@ -495,6 +539,45 @@
     publisherPortfolioRows: document.getElementById("publisherPortfolioRows"),
     publishersTablePanel: document.getElementById("publishersTablePanel"),
     monthlyNewMerchantsPage: document.getElementById("monthlyNewMerchantsPage"),
+    offerListTrackerPage: document.getElementById("offerListTrackerPage"),
+    offerTrackerSavedViewsToggle: document.getElementById("offerTrackerSavedViewsToggle"),
+    offerTrackerSavedViewsPanel: document.getElementById("offerTrackerSavedViewsPanel"),
+    offerTrackerSavedViewsList: document.getElementById("offerTrackerSavedViewsList"),
+    offerTrackerSavedViewName: document.getElementById("offerTrackerSavedViewName"),
+    offerTrackerSaveView: document.getElementById("offerTrackerSaveView"),
+    offerTrackerExport: document.getElementById("offerTrackerExport"),
+    offerTrackerTier: document.getElementById("offerTrackerTier"),
+    offerTrackerCategory: document.getElementById("offerTrackerCategory"),
+    offerTrackerMinAov: document.getElementById("offerTrackerMinAov"),
+    offerTrackerMaxAov: document.getElementById("offerTrackerMaxAov"),
+    offerTrackerMinCommission: document.getElementById("offerTrackerMinCommission"),
+    offerTrackerMaxCommission: document.getElementById("offerTrackerMaxCommission"),
+    offerTrackerNetwork: document.getElementById("offerTrackerNetwork"),
+    offerTrackerFilterChips: document.getElementById("offerTrackerFilterChips"),
+    offerTrackerResetFilters: document.getElementById("offerTrackerResetFilters"),
+    offerTrackerApplyFilters: document.getElementById("offerTrackerApplyFilters"),
+    offerTrackerKpis: document.getElementById("offerTrackerKpis"),
+    offerTrackerOffersTab: document.getElementById("offerTrackerOffersTab"),
+    offerTrackerProductsTab: document.getElementById("offerTrackerProductsTab"),
+    offerTrackerSearch: document.getElementById("offerTrackerSearch"),
+    offerTrackerColumnsToggle: document.getElementById("offerTrackerColumnsToggle"),
+    offerTrackerColumnsPanel: document.getElementById("offerTrackerColumnsPanel"),
+    offerTrackerRulesToggle: document.getElementById("offerTrackerRulesToggle"),
+    offerTrackerRulesPanel: document.getElementById("offerTrackerRulesPanel"),
+    offerTrackerScoreLegend: document.getElementById("offerTrackerScoreLegend"),
+    offerTrackerHighScore: document.getElementById("offerTrackerHighScore"),
+    offerTrackerLowAovMax: document.getElementById("offerTrackerLowAovMax"),
+    offerTrackerResetRules: document.getElementById("offerTrackerResetRules"),
+    offerTrackerSaveRules: document.getElementById("offerTrackerSaveRules"),
+    offerTrackerTableHead: document.getElementById("offerTrackerTableHead"),
+    offerTrackerTableRows: document.getElementById("offerTrackerTableRows"),
+    offerTrackerTableCount: document.getElementById("offerTrackerTableCount"),
+    offerTrackerPagePrev: document.getElementById("offerTrackerPagePrev"),
+    offerTrackerPageNext: document.getElementById("offerTrackerPageNext"),
+    offerTrackerPageIndicator: document.getElementById("offerTrackerPageIndicator"),
+    offerTrackerExportSelected: document.getElementById("offerTrackerExportSelected"),
+    offerTrackerSelectedCount: document.getElementById("offerTrackerSelectedCount"),
+    offerTrackerNotice: document.getElementById("offerTrackerNotice"),
     monthlyNewMerchantsMonth: document.getElementById("monthlyNewMerchantsMonth"),
     monthlyNewMerchantImport: document.getElementById("monthlyNewMerchantImport"),
     monthlyNewMerchantAdd: document.getElementById("monthlyNewMerchantAdd"),
@@ -700,6 +783,33 @@
       "nav.targets": "目标",
       "nav.category": "品类",
       "nav.monthlyNewMerchants": "上新商家",
+      "nav.offerListTracker": "Offer 清单追踪",
+      "offerTracker.eyebrow": "Offer 规划工作台",
+      "offerTracker.title": "Offer List Tracker",
+      "offerTracker.subtitle": "按优先级生成 Offer 清单，并导出可直接分享的工作簿。",
+      "offerTracker.savedViews": "已保存视图",
+      "offerTracker.viewName": "视图名称",
+      "offerTracker.viewNamePlaceholder": "例如：Tier 1 美妆",
+      "offerTracker.saveCurrentView": "保存当前视图",
+      "offerTracker.exportExcel": "导出 Excel",
+      "offerTracker.defineRange": "定义 Offer 范围",
+      "offerTracker.defineRangeSubtitle": "先选择商业范围，再查看并导出对应的优先级清单。",
+      "offerTracker.liveSource": "实时 Offer 缓存",
+      "offerTracker.aovRange": "AOV 范围",
+      "offerTracker.commissionRange": "佣金范围",
+      "offerTracker.applyFilters": "应用筛选",
+      "offerTracker.offerList": "Offer 清单",
+      "offerTracker.productList": "品牌产品清单",
+      "offerTracker.search": "搜索 Offer",
+      "offerTracker.searchPlaceholder": "搜索商家或 ID",
+      "offerTracker.columns": "列设置",
+      "offerTracker.priorityRules": "优先级规则",
+      "offerTracker.rulesSubtitle": "使用透明评分对导出内容分组。",
+      "offerTracker.highScore": "高优先级最低分",
+      "offerTracker.lowAovCeiling": "低 AOV 上限",
+      "offerTracker.resetRules": "重置规则",
+      "offerTracker.saveRules": "保存规则",
+      "offerTracker.exportSelected": "导出已选",
       "monthlyNewMerchants.title": "本月上新商家",
       "monthlyNewMerchants.subtitle": "手动新增本月商家，每条记录都会直接保存到数据库",
       "monthlyNewMerchants.add": "新增商家",
@@ -1442,6 +1552,8 @@
       renderTierPage(state.selectedTierPage);
     } else if (state.page === "monthly-new-merchants") {
       renderMonthlyNewMerchantsPage();
+    } else if (state.page === "offer-list-tracker") {
+      renderOfferListTrackerPage();
     } else {
       renderAll();
       if (state.currentContext.type !== "default") renderContextPanel(state.currentContext);
@@ -21165,13 +21277,513 @@ var _NUMERIC_COL_PATTERNS = [
     }
   }
 
+  function loadOfferTrackerRules() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(OFFER_TRACKER_RULES_KEY) || "{}");
+      return {
+        highScore: Math.min(11, Math.max(4, Math.round(number(parsed.highScore) || DEFAULT_OFFER_TRACKER_RULES.highScore))),
+        lowAovMax: Math.max(1, number(parsed.lowAovMax) || DEFAULT_OFFER_TRACKER_RULES.lowAovMax)
+      };
+    } catch (error) {
+      return { ...DEFAULT_OFFER_TRACKER_RULES };
+    }
+  }
+
+  function loadOfferTrackerVisibleColumns() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(OFFER_TRACKER_COLUMNS_KEY) || "{}");
+      return Object.keys(DEFAULT_OFFER_TRACKER_COLUMNS).reduce((result, key) => {
+        result[key] = parsed[key] == null ? DEFAULT_OFFER_TRACKER_COLUMNS[key] : Boolean(parsed[key]);
+        return result;
+      }, {});
+    } catch (error) {
+      return { ...DEFAULT_OFFER_TRACKER_COLUMNS };
+    }
+  }
+
+  function loadOfferTrackerSavedViews() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(OFFER_TRACKER_SAVED_VIEWS_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.filter((view) => view && view.id && view.name).slice(0, 8) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function offerTrackerText(en, zh) {
+    return state.language === "zh" ? zh : en;
+  }
+
+  function offerTrackerOptionalNumber(value) {
+    if (value == null || String(value).trim() === "") return null;
+    const parsed = Number(String(value).replace(/[$,%]/g, "").replace(/,/g, "").trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function offerTrackerCommissionRate(offer) {
+    const candidates = [offer && offer.affCommissionRate, offer && offer.commissionRate];
+    for (const value of candidates) {
+      const parsed = offerTrackerOptionalNumber(value);
+      if (parsed !== null) return parsed;
+    }
+    return 0;
+  }
+
+  function offerTrackerAsins(offer) {
+    const values = [offer && offer.topAsins, offer && offer.productAsins, offer && offer.asinsText]
+      .flatMap((value) => Array.isArray(value) ? value : String(value || "").split(/[|,;\s]+/));
+    const seen = new Set();
+    return values.map((value) => String(value || "").trim().toUpperCase()).filter((value) => {
+      if (!/^B0[A-Z0-9]{8}$/.test(value) || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    }).slice(0, 3);
+  }
+
+  function offerTrackerScore(offer) {
+    const tier = canonicalTierName(offer && offer.tier);
+    const tierPoints = tier === "Tier 1" ? 4 : tier === "Tier 2" ? 3 : tier === "Tier 3" ? 2 : tier === "Tier 4" ? 1 : 0;
+    const commission = offerTrackerCommissionRate(offer);
+    const commissionPoints = commission >= 20 ? 4 : commission >= 15 ? 3 : commission >= 10 ? 2 : commission >= 5 ? 1 : 0;
+    const aov = number(offer && offer.aov);
+    const aovPoints = aov >= 75 && aov <= 350 ? 2 : aov > 350 ? 1 : 0;
+    const asinPoints = offerTrackerAsins(offer).length ? 1 : 0;
+    return tierPoints + commissionPoints + aovPoints + asinPoints;
+  }
+
+  function offerTrackerPriority(offer, rules = DEFAULT_OFFER_TRACKER_RULES) {
+    const score = offerTrackerScore(offer);
+    const aov = number(offer && offer.aov);
+    if (score >= number(rules.highScore)) return { key: "high", score, order: 0 };
+    if (aov > 0 && aov <= number(rules.lowAovMax)) return { key: "low-aov", score, order: 2 };
+    return { key: "recommended", score, order: 1 };
+  }
+
+  function offerTrackerPriorityLabel(key, language = state.language) {
+    const labels = {
+      high: language === "zh" ? "高优先级 Offer" : "High Priority",
+      recommended: language === "zh" ? "推荐 Offer" : "Recommended",
+      "low-aov": language === "zh" ? "低 AOV 优选" : "Low-AOV Pick"
+    };
+    return labels[key] || labels.recommended;
+  }
+
+  function offerTrackerMerchantName(offer) {
+    return String((offer && (offer.merchantName || offer.brand)) || "Unnamed merchant").trim();
+  }
+
+  function offerTrackerRecommendation() {
+    return "";
+  }
+
+  function filterOfferTrackerRows(sourceRows, filters = {}, search = "", rules = DEFAULT_OFFER_TRACKER_RULES) {
+    const minAov = offerTrackerOptionalNumber(filters.minAov);
+    const maxAov = offerTrackerOptionalNumber(filters.maxAov);
+    const minCommission = offerTrackerOptionalNumber(filters.minCommission);
+    const maxCommission = offerTrackerOptionalNumber(filters.maxCommission);
+    const query = String(search || "").trim().toLowerCase();
+    return (sourceRows || []).filter((offer) => {
+      const tier = canonicalTierName(offer.tier);
+      const category = displayCategory(offer);
+      const aov = number(offer.aov);
+      const commission = offerTrackerCommissionRate(offer);
+      if (filters.tier && filters.tier !== "all" && tier !== canonicalTierName(filters.tier)) return false;
+      if (filters.category && filters.category !== "all" && category !== filters.category) return false;
+      if (filters.network && filters.network !== "all" && String(offer.network || "") !== String(filters.network)) return false;
+      if (minAov !== null && aov < minAov) return false;
+      if (maxAov !== null && aov > maxAov) return false;
+      if (minCommission !== null && commission < minCommission) return false;
+      if (maxCommission !== null && commission > maxCommission) return false;
+      if (query) {
+        const haystack = [offerTrackerMerchantName(offer), offer.brand, offer.merchantId, tier, offer.network, category]
+          .filter(Boolean).join(" ").toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    }).sort((a, b) => {
+      const aPriority = offerTrackerPriority(a, rules);
+      const bPriority = offerTrackerPriority(b, rules);
+      return aPriority.order - bPriority.order
+        || bPriority.score - aPriority.score
+        || offerTrackerCommissionRate(b) - offerTrackerCommissionRate(a)
+        || number(b.aov) - number(a.aov)
+        || offerTrackerMerchantName(a).localeCompare(offerTrackerMerchantName(b));
+    });
+  }
+
+  function offerTrackerFilteredRows() {
+    return filterOfferTrackerRows(
+      offers,
+      state.offerListTracker.filters,
+      state.offerListTracker.search,
+      state.offerListTracker.rules
+    );
+  }
+
+  function offerTrackerColumnDefinitions(view = state.offerListTracker.view) {
+    const labels = state.language === "zh"
+      ? { priority: "优先级", merchant: "商家", tier: "层级", commission: "佣金", aov: "AOV", category: "品类", asins: "Top Rank ASINs", recommendation: "推荐信息" }
+      : { priority: "Priority", merchant: "Merchant", tier: "Tier", commission: "Commission", aov: "AOV", category: "Category", asins: "Top Rank ASINs", recommendation: "Recommendation" };
+    const all = [
+      { key: "priority", label: labels.priority, mandatory: true },
+      { key: "merchant", label: labels.merchant, mandatory: true },
+      { key: "tier", label: labels.tier },
+      { key: "commission", label: labels.commission },
+      { key: "aov", label: labels.aov },
+      { key: "category", label: labels.category },
+      { key: "asins", label: labels.asins },
+      { key: "recommendation", label: labels.recommendation }
+    ];
+    const allowed = view === "products"
+      ? new Set(["priority", "merchant", "aov", "category", "asins"])
+      : new Set(all.map((column) => column.key));
+    return all.filter((column) => allowed.has(column.key) && (column.mandatory || state.offerListTracker.visibleColumns[column.key] !== false));
+  }
+
+  function offerTrackerCellHtml(offer, column) {
+    const priority = offerTrackerPriority(offer, state.offerListTracker.rules);
+    if (column.key === "priority") {
+      const checked = state.offerListTracker.selectedKeys.has(offerKey(offer));
+      return `<div class="offer-tracker-priority-cell"><input class="offer-tracker-row-select" type="checkbox" data-offer-tracker-key="${escapeHtml(offerKey(offer))}" ${checked ? "checked" : ""} aria-label="Select ${escapeHtml(offerTrackerMerchantName(offer))}"/><span class="offer-tracker-priority-badge ${priority.key}">${escapeHtml(offerTrackerPriorityLabel(priority.key))}</span></div>`;
+    }
+    if (column.key === "merchant") {
+      return `<div class="offer-tracker-merchant-cell"><strong title="${escapeHtml(offerTrackerMerchantName(offer))}">${escapeHtml(offerTrackerMerchantName(offer))}</strong><span>ID ${escapeHtml(offer.merchantId || "—")}</span></div>`;
+    }
+    if (column.key === "tier") return `<span class="offer-tracker-tier-badge">${escapeHtml(canonicalTierName(offer.tier) || "Unknown")}</span>`;
+    if (column.key === "commission") return `<span class="offer-tracker-number-cell">${escapeHtml(`${offerTrackerCommissionRate(offer).toFixed(2).replace(/\.00$/, "")}%`)}</span>`;
+    if (column.key === "aov") return `<span class="offer-tracker-number-cell">${escapeHtml(money(number(offer.aov)))}</span>`;
+    if (column.key === "category") return `<span class="offer-tracker-category-cell">${escapeHtml(displayCategory(offer))}</span>`;
+    if (column.key === "asins") {
+      const asins = offerTrackerAsins(offer);
+      return asins.length ? `<div class="offer-tracker-asins">${asins.map((asin) => `<span class="offer-tracker-asin">${escapeHtml(asin)}</span>`).join("")}</div>` : "—";
+    }
+    if (column.key === "recommendation") return `<span class="offer-tracker-recommendation-cell">${escapeHtml(offerTrackerRecommendation(offer, priority))}</span>`;
+    return "";
+  }
+
+  function offerTrackerOfferExportColumns() {
+    return [
+      ["Priority", (offer) => offerTrackerPriorityLabel(offerTrackerPriority(offer, state.offerListTracker.rules).key, "en"), 22],
+      ["Merchant ID", (offer) => offer.merchantId || "", 16],
+      ["Merchant Name", (offer) => offerTrackerMerchantName(offer), 28],
+      ["Tier", (offer) => canonicalTierName(offer.tier) || "Unknown", 14],
+      ["Commission", (offer) => offerTrackerCommissionRate(offer), 14, "percentage"],
+      ["AOV", (offer) => number(offer.aov), 14],
+      ["Category", (offer) => displayCategory(offer), 34],
+      ["Recommendation", (offer) => offerTrackerRecommendation(offer, offerTrackerPriority(offer, state.offerListTracker.rules)), 54]
+    ];
+  }
+
+  function offerTrackerProductExportColumns() {
+    return [
+      ["Priority", (offer) => offerTrackerPriorityLabel(offerTrackerPriority(offer, state.offerListTracker.rules).key, "en"), 22],
+      ["Merchant ID", (offer) => offer.merchantId || "", 16],
+      ["Merchant Name", (offer) => offerTrackerMerchantName(offer), 28],
+      ["AOV", (offer) => number(offer.aov), 14],
+      ["Category", (offer) => displayCategory(offer), 34],
+      ["Top Rank ASINs", (offer) => offerTrackerAsins(offer).join(", "), 42]
+    ];
+  }
+
+  function setOfferTrackerNotice(message = "") {
+    if (!els.offerTrackerNotice) return;
+    els.offerTrackerNotice.textContent = message;
+    els.offerTrackerNotice.classList.toggle("hidden", !message);
+  }
+
+  function downloadOfferTrackerWorkbook(selectedOnly = false) {
+    const filteredRows = offerTrackerFilteredRows();
+    const rows = selectedOnly
+      ? filteredRows.filter((offer) => state.offerListTracker.selectedKeys.has(offerKey(offer)))
+      : filteredRows;
+    if (!rows.length) {
+      setOfferTrackerNotice(offerTrackerText("No matching offers are available to export.", "当前没有可导出的匹配 Offer。"));
+      return;
+    }
+    const offerColumns = offerTrackerOfferExportColumns();
+    const productColumns = offerTrackerProductExportColumns();
+    const workbook = createRecommendationWorkbook(rows, {
+      sheets: [
+        { sheetName: "List of Offers", rows, columns: offerColumns },
+        { sheetName: "Brand Product List", rows, columns: productColumns }
+      ]
+    });
+    const scope = selectedOnly ? "selected" : "filtered";
+    triggerWorkbookDownload(workbook, `YP_Amazon_Offer_List_Tracker_${scope}_${rows.length}_${todayFileStamp()}.xlsx`);
+    setOfferTrackerNotice(offerTrackerText(
+      `Exported ${rows.length.toLocaleString()} offers in two worksheets.`,
+      `已导出 ${rows.length.toLocaleString()} 个 Offer，共两个工作表。`
+    ));
+  }
+
+  function initializeOfferTrackerControls() {
+    if (state.offerListTracker.controlsReady || !els.offerTrackerTier) return;
+    replaceSelectOptions(els.offerTrackerTier, "All tiers", uniqueValues("tier"), state.offerListTracker.draftFilters.tier);
+    replaceSelectOptions(els.offerTrackerCategory, "All categories", uniqueCategoryValues(), state.offerListTracker.draftFilters.category);
+    replaceSelectOptions(els.offerTrackerNetwork, "All networks", uniqueValues("network"), state.offerListTracker.draftFilters.network);
+    state.offerListTracker.controlsReady = true;
+    syncOfferTrackerControls();
+  }
+
+  function syncOfferTrackerControls() {
+    const draft = state.offerListTracker.draftFilters;
+    if (els.offerTrackerTier) els.offerTrackerTier.value = draft.tier;
+    if (els.offerTrackerCategory) els.offerTrackerCategory.value = draft.category;
+    if (els.offerTrackerNetwork) els.offerTrackerNetwork.value = draft.network;
+    if (els.offerTrackerMinAov) els.offerTrackerMinAov.value = draft.minAov;
+    if (els.offerTrackerMaxAov) els.offerTrackerMaxAov.value = draft.maxAov;
+    if (els.offerTrackerMinCommission) els.offerTrackerMinCommission.value = draft.minCommission;
+    if (els.offerTrackerMaxCommission) els.offerTrackerMaxCommission.value = draft.maxCommission;
+    if (els.offerTrackerSearch && els.offerTrackerSearch.value !== state.offerListTracker.search) {
+      els.offerTrackerSearch.value = state.offerListTracker.search;
+    }
+  }
+
+  function readOfferTrackerDraftFilters() {
+    return {
+      tier: els.offerTrackerTier.value || "all",
+      category: els.offerTrackerCategory.value || "all",
+      minAov: els.offerTrackerMinAov.value.trim(),
+      maxAov: els.offerTrackerMaxAov.value.trim(),
+      minCommission: els.offerTrackerMinCommission.value.trim(),
+      maxCommission: els.offerTrackerMaxCommission.value.trim(),
+      network: els.offerTrackerNetwork.value || "all"
+    };
+  }
+
+  function offerTrackerFilterChipLabels(filters = state.offerListTracker.filters) {
+    const chips = [];
+    if (filters.tier !== "all") chips.push(filters.tier);
+    if (filters.category !== "all") chips.push(filters.category);
+    if (filters.network !== "all") chips.push(filters.network);
+    if (filters.minAov || filters.maxAov) chips.push(`AOV ${filters.minAov ? `$${filters.minAov}` : "$0"}–${filters.maxAov ? `$${filters.maxAov}` : "∞"}`);
+    if (filters.minCommission || filters.maxCommission) chips.push(`${filters.minCommission || "0"}%–${filters.maxCommission || "100"}%`);
+    return chips;
+  }
+
+  function renderOfferTrackerFilterChips() {
+    if (!els.offerTrackerFilterChips) return;
+    const chips = offerTrackerFilterChipLabels();
+    els.offerTrackerFilterChips.innerHTML = chips.length
+      ? chips.map((label) => `<span class="offer-tracker-filter-chip">${escapeHtml(label)}</span>`).join("")
+      : `<span class="offer-tracker-filter-empty">${escapeHtml(offerTrackerText("All offers are included", "当前包含全部 Offer"))}</span>`;
+  }
+
+  function renderOfferTrackerColumnsPanel() {
+    if (!els.offerTrackerColumnsPanel) return;
+    const labels = state.language === "zh"
+      ? { tier: "层级", commission: "佣金", aov: "AOV", category: "品类", asins: "Top Rank ASINs", recommendation: "推荐信息" }
+      : { tier: "Tier", commission: "Commission", aov: "AOV", category: "Category", asins: "Top Rank ASINs", recommendation: "Recommendation" };
+    els.offerTrackerColumnsPanel.innerHTML = `<div class="offer-tracker-popover-header"><strong>${escapeHtml(offerTrackerText("Visible columns", "显示列"))}</strong><button type="button" data-offer-tracker-close="columns" aria-label="Close columns">×</button></div>${Object.keys(labels).map((key) => `<label class="offer-tracker-column-option"><input type="checkbox" data-offer-tracker-column="${key}" ${state.offerListTracker.visibleColumns[key] !== false ? "checked" : ""}/><span>${escapeHtml(labels[key])}</span></label>`).join("")}`;
+  }
+
+  function renderOfferTrackerRulesPanel() {
+    if (!els.offerTrackerRulesPanel) return;
+    els.offerTrackerHighScore.value = state.offerListTracker.rules.highScore;
+    els.offerTrackerLowAovMax.value = state.offerListTracker.rules.lowAovMax;
+    els.offerTrackerScoreLegend.innerHTML = state.language === "zh"
+      ? "<span>层级：Tier 1 +4 / Tier 2 +3 / Tier 3 +2 / Tier 4 +1</span><span>佣金：≥20% +4 / ≥15% +3 / ≥10% +2 / ≥5% +1</span><span>AOV：$75–$350 +2 / &gt;$350 +1；有 ASIN +1</span>"
+      : "<span>Tier: T1 +4 / T2 +3 / T3 +2 / T4 +1</span><span>Commission: ≥20% +4 / ≥15% +3 / ≥10% +2 / ≥5% +1</span><span>AOV: $75–$350 +2 / &gt;$350 +1; ASIN coverage +1</span>";
+  }
+
+  function renderOfferTrackerSavedViews() {
+    if (!els.offerTrackerSavedViewsList) return;
+    const views = state.offerListTracker.savedViews;
+    els.offerTrackerSavedViewsList.innerHTML = views.length
+      ? views.map((view) => `<div class="offer-tracker-saved-view"><button type="button" data-offer-tracker-load-view="${escapeHtml(view.id)}" title="${escapeHtml(view.name)}">${escapeHtml(view.name)}</button><button type="button" data-offer-tracker-delete-view="${escapeHtml(view.id)}" aria-label="Delete ${escapeHtml(view.name)}">×</button></div>`).join("")
+      : `<p class="offer-tracker-saved-empty">${escapeHtml(offerTrackerText("No saved views yet.", "还没有保存的视图。"))}</p>`;
+  }
+
+  function renderOfferListTrackerPage() {
+    if (!els.offerListTrackerPage) return;
+    initializeOfferTrackerControls();
+    [
+      [els.offerTrackerTier, "All tiers"],
+      [els.offerTrackerCategory, "All categories"],
+      [els.offerTrackerNetwork, "All networks"]
+    ].forEach(([select, label]) => {
+      const option = select && select.querySelector('option[value="all"]');
+      if (option) option.textContent = optionText(label);
+    });
+    const rows = offerTrackerFilteredRows();
+    const totalPages = Math.max(1, Math.ceil(rows.length / state.offerListTracker.pageSize));
+    state.offerListTracker.page = Math.min(Math.max(1, state.offerListTracker.page), totalPages);
+    const start = (state.offerListTracker.page - 1) * state.offerListTracker.pageSize;
+    const pageRows = rows.slice(start, start + state.offerListTracker.pageSize);
+    const counts = rows.reduce((result, offer) => {
+      result[offerTrackerPriority(offer, state.offerListTracker.rules).key] += 1;
+      return result;
+    }, { high: 0, recommended: 0, "low-aov": 0 });
+    const kpis = [
+      { label: offerTrackerText("Matched Offers", "匹配 Offer"), value: rows.length, note: offerTrackerText("current filter range", "当前筛选范围"), icon: "#", color: "#1769d2", soft: "#eaf2fc" },
+      { label: offerTrackerText("High Priority", "高优先级"), value: counts.high, note: `${offerTrackerText("score", "评分")} ≥ ${state.offerListTracker.rules.highScore}`, icon: "★", color: "#b36d00", soft: "#fff3dc" },
+      { label: offerTrackerText("Recommended", "推荐"), value: counts.recommended, note: offerTrackerText("standard opportunity pool", "常规机会池"), icon: "↑", color: "#2f69a8", soft: "#eaf2fc" },
+      { label: offerTrackerText("Low-AOV Picks", "低 AOV 优选"), value: counts["low-aov"], note: `AOV ≤ ${money(state.offerListTracker.rules.lowAovMax)}`, icon: "$", color: "#247359", soft: "#edf7f2" }
+    ];
+    els.offerTrackerKpis.innerHTML = kpis.map((kpi) => `<article class="offer-tracker-kpi" style="--kpi-accent:${kpi.color};--kpi-soft:${kpi.soft}"><span class="offer-tracker-kpi-icon">${escapeHtml(kpi.icon)}</span><div><small>${escapeHtml(kpi.label)}</small><strong>${number(kpi.value).toLocaleString()}</strong><span>${escapeHtml(kpi.note)}</span></div></article>`).join("");
+
+    const columns = offerTrackerColumnDefinitions();
+    const allPageSelected = pageRows.length > 0 && pageRows.every((offer) => state.offerListTracker.selectedKeys.has(offerKey(offer)));
+    els.offerTrackerTableHead.innerHTML = `<tr>${columns.map((column) => `<th>${column.key === "priority" ? `<span class="offer-tracker-priority-cell"><input class="offer-tracker-select-all" type="checkbox" ${allPageSelected ? "checked" : ""} aria-label="Select current page"/><span>${escapeHtml(column.label)}</span></span>` : escapeHtml(column.label)}</th>`).join("")}</tr>`;
+    els.offerTrackerTableRows.innerHTML = pageRows.length
+      ? pageRows.map((offer) => `<tr class="${state.offerListTracker.selectedKeys.has(offerKey(offer)) ? "is-selected" : ""}">${columns.map((column) => `<td>${offerTrackerCellHtml(offer, column)}</td>`).join("")}</tr>`).join("")
+      : `<tr class="offer-tracker-empty-row"><td colspan="${columns.length}">${escapeHtml(offerTrackerText("No offers match this range. Adjust the filters and try again.", "没有符合当前范围的 Offer，请调整筛选条件。"))}</td></tr>`;
+
+    els.offerTrackerOffersTab.classList.toggle("active", state.offerListTracker.view === "offers");
+    els.offerTrackerProductsTab.classList.toggle("active", state.offerListTracker.view === "products");
+    els.offerTrackerOffersTab.setAttribute("aria-selected", state.offerListTracker.view === "offers" ? "true" : "false");
+    els.offerTrackerProductsTab.setAttribute("aria-selected", state.offerListTracker.view === "products" ? "true" : "false");
+    els.offerTrackerTableCount.textContent = rows.length
+      ? offerTrackerText(`Showing ${start + 1}–${Math.min(start + pageRows.length, rows.length)} of ${rows.length.toLocaleString()} offers`, `显示第 ${start + 1}–${Math.min(start + pageRows.length, rows.length)} 条，共 ${rows.length.toLocaleString()} 个 Offer`)
+      : offerTrackerText("0 offers", "0 个 Offer");
+    els.offerTrackerPageIndicator.textContent = `${state.offerListTracker.page} / ${totalPages}`;
+    els.offerTrackerPagePrev.disabled = state.offerListTracker.page <= 1;
+    els.offerTrackerPageNext.disabled = state.offerListTracker.page >= totalPages;
+    const selectedCount = rows.filter((offer) => state.offerListTracker.selectedKeys.has(offerKey(offer))).length;
+    els.offerTrackerSelectedCount.textContent = selectedCount.toLocaleString();
+    els.offerTrackerExportSelected.disabled = selectedCount === 0;
+    renderOfferTrackerFilterChips();
+    renderOfferTrackerColumnsPanel();
+    renderOfferTrackerRulesPanel();
+    renderOfferTrackerSavedViews();
+    syncOfferTrackerControls();
+
+    if (!state.offerListTracker.animated && state.page === "offer-list-tracker") {
+      state.offerListTracker.animated = true;
+      window.requestAnimationFrame(() => {
+        if (!window.gsap) return;
+        window.gsap.fromTo(
+          els.offerListTrackerPage.querySelectorAll(".offer-tracker-header, .offer-tracker-filter-card, .offer-tracker-kpi, .offer-tracker-table-panel"),
+          { opacity: 0, y: 12 },
+          { opacity: 1, y: 0, duration: 0.42, stagger: 0.045, ease: "power2.out", clearProps: "opacity,transform" }
+        );
+      });
+    }
+  }
+
+  function applyOfferTrackerFilters() {
+    const filters = readOfferTrackerDraftFilters();
+    const minAov = offerTrackerOptionalNumber(filters.minAov);
+    const maxAov = offerTrackerOptionalNumber(filters.maxAov);
+    const minCommission = offerTrackerOptionalNumber(filters.minCommission);
+    const maxCommission = offerTrackerOptionalNumber(filters.maxCommission);
+    if ((minAov !== null && maxAov !== null && minAov > maxAov) || (minCommission !== null && maxCommission !== null && minCommission > maxCommission)) {
+      setOfferTrackerNotice(offerTrackerText("A minimum value cannot be greater than its maximum.", "最小值不能大于最大值。"));
+      return;
+    }
+    state.offerListTracker.draftFilters = { ...filters };
+    state.offerListTracker.filters = { ...filters };
+    state.offerListTracker.page = 1;
+    setOfferTrackerNotice("");
+    renderOfferListTrackerPage();
+  }
+
+  function resetOfferTrackerFilters() {
+    const filters = { tier: "all", category: "all", minAov: "", maxAov: "", minCommission: "", maxCommission: "", network: "all" };
+    state.offerListTracker.draftFilters = { ...filters };
+    state.offerListTracker.filters = { ...filters };
+    state.offerListTracker.search = "";
+    state.offerListTracker.page = 1;
+    setOfferTrackerNotice("");
+    syncOfferTrackerControls();
+    renderOfferListTrackerPage();
+  }
+
+  function toggleOfferTrackerPanel(panelName) {
+    const panels = {
+      saved: [els.offerTrackerSavedViewsPanel, els.offerTrackerSavedViewsToggle],
+      columns: [els.offerTrackerColumnsPanel, els.offerTrackerColumnsToggle],
+      rules: [els.offerTrackerRulesPanel, els.offerTrackerRulesToggle]
+    };
+    const target = panels[panelName];
+    if (!target || !target[0]) return;
+    const shouldOpen = target[0].classList.contains("hidden");
+    Object.entries(panels).forEach(([name, [panel, button]]) => {
+      if (!panel) return;
+      const open = name === panelName && shouldOpen;
+      panel.classList.toggle("hidden", !open);
+      if (button) button.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
+
+  function saveOfferTrackerRules() {
+    state.offerListTracker.rules = {
+      highScore: Math.min(11, Math.max(4, Math.round(number(els.offerTrackerHighScore.value) || DEFAULT_OFFER_TRACKER_RULES.highScore))),
+      lowAovMax: Math.max(1, number(els.offerTrackerLowAovMax.value) || DEFAULT_OFFER_TRACKER_RULES.lowAovMax)
+    };
+    localStorage.setItem(OFFER_TRACKER_RULES_KEY, JSON.stringify(state.offerListTracker.rules));
+    state.offerListTracker.page = 1;
+    toggleOfferTrackerPanel("rules");
+    renderOfferListTrackerPage();
+  }
+
+  function saveOfferTrackerView() {
+    const name = String(els.offerTrackerSavedViewName.value || "").trim();
+    if (!name) {
+      setOfferTrackerNotice(offerTrackerText("Enter a name before saving this view.", "保存视图前请先填写名称。"));
+      els.offerTrackerSavedViewName.focus();
+      return;
+    }
+    const view = {
+      id: `view-${Date.now()}`,
+      name,
+      filters: { ...state.offerListTracker.filters },
+      search: state.offerListTracker.search,
+      view: state.offerListTracker.view
+    };
+    state.offerListTracker.savedViews = [view, ...state.offerListTracker.savedViews].slice(0, 8);
+    localStorage.setItem(OFFER_TRACKER_SAVED_VIEWS_KEY, JSON.stringify(state.offerListTracker.savedViews));
+    els.offerTrackerSavedViewName.value = "";
+    renderOfferTrackerSavedViews();
+    setOfferTrackerNotice(offerTrackerText(`Saved view “${name}”.`, `已保存视图“${name}”。`));
+  }
+
+  function handleOfferTrackerSavedViewsClick(event) {
+    const loadButton = event.target.closest("[data-offer-tracker-load-view]");
+    const deleteButton = event.target.closest("[data-offer-tracker-delete-view]");
+    if (loadButton) {
+      const saved = state.offerListTracker.savedViews.find((view) => view.id === loadButton.dataset.offerTrackerLoadView);
+      if (!saved) return;
+      state.offerListTracker.filters = { ...state.offerListTracker.filters, ...(saved.filters || {}) };
+      state.offerListTracker.draftFilters = { ...state.offerListTracker.filters };
+      state.offerListTracker.search = saved.search || "";
+      state.offerListTracker.view = saved.view === "products" ? "products" : "offers";
+      state.offerListTracker.page = 1;
+      toggleOfferTrackerPanel("saved");
+      renderOfferListTrackerPage();
+    } else if (deleteButton) {
+      state.offerListTracker.savedViews = state.offerListTracker.savedViews.filter((view) => view.id !== deleteButton.dataset.offerTrackerDeleteView);
+      localStorage.setItem(OFFER_TRACKER_SAVED_VIEWS_KEY, JSON.stringify(state.offerListTracker.savedViews));
+      renderOfferTrackerSavedViews();
+    }
+  }
+
+  function handleOfferTrackerSelectionChange(event) {
+    const rowCheckbox = event.target.closest(".offer-tracker-row-select");
+    if (rowCheckbox) {
+      if (rowCheckbox.checked) state.offerListTracker.selectedKeys.add(rowCheckbox.dataset.offerTrackerKey);
+      else state.offerListTracker.selectedKeys.delete(rowCheckbox.dataset.offerTrackerKey);
+      renderOfferListTrackerPage();
+      return;
+    }
+    const allCheckbox = event.target.closest(".offer-tracker-select-all");
+    if (!allCheckbox) return;
+    const rows = offerTrackerFilteredRows();
+    const start = (state.offerListTracker.page - 1) * state.offerListTracker.pageSize;
+    rows.slice(start, start + state.offerListTracker.pageSize).forEach((offer) => {
+      if (allCheckbox.checked) state.offerListTracker.selectedKeys.add(offerKey(offer));
+      else state.offerListTracker.selectedKeys.delete(offerKey(offer));
+    });
+    renderOfferListTrackerPage();
+  }
+
   function updateReportsNavState() {
     if (els.sheetsNav) els.sheetsNav.setAttribute("aria-expanded", state.reportsOpen ? "true" : "false");
     if (els.reportsSubnav) els.reportsSubnav.classList.toggle("collapsed", !state.reportsOpen);
   }
 
   function pageBelongsToReports(page) {
-    return page === "sheets" || page === "category" || page === "tier";
+    return page === "category" || page === "tier";
   }
 
   function updatePageModeClass(page = state.page) {
@@ -21187,6 +21799,7 @@ var _NUMERIC_COL_PATTERNS = [
       payments: t("nav.payments", "Payments"),
       publishers: t("nav.publishers", "Publishers"),
       sheets: t("nav.targets", "Targets"),
+      "offer-list-tracker": t("nav.offerListTracker", "Offer List Tracker"),
       category: t("nav.category", "Category"),
       "monthly-new-merchants": t("nav.monthlyNewMerchants", "New merchants")
     };
@@ -21308,12 +21921,14 @@ var _NUMERIC_COL_PATTERNS = [
     const isSheets = page === "sheets";
     const isCategory = page === "category";
     const isMonthlyNewMerchants = page === "monthly-new-merchants";
+    const isOfferListTracker = page === "offer-list-tracker";
     const isReportPage = pageBelongsToReports(page);
     if (isReportPage) state.reportsOpen = true;
     document.querySelectorAll(".dashboard-page").forEach((el) => el.classList.toggle("hidden", page !== "dashboard"));
     els.paymentsPage.classList.toggle("hidden", page !== "payments");
     els.publishersPage.classList.toggle("hidden", page !== "publishers");
     els.monthlyNewMerchantsPage.classList.toggle("hidden", !isMonthlyNewMerchants);
+    if (els.offerListTrackerPage) els.offerListTrackerPage.classList.toggle("hidden", !isOfferListTracker);
     // 离开 Publishers 页面时退出布局编辑模式
     if (page !== "publishers" && state.publisherLayoutEditing) {
       _exitPublisherLayoutEditMode(false);
@@ -21326,6 +21941,7 @@ var _NUMERIC_COL_PATTERNS = [
     els.publishersNav.classList.toggle("active", page === "publishers");
     els.sheetsNav.classList.toggle("active", isReportPage);
     els.targetNav.classList.toggle("active", isSheets);
+    if (els.offerListTrackerNav) els.offerListTrackerNav.classList.toggle("active", isOfferListTracker);
     els.categoryNav.classList.toggle("active", isCategory);
     els.monthlyNewMerchantsNav.classList.toggle("active", isMonthlyNewMerchants);
     els.tierNavButtons.forEach((button) => {
@@ -21352,6 +21968,7 @@ var _NUMERIC_COL_PATTERNS = [
       renderMonthlyNewMerchantsPage();
       loadMonthlyNewMerchants();
     }
+    if (isOfferListTracker) renderOfferListTrackerPage();
     updateMobileCurrentPage();
     closeMobileNavigation(true);
   }
@@ -21379,6 +21996,7 @@ var _NUMERIC_COL_PATTERNS = [
     if (els.tier) fillSelect(els.tier, uniqueValues("tier"));
     if (els.network) fillSelect(els.network, uniqueValues("network"));
     if (els.category) fillSelect(els.category, uniqueCategoryValues());
+    initializeOfferTrackerControls();
     refreshPaymentFilterOptions();
     refreshTargetFilters();
     setDatasetStamp();
@@ -21515,10 +22133,97 @@ var _NUMERIC_COL_PATTERNS = [
       updateReportsNavState();
     });
     els.targetNav.addEventListener("click", () => switchPage("sheets"));
+    if (els.offerListTrackerNav) {
+      els.offerListTrackerNav.addEventListener("click", () => switchPage("offer-list-tracker"));
+    }
     els.categoryNav.addEventListener("click", () => switchPage("category"));
     if (els.monthlyNewMerchantsNav) {
       els.monthlyNewMerchantsNav.addEventListener("click", () => switchPage("monthly-new-merchants"));
     }
+    if (els.offerTrackerApplyFilters) els.offerTrackerApplyFilters.addEventListener("click", applyOfferTrackerFilters);
+    if (els.offerTrackerResetFilters) els.offerTrackerResetFilters.addEventListener("click", resetOfferTrackerFilters);
+    [els.offerTrackerTier, els.offerTrackerCategory, els.offerTrackerNetwork].filter(Boolean).forEach((select) => {
+      select.addEventListener("change", () => {
+        state.offerListTracker.draftFilters = readOfferTrackerDraftFilters();
+      });
+    });
+    [els.offerTrackerMinAov, els.offerTrackerMaxAov, els.offerTrackerMinCommission, els.offerTrackerMaxCommission].filter(Boolean).forEach((input) => {
+      input.addEventListener("input", () => {
+        state.offerListTracker.draftFilters = readOfferTrackerDraftFilters();
+      });
+    });
+    [els.offerTrackerMinAov, els.offerTrackerMaxAov, els.offerTrackerMinCommission, els.offerTrackerMaxCommission].filter(Boolean).forEach((input) => {
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") applyOfferTrackerFilters();
+      });
+    });
+    if (els.offerTrackerSearch) {
+      els.offerTrackerSearch.addEventListener("input", () => {
+        state.offerListTracker.search = els.offerTrackerSearch.value;
+        state.offerListTracker.page = 1;
+        renderOfferListTrackerPage();
+      });
+    }
+    if (els.offerTrackerOffersTab) {
+      els.offerTrackerOffersTab.addEventListener("click", () => {
+        state.offerListTracker.view = "offers";
+        renderOfferListTrackerPage();
+      });
+    }
+    if (els.offerTrackerProductsTab) {
+      els.offerTrackerProductsTab.addEventListener("click", () => {
+        state.offerListTracker.view = "products";
+        renderOfferListTrackerPage();
+      });
+    }
+    if (els.offerTrackerSavedViewsToggle) els.offerTrackerSavedViewsToggle.addEventListener("click", () => toggleOfferTrackerPanel("saved"));
+    if (els.offerTrackerColumnsToggle) els.offerTrackerColumnsToggle.addEventListener("click", () => toggleOfferTrackerPanel("columns"));
+    if (els.offerTrackerRulesToggle) els.offerTrackerRulesToggle.addEventListener("click", () => toggleOfferTrackerPanel("rules"));
+    if (els.offerListTrackerPage) {
+      els.offerListTrackerPage.addEventListener("click", (event) => {
+        const close = event.target.closest("[data-offer-tracker-close]");
+        if (close) toggleOfferTrackerPanel(close.dataset.offerTrackerClose);
+      });
+    }
+    if (els.offerTrackerColumnsPanel) {
+      els.offerTrackerColumnsPanel.addEventListener("change", (event) => {
+        const input = event.target.closest("[data-offer-tracker-column]");
+        if (!input) return;
+        state.offerListTracker.visibleColumns[input.dataset.offerTrackerColumn] = input.checked;
+        localStorage.setItem(OFFER_TRACKER_COLUMNS_KEY, JSON.stringify(state.offerListTracker.visibleColumns));
+        renderOfferListTrackerPage();
+      });
+    }
+    if (els.offerTrackerSaveRules) els.offerTrackerSaveRules.addEventListener("click", saveOfferTrackerRules);
+    if (els.offerTrackerResetRules) {
+      els.offerTrackerResetRules.addEventListener("click", () => {
+        els.offerTrackerHighScore.value = DEFAULT_OFFER_TRACKER_RULES.highScore;
+        els.offerTrackerLowAovMax.value = DEFAULT_OFFER_TRACKER_RULES.lowAovMax;
+      });
+    }
+    if (els.offerTrackerSaveView) els.offerTrackerSaveView.addEventListener("click", saveOfferTrackerView);
+    if (els.offerTrackerSavedViewName) {
+      els.offerTrackerSavedViewName.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") saveOfferTrackerView();
+      });
+    }
+    if (els.offerTrackerSavedViewsList) els.offerTrackerSavedViewsList.addEventListener("click", handleOfferTrackerSavedViewsClick);
+    if (els.offerTrackerTableHead) els.offerTrackerTableHead.addEventListener("change", handleOfferTrackerSelectionChange);
+    if (els.offerTrackerTableRows) els.offerTrackerTableRows.addEventListener("change", handleOfferTrackerSelectionChange);
+    if (els.offerTrackerPagePrev) {
+      els.offerTrackerPagePrev.addEventListener("click", () => {
+        state.offerListTracker.page = Math.max(1, state.offerListTracker.page - 1);
+        renderOfferListTrackerPage();
+      });
+    }
+    if (els.offerTrackerPageNext) {
+      els.offerTrackerPageNext.addEventListener("click", () => {
+        state.offerListTracker.page += 1;
+        renderOfferListTrackerPage();
+      });
+    }
+    if (els.offerTrackerExport) els.offerTrackerExport.addEventListener("click", () => downloadOfferTrackerWorkbook(false));
+    if (els.offerTrackerExportSelected) els.offerTrackerExportSelected.addEventListener("click", () => downloadOfferTrackerWorkbook(true));
     if (els.monthlyNewMerchantsMonth) {
       els.monthlyNewMerchantsMonth.value = state.monthlyNewMerchants.month;
       els.monthlyNewMerchantsMonth.addEventListener("click", openMonthlyNewMerchantMonthPicker);
@@ -22530,6 +23235,18 @@ var _NUMERIC_COL_PATTERNS = [
       parseMonthlyNewMerchantCommission,
       monthlyNewMerchantImportRows,
       pageBelongsToReports,
+      offerTrackerCommissionRate,
+      offerTrackerAsins,
+      offerTrackerScore,
+      offerTrackerPriority,
+      offerTrackerPriorityLabel,
+      offerTrackerRecommendation,
+      filterOfferTrackerRows,
+      offerTrackerOfferExportColumns,
+      offerTrackerProductExportColumns,
+      offerTrackerFilterChipLabels,
+      createRecommendationWorkbook,
+      defaultOfferTrackerRules: () => ({ ...DEFAULT_OFFER_TRACKER_RULES }),
       setPublisherPortfolioFilters: (filters = {}) => {
         state.publisherMarket = filters.market == null ? state.publisherMarket : filters.market;
         state.publisherNetwork = filters.network == null ? state.publisherNetwork : filters.network;

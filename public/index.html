@@ -123,6 +123,18 @@
             </span>
             <span data-i18n="nav.monthlyNewMerchants">New merchants</span>
           </button>
+          <button class="page-nav-button" id="targetNav" type="button">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/><path d="M9 5v14"/><path d="M5 10h14"/></svg>
+            </span>
+            <span data-i18n="nav.targets">Targets</span>
+          </button>
+          <button class="page-nav-button" id="offerListTrackerNav" type="button">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 4h10v3H7z"/><path d="M5 6h14v14H5z"/><path d="m8 12 2 2 4-4"/><path d="M8 17h8"/></svg>
+            </span>
+            <span data-i18n="nav.offerListTracker">Offer List Tracker</span>
+          </button>
           <div class="nav-group">
             <button class="page-nav-button report-nav" id="sheetsNav" type="button" aria-expanded="true" aria-controls="reportsSubnav">
               <span class="nav-icon" aria-hidden="true">
@@ -134,12 +146,6 @@
               </span>
             </button>
             <div class="nav-subnav" id="reportsSubnav" aria-label="Report pages">
-              <button class="page-nav-button" id="targetNav" type="button">
-                <span class="nav-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/><path d="M9 5v14"/><path d="M5 10h14"/></svg>
-                </span>
-                <span data-i18n="nav.targets">Targets</span>
-              </button>
               <button class="page-nav-button" id="categoryNav" type="button">
                 <span class="nav-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>
@@ -1021,6 +1027,159 @@
             </footer>
           </section>
         </div>
+
+        <section class="offer-tracker-page hidden" id="offerListTrackerPage" aria-label="Offer List Tracker">
+          <header class="offer-tracker-header">
+            <div>
+              <span class="offer-tracker-eyebrow" data-i18n="offerTracker.eyebrow">Offer planning workspace</span>
+              <h2 data-i18n="offerTracker.title">Offer List Tracker</h2>
+              <p data-i18n="offerTracker.subtitle">Build priority-based offer lists and export ready-to-share workbooks.</p>
+            </div>
+            <div class="offer-tracker-header-actions">
+              <div class="offer-tracker-menu-wrap">
+                <button class="offer-tracker-secondary-button" id="offerTrackerSavedViewsToggle" type="button" aria-expanded="false" aria-controls="offerTrackerSavedViewsPanel">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v15l-7-4-7 4z"/></svg>
+                  <span data-i18n="offerTracker.savedViews">Saved views</span>
+                </button>
+                <section class="offer-tracker-popover hidden" id="offerTrackerSavedViewsPanel" aria-label="Saved offer views">
+                  <div class="offer-tracker-popover-header">
+                    <strong data-i18n="offerTracker.savedViews">Saved views</strong>
+                    <button type="button" data-offer-tracker-close="saved" aria-label="Close saved views">×</button>
+                  </div>
+                  <div class="offer-tracker-saved-list" id="offerTrackerSavedViewsList"></div>
+                  <label class="offer-tracker-save-field">
+                    <span data-i18n="offerTracker.viewName">View name</span>
+                    <input id="offerTrackerSavedViewName" type="text" maxlength="48" placeholder="e.g. Tier 1 beauty" data-i18n-placeholder="offerTracker.viewNamePlaceholder" />
+                  </label>
+                  <button class="offer-tracker-popover-primary" id="offerTrackerSaveView" type="button" data-i18n="offerTracker.saveCurrentView">Save current view</button>
+                </section>
+              </div>
+              <button class="offer-tracker-export-button" id="offerTrackerExport" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 20h14"/></svg>
+                <span data-i18n="offerTracker.exportExcel">Export Excel</span>
+              </button>
+            </div>
+          </header>
+
+          <section class="offer-tracker-filter-card" aria-label="Offer range filters">
+            <div class="offer-tracker-section-heading">
+              <div>
+                <h3 data-i18n="offerTracker.defineRange">Define offer range</h3>
+                <p data-i18n="offerTracker.defineRangeSubtitle">Choose the commercial range first, then review and export the resulting priorities.</p>
+              </div>
+              <span class="offer-tracker-live-source" data-i18n="offerTracker.liveSource">Live offer cache</span>
+            </div>
+            <div class="offer-tracker-filter-grid">
+              <label>
+                <span data-i18n="label.Tier">Tier</span>
+                <select id="offerTrackerTier"><option value="all">All tiers</option></select>
+              </label>
+              <label>
+                <span data-i18n="label.Category">Category</span>
+                <select id="offerTrackerCategory"><option value="all">All categories</option></select>
+              </label>
+              <label class="offer-tracker-range-field">
+                <span data-i18n="offerTracker.aovRange">AOV range</span>
+                <span class="offer-tracker-range-inputs">
+                  <input id="offerTrackerMinAov" type="number" min="0" step="1" inputmode="decimal" placeholder="Min $" />
+                  <i aria-hidden="true">–</i>
+                  <input id="offerTrackerMaxAov" type="number" min="0" step="1" inputmode="decimal" placeholder="Max $" />
+                </span>
+              </label>
+              <label class="offer-tracker-range-field">
+                <span data-i18n="offerTracker.commissionRange">Commission range</span>
+                <span class="offer-tracker-range-inputs">
+                  <input id="offerTrackerMinCommission" type="number" min="0" max="100" step="0.25" inputmode="decimal" placeholder="Min %" />
+                  <i aria-hidden="true">–</i>
+                  <input id="offerTrackerMaxCommission" type="number" min="0" max="100" step="0.25" inputmode="decimal" placeholder="Max %" />
+                </span>
+              </label>
+              <label>
+                <span data-i18n="label.Network">Network</span>
+                <select id="offerTrackerNetwork"><option value="all">All networks</option></select>
+              </label>
+            </div>
+            <div class="offer-tracker-filter-footer">
+              <div class="offer-tracker-filter-chips" id="offerTrackerFilterChips" aria-live="polite"></div>
+              <div class="offer-tracker-filter-actions">
+                <button id="offerTrackerResetFilters" type="button" data-i18n="action.reset">Reset</button>
+                <button id="offerTrackerApplyFilters" type="button" data-i18n="offerTracker.applyFilters">Apply filters</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="offer-tracker-kpis" id="offerTrackerKpis" aria-label="Offer list summary"></section>
+
+          <section class="offer-tracker-table-panel" aria-label="Offer list results">
+            <div class="offer-tracker-table-toolbar">
+              <div class="offer-tracker-view-tabs" role="tablist" aria-label="Offer export views">
+                <button class="active" id="offerTrackerOffersTab" type="button" role="tab" aria-selected="true" data-offer-tracker-view="offers" data-i18n="offerTracker.offerList">Offer List</button>
+                <button id="offerTrackerProductsTab" type="button" role="tab" aria-selected="false" data-offer-tracker-view="products" data-i18n="offerTracker.productList">Brand Product List</button>
+              </div>
+              <div class="offer-tracker-table-actions">
+                <label class="offer-tracker-search">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+                  <span class="sr-only" data-i18n="offerTracker.search">Search offers</span>
+                  <input id="offerTrackerSearch" type="search" placeholder="Search merchant or ID" data-i18n-placeholder="offerTracker.searchPlaceholder" />
+                </label>
+                <div class="offer-tracker-menu-wrap">
+                  <button class="offer-tracker-tool-button" id="offerTrackerColumnsToggle" type="button" aria-expanded="false" aria-controls="offerTrackerColumnsPanel">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM10 5v14M16 5v14"/></svg>
+                    <span data-i18n="offerTracker.columns">Columns</span>
+                  </button>
+                  <section class="offer-tracker-popover offer-tracker-columns-panel hidden" id="offerTrackerColumnsPanel" aria-label="Visible offer columns"></section>
+                </div>
+                <div class="offer-tracker-menu-wrap">
+                  <button class="offer-tracker-tool-button" id="offerTrackerRulesToggle" type="button" aria-expanded="false" aria-controls="offerTrackerRulesPanel">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+                    <span data-i18n="offerTracker.priorityRules">Priority rules</span>
+                  </button>
+                  <section class="offer-tracker-popover offer-tracker-rules-panel hidden" id="offerTrackerRulesPanel" aria-label="Priority rules">
+                    <div class="offer-tracker-popover-header">
+                      <div>
+                        <strong data-i18n="offerTracker.priorityRules">Priority rules</strong>
+                        <small data-i18n="offerTracker.rulesSubtitle">A transparent score groups the export.</small>
+                      </div>
+                      <button type="button" data-offer-tracker-close="rules" aria-label="Close priority rules">×</button>
+                    </div>
+                    <div class="offer-tracker-score-legend" id="offerTrackerScoreLegend"></div>
+                    <label class="offer-tracker-rule-field">
+                      <span data-i18n="offerTracker.highScore">High priority score</span>
+                      <input id="offerTrackerHighScore" type="number" min="4" max="11" step="1" />
+                    </label>
+                    <label class="offer-tracker-rule-field">
+                      <span data-i18n="offerTracker.lowAovCeiling">Low-AOV ceiling</span>
+                      <span class="offer-tracker-money-input"><b>$</b><input id="offerTrackerLowAovMax" type="number" min="1" step="1" /></span>
+                    </label>
+                    <div class="offer-tracker-rule-actions">
+                      <button id="offerTrackerResetRules" type="button" data-i18n="offerTracker.resetRules">Reset rules</button>
+                      <button id="offerTrackerSaveRules" type="button" data-i18n="offerTracker.saveRules">Save rules</button>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+            <div class="offer-tracker-table-wrap">
+              <table class="offer-tracker-table">
+                <thead id="offerTrackerTableHead"></thead>
+                <tbody id="offerTrackerTableRows"></tbody>
+              </table>
+            </div>
+            <footer class="offer-tracker-table-footer">
+              <p id="offerTrackerTableCount"></p>
+              <div class="offer-tracker-pagination">
+                <button id="offerTrackerPagePrev" type="button" aria-label="Previous page">‹</button>
+                <span id="offerTrackerPageIndicator"></span>
+                <button id="offerTrackerPageNext" type="button" aria-label="Next page">›</button>
+              </div>
+              <button class="offer-tracker-selected-export" id="offerTrackerExportSelected" type="button" disabled>
+                <span data-i18n="offerTracker.exportSelected">Export selected</span>
+                <b id="offerTrackerSelectedCount">0</b>
+              </button>
+            </footer>
+            <div class="offer-tracker-notice hidden" id="offerTrackerNotice" role="status" aria-live="polite"></div>
+          </section>
+        </section>
 
         <section class="sheet-page hidden" id="sheetPage" aria-label="All sheet tabs">
           <div class="tier-header sheet-page-header">
