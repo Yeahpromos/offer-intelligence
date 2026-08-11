@@ -714,6 +714,7 @@
       "monthlyNewMerchants.importValid": "导入有效行",
       "monthlyNewMerchants.search": "搜索上新商家",
       "monthlyNewMerchants.searchPlaceholder": "搜索商家、ID 或 BD",
+      "monthlyNewMerchants.merchantId": "商家 ID",
       "monthlyNewMerchants.priority": "重点",
       "monthlyNewMerchants.priorityAction": "重点推荐",
       "monthlyNewMerchants.priorityHelp": "在月度列表中高亮该商家",
@@ -20329,7 +20330,7 @@ var _NUMERIC_COL_PATTERNS = [
     const parsedTarget = rawTarget === null || rawTarget === undefined || rawTarget === ""
       ? null
       : Number(rawTarget);
-    return {
+    const normalizedRecord = {
       recordId: Number(record.recordId) || 0,
       reportMonth: String(record.reportMonth || ""),
       merchantId: String(record.merchantId || "").trim(),
@@ -20351,6 +20352,41 @@ var _NUMERIC_COL_PATTERNS = [
       createdAt: String(record.createdAt || "").trim(),
       updatedAt: String(record.updatedAt || "").trim()
     };
+    normalizedRecord.merchantId = resolveMonthlyNewMerchantId(normalizedRecord);
+    return normalizedRecord;
+  }
+
+  function resolveMonthlyNewMerchantId(record = {}) {
+    const explicitId = String(record.merchantId || "").trim();
+    if (explicitId) return explicitId;
+
+    const merchantName = normalize(record.merchantName);
+    if (!merchantName) return "";
+    const exactMatches = offers.filter((offer) => (
+      [offer.merchantName, offer.brand].some((value) => normalize(value) === merchantName)
+    ));
+    const uniqueId = (matches) => {
+      const ids = [...new Set(
+        matches
+          .map((offer) => String(offer.merchantId || "").trim())
+          .filter(Boolean)
+      )];
+      return ids.length === 1 ? ids[0] : "";
+    };
+
+    const tier1Id = uniqueId(
+      exactMatches.filter((offer) => canonicalTierName(offer.tier) === "Tier 1")
+    );
+    if (tier1Id) return tier1Id;
+
+    const platform = normalize(record.platform);
+    if (platform) {
+      const platformId = uniqueId(
+        exactMatches.filter((offer) => normalize(offer.network) === platform)
+      );
+      if (platformId) return platformId;
+    }
+    return uniqueId(exactMatches);
   }
 
   function filteredMonthlyNewMerchantRecords(records, search = "") {
@@ -20437,6 +20473,17 @@ var _NUMERIC_COL_PATTERNS = [
     }).format(date);
   }
 
+  function openMonthlyNewMerchantMonthPicker() {
+    if (!els.monthlyNewMerchantsMonth) return;
+    els.monthlyNewMerchantsMonth.focus({ preventScroll: true });
+    if (typeof els.monthlyNewMerchantsMonth.showPicker !== "function") return;
+    try {
+      els.monthlyNewMerchantsMonth.showPicker();
+    } catch (_error) {
+      // The focused native month input remains usable when showPicker is unavailable.
+    }
+  }
+
   function setMonthlyNewMerchantNotice(message = "", type = "success") {
     const management = state.monthlyNewMerchants;
     management.notice = String(message || "");
@@ -20485,11 +20532,11 @@ var _NUMERIC_COL_PATTERNS = [
     if (!els.monthlyNewMerchantsRows) return;
 
     if (management.loading && !management.records.length) {
-      els.monthlyNewMerchantsRows.innerHTML = `<tr class="monthly-new-merchants-empty"><td colspan="13">${escapeHtml(t("monthlyNewMerchants.loading", "Loading new merchants from the database…"))}</td></tr>`;
+      els.monthlyNewMerchantsRows.innerHTML = `<tr class="monthly-new-merchants-empty"><td colspan="14">${escapeHtml(t("monthlyNewMerchants.loading", "Loading new merchants from the database…"))}</td></tr>`;
       return;
     }
     if (management.error && !management.records.length) {
-      els.monthlyNewMerchantsRows.innerHTML = `<tr class="monthly-new-merchants-empty"><td colspan="13"><strong>${escapeHtml(t("monthlyNewMerchants.databaseError", "The database is temporarily unavailable."))}</strong><span>${escapeHtml(management.error)}</span></td></tr>`;
+      els.monthlyNewMerchantsRows.innerHTML = `<tr class="monthly-new-merchants-empty"><td colspan="14"><strong>${escapeHtml(t("monthlyNewMerchants.databaseError", "The database is temporarily unavailable."))}</strong><span>${escapeHtml(management.error)}</span></td></tr>`;
       return;
     }
     if (!rows.length) {
@@ -20500,7 +20547,7 @@ var _NUMERIC_COL_PATTERNS = [
       const body = searching
         ? t("monthlyNewMerchants.noMatchesBody", "Try a different merchant, ID, or BD.")
         : t("monthlyNewMerchants.emptyBody", "No newly added merchants were found in the backend database for this month.");
-      els.monthlyNewMerchantsRows.innerHTML = `<tr class="monthly-new-merchants-empty"><td colspan="13"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(body)}</span></td></tr>`;
+      els.monthlyNewMerchantsRows.innerHTML = `<tr class="monthly-new-merchants-empty"><td colspan="14"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(body)}</span></td></tr>`;
       return;
     }
 
@@ -20521,12 +20568,13 @@ var _NUMERIC_COL_PATTERNS = [
         ? '<span class="monthly-new-merchant-muted">—</span>'
         : `${escapeHtml(Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }))}%`;
       return `<tr class="${rowClasses}" data-monthly-new-merchant-id="${record.recordId}">
+        <td class="monthly-new-merchant-id-cell">${textCell(record.merchantId)}</td>
         <td class="monthly-new-merchant-priority-cell">
           <button class="monthly-new-merchant-priority" type="button" data-monthly-new-merchant-action="priority" aria-pressed="${record.isPriority ? "true" : "false"}" aria-label="${escapeHtml(`${priorityLabel}: ${merchantLabel}`)}" ${!record.recordId || saving ? "disabled" : ""}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg>
           </button>
         </td>
-        <td><div class="monthly-new-merchant-name"><strong>${escapeHtml(merchantLabel)}</strong>${record.merchantId ? `<small>ID ${escapeHtml(record.merchantId)}</small>` : ""}</div></td>
+        <td><div class="monthly-new-merchant-name"><strong>${escapeHtml(merchantLabel)}</strong></div></td>
         <td>${textCell(record.program)}</td>
         <td>${textCell(record.platform)}</td>
         <td>${targetText}</td>
@@ -21473,6 +21521,12 @@ var _NUMERIC_COL_PATTERNS = [
     }
     if (els.monthlyNewMerchantsMonth) {
       els.monthlyNewMerchantsMonth.value = state.monthlyNewMerchants.month;
+      els.monthlyNewMerchantsMonth.addEventListener("click", openMonthlyNewMerchantMonthPicker);
+      els.monthlyNewMerchantsMonth.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openMonthlyNewMerchantMonthPicker();
+      });
       els.monthlyNewMerchantsMonth.addEventListener("change", () => {
         const month = String(els.monthlyNewMerchantsMonth.value || "").trim();
         if (!month || month === state.monthlyNewMerchants.month) return;
@@ -22466,6 +22520,7 @@ var _NUMERIC_COL_PATTERNS = [
       publisherMetricAffCommissionRate: _publisherMetricAffCommissionRate,
       publisherAffinitySummary: _publisherAffinitySummary,
       normalizeMonthlyNewMerchantRecord,
+      resolveMonthlyNewMerchantId,
       filteredMonthlyNewMerchantRecords,
       monthlyNewMerchantTargetTotal,
       buildMonthlyNewMerchantPayload,
