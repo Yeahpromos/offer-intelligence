@@ -97,7 +97,18 @@ if (hooks.brandMediaColor(0) === hooks.brandMediaColor(1)) {
   throw new Error("different media should receive different line colors");
 }
 
-const chart = hooks.brandMediaChartPayload({
+assertEqual(
+  hooks.brandMediaDateKey("2026-03-08"),
+  "2026-03-08",
+  "valid ISO dates should remain stable for chart coordinates"
+);
+assertEqual(
+  hooks.brandMediaDayOrdinal("2026-03-08") - hooks.brandMediaDayOrdinal("2026-03-07"),
+  1,
+  "date coordinates should advance by one calendar day across DST boundaries"
+);
+
+const chartPayload = {
   dateRange: { startDate: "2026-05-01", endDate: "2026-05-05" },
   publishers: [{
     userId: 9,
@@ -109,9 +120,23 @@ const chart = hooks.brandMediaChartPayload({
       { date: "2026-05-05", revenue: 22 }
     ]
   }]
-});
+};
+const chart = hooks.brandMediaChartPayload(chartPayload);
 if ((chart.match(/class="brand-media-series"/g) || []).length !== 2) {
   throw new Error("the chart should emit two SVG paths for one publisher with a missing-date gap");
+}
+if (!chart.includes('data-brand-media-date="2026-05-05"')) {
+  throw new Error("the x-axis should expose the exact end date used by the plot");
+}
+if (!chart.includes('class="brand-media-crosshair brand-media-crosshair-date"') ||
+    !chart.includes('class="brand-media-crosshair brand-media-crosshair-value"') ||
+    !chart.includes('data-brand-media-publisher-index="0"')) {
+  throw new Error("the chart should include crosshair and publisher interaction targets");
+}
+const chartModel = hooks.brandMediaChartModel(chartPayload);
+if (Math.round(chartModel.xFor("2026-05-01")) !== 82 ||
+    Math.round(chartModel.xFor("2026-05-05")) !== 1152) {
+  throw new Error("series points should share the same date-to-x coordinate as the axis");
 }
 
 const indexHtml = fs.readFileSync("public/index.html", "utf8");
