@@ -4185,7 +4185,7 @@ SELECT
 FROM cnpscy_amazon_order o
 LEFT JOIN (
     SELECT user_id, MAX(NULLIF(TRIM(user_name), '')) AS user_name
-    FROM cnpscy_user
+    FROM v_maxai_cnpscy_user
     GROUP BY user_id
 ) u ON o.user_id = u.user_id
 LEFT JOIN (
@@ -4716,7 +4716,7 @@ def publisher_portfolio_payload(
                 u.user_id,
                 u.user_name,
                 COALESCE(ad.admin_name, 'Unknown') AS admin_name
-            FROM cnpscy_user u
+            FROM v_maxai_cnpscy_user u
             LEFT JOIN cnpscy_admins ad
                 ON CAST(u.admin_id_look AS CHAR) = CAST(ad.admin_code AS CHAR)
                 AND ad.is_delete = 0

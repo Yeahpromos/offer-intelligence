@@ -164,6 +164,8 @@ def main():
                 raise AssertionError("click-table date range was not applied")
             return ROWS
         if "FROM cnpscy_user" in sql:
+            raise AssertionError("publisher portfolio query must read users from v_maxai_cnpscy_user")
+        if "FROM v_maxai_cnpscy_user" in sql:
             return [{"user_id": 7, "user_name": "Media Seven", "admin_name": "Fiona"}]
         raise AssertionError(f"unexpected query: {sql[:80]}")
 

@@ -105,6 +105,8 @@ def main():
         assert_equal(params, (101, 20260701, 20260731), "trend SQL params")
         if "GROUP BY o.advert_id, o.user_id, o.order_time_day" not in sql:
             raise AssertionError("trend query must aggregate at merchant + publisher + day grain")
+        if "FROM v_maxai_cnpscy_user" not in sql or "FROM cnpscy_user" in sql:
+            raise AssertionError("trend query must read publisher names from v_maxai_cnpscy_user")
         if "SUM(COALESCE(o.amount, 0)) AS revenue" not in sql:
             raise AssertionError("trend query must use the order amount as revenue")
         if "o.order_time_day BETWEEN %s AND %s" not in sql:

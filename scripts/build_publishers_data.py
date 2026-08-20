@@ -451,7 +451,7 @@ def _fill_user_info(conn, publishers: dict, admins_map: dict[str, str]) -> None:
     placeholders = ", ".join(["%s"] * len(uids))
     rows = fetch_all(
         conn,
-        f"SELECT user_id, user_name, admin_id_look FROM cnpscy_user WHERE user_id IN ({placeholders})",
+        f"SELECT user_id, user_name, admin_id_look FROM v_maxai_cnpscy_user WHERE user_id IN ({placeholders})",
         tuple(uids),
     )
     for row in rows:
