@@ -1215,8 +1215,8 @@
       "publishers.track": "Track",
       "publishers.empty": "暂无数据",
       "brandMedia.title": "品牌媒体趋势",
-      "brandMedia.subtitle": "查看一个品牌在不同日期由各媒体带来的 Revenue 变化。",
-      "brandMedia.liveSource": "每日订单 Revenue",
+      "brandMedia.subtitle": "查看一个品牌在不同日期由各媒体带来的订单数变化，Revenue 保留在 hover 中。",
+      "brandMedia.liveSource": "每日订单数",
       "brandMedia.brand": "品牌",
       "brandMedia.brandPlaceholder": "搜索品牌或商家 ID",
       "brandMedia.manager": "媒介经理",
@@ -1224,10 +1224,10 @@
       "brandMedia.timeRange": "时间跨度",
       "brandMedia.startDate": "开始日期",
       "brandMedia.endDate": "结束日期",
-      "brandMedia.sourceNote": "Revenue 使用订单金额；缺少某媒体当天的源记录时，图表会断开而不会补为 0。",
-      "brandMedia.chartTitle": "各媒体每日 Revenue",
-      "brandMedia.chartSubtitle": "点击右侧媒体可锁定；可同时锁定多家，再次点击解除。黑线表示未锁定前的全部媒体 Revenue。没有每日源记录时会断开。",
-      "brandMedia.allRevenueLine": "全部媒体 Revenue",
+      "brandMedia.sourceNote": "折线表示每日订单数；缺少某媒体当天的源记录时，图表会断开而不会补为 0，Revenue 会保留在 hover 中。",
+      "brandMedia.chartTitle": "各媒体每日订单数",
+      "brandMedia.chartSubtitle": "点击右侧媒体可锁定；可同时锁定多家，再次点击解除。黑线表示未锁定前的全部媒体订单数，Revenue 会保留在 hover 中。没有每日源记录时会断开。",
+      "brandMedia.allOrderLine": "全部媒体订单数",
       "brandMedia.clicksTitle": "已锁定媒体的每日点击",
       "brandMedia.clicksSubtitle": "锁定一家媒体时显示普通柱状图；锁定多家时按媒体堆叠显示每日累计点击。",
       "brandMedia.clicksCount": "点击柱",
@@ -1238,25 +1238,28 @@
       "brandMedia.tableSubtitle": "展示图表中每条线在选定时间内的汇总和源记录覆盖情况。",
       "brandMedia.media": "媒体",
       "brandMedia.revenue": "Revenue",
-      "brandMedia.orders": "订单",
+      "brandMedia.orders": "订单数",
       "brandMedia.activeDays": "活跃天数",
       "brandMedia.firstSeen": "首个记录",
       "brandMedia.lastSeen": "最后记录",
-      "brandMedia.selectBrand": "先选择一个品牌，即可加载该品牌所有媒体的每日 Revenue。",
-      "brandMedia.loading": "正在读取该品牌的媒体 Revenue 趋势…",
+      "brandMedia.selectBrand": "先选择一个品牌，即可加载该品牌所有媒体的每日订单数。",
+      "brandMedia.loading": "正在读取该品牌的媒体订单数趋势…",
       "brandMedia.noData": "这个品牌在所选时间内没有媒体订单记录。",
       "brandMedia.loadError": "无法读取品牌媒体趋势，请调整日期范围后重试。",
       "brandMedia.lineCount": "条媒体线",
       "brandMedia.publisherCount": "活跃媒体",
       "brandMedia.totalRevenue": "Revenue",
-      "brandMedia.totalForDate": "当日总 Revenue",
+      "brandMedia.totalOrders": "订单数",
+      "brandMedia.totalOrdersForDate": "当日总订单数",
+      "brandMedia.totalRevenueForDate": "当日总 Revenue",
       "brandMedia.allMedia": "全部媒体",
       "brandMedia.lockedMedia": "已锁定媒体",
       "brandMedia.lockedCount": "已锁定",
       "brandMedia.lock": "点击锁定该媒体",
       "brandMedia.unlock": "点击解除该媒体锁定",
       "brandMedia.noLockedData": "当前锁定媒体在所选时间内没有源记录。点击右侧媒体可解除锁定。",
-      "brandMedia.mediaForDate": "该媒体当日 Revenue",
+      "brandMedia.mediaOrdersForDate": "该媒体当日订单数",
+      "brandMedia.mediaRevenueForDate": "该媒体当日 Revenue",
       "brandMedia.noRecord": "无源记录",
       "brandMedia.observations": "媒体日期记录",
       "brandMedia.coverage": "数据覆盖",
@@ -18182,7 +18185,7 @@ var _NUMERIC_COL_PATTERNS = [
       : ((payload && payload.publishers) || []);
     var allPublishers = _brandMediaManagerFilteredPublishers(payload);
     var lockedKeys = _brandMediaLockedPublisherSet();
-    var showAllRevenueLine = !lockedKeys.size && publishers.length === allPublishers.length;
+    var showAllOrderLine = !lockedKeys.size && publishers.length === allPublishers.length;
     var range = (payload && payload.dateRange) || {};
     var startDate = brandMediaDateKey(range.startDate);
     var endDate = brandMediaDateKey(range.endDate);
@@ -18191,10 +18194,12 @@ var _NUMERIC_COL_PATTERNS = [
     if (!publishers.length || startOrdinal == null || endOrdinal == null || endOrdinal < startOrdinal) return null;
 
     var daySpan = endOrdinal - startOrdinal;
-    var minRevenue = 0;
-    var maxRevenue = 0;
-    var dailyTotals = {};
-    var allDailyTotals = {};
+    var minOrders = 0;
+    var maxOrders = 0;
+    var dailyOrderTotals = {};
+    var dailyRevenueTotals = {};
+    var allDailyOrderTotals = {};
+    var allDailyRevenueTotals = {};
     var publisherPoints = [];
     var publisherPointsByIndex = {};
     var publisherByIndex = {};
@@ -18206,9 +18211,12 @@ var _NUMERIC_COL_PATTERNS = [
         if (!date || ordinal == null || ordinal < startOrdinal || ordinal > endOrdinal) return null;
         var revenue = Number(point.revenue);
         revenue = Number.isFinite(revenue) ? revenue : 0;
-        dailyTotals[date] = (dailyTotals[date] || 0) + revenue;
-        maxRevenue = Math.max(maxRevenue, revenue);
-        return Object.assign({}, point, { date: date, revenue: revenue });
+        var orders = Number(point.orders);
+        orders = Number.isFinite(orders) ? Math.max(0, orders) : 0;
+        dailyOrderTotals[date] = (dailyOrderTotals[date] || 0) + orders;
+        dailyRevenueTotals[date] = (dailyRevenueTotals[date] || 0) + revenue;
+        maxOrders = Math.max(maxOrders, orders);
+        return Object.assign({}, point, { date: date, revenue: revenue, orders: orders });
       }).filter(Boolean).sort(function (a, b) {
         return a.date.localeCompare(b.date);
       });
@@ -18229,15 +18237,18 @@ var _NUMERIC_COL_PATTERNS = [
         if (!date || ordinal == null || ordinal < startOrdinal || ordinal > endOrdinal) return;
         var revenue = Number(point.revenue);
         revenue = Number.isFinite(revenue) ? revenue : 0;
-        allDailyTotals[date] = (allDailyTotals[date] || 0) + revenue;
+        var orders = Number(point.orders);
+        orders = Number.isFinite(orders) ? Math.max(0, orders) : 0;
+        allDailyOrderTotals[date] = (allDailyOrderTotals[date] || 0) + orders;
+        allDailyRevenueTotals[date] = (allDailyRevenueTotals[date] || 0) + revenue;
       });
     });
-    if (showAllRevenueLine) {
-      Object.keys(allDailyTotals).forEach(function (date) {
-        maxRevenue = Math.max(maxRevenue, Number(allDailyTotals[date] || 0));
+    if (showAllOrderLine) {
+      Object.keys(allDailyOrderTotals).forEach(function (date) {
+        maxOrders = Math.max(maxOrders, Number(allDailyOrderTotals[date] || 0));
       });
     }
-    if (maxRevenue === minRevenue) maxRevenue = minRevenue + 1;
+    if (maxOrders === minOrders) maxOrders = minOrders + 1;
     var width = 1180;
     var height = 560;
     var left = 82;
@@ -18252,20 +18263,20 @@ var _NUMERIC_COL_PATTERNS = [
       var denominator = Math.max(1, daySpan);
       return left + Math.max(0, Math.min(daySpan, day)) / denominator * plotWidth;
     }
-    var revenueSpan = maxRevenue - minRevenue;
+    var orderSpan = maxOrders - minOrders;
     function yFor(value) {
-      return top + plotHeight - (Number(value || 0) - minRevenue) / revenueSpan * plotHeight;
+      return top + plotHeight - (Number(value || 0) - minOrders) / orderSpan * plotHeight;
     }
     var svg = [];
     svg.push('<svg class="brand-media-svg" viewBox="0 0 ' + width + ' ' + height +
       '" preserveAspectRatio="none" aria-hidden="true" data-brand-media-day-span="' + daySpan + '">');
     for (var tick = 0; tick <= 4; tick++) {
-      var value = minRevenue + revenueSpan * tick / 4;
+      var value = Math.round(minOrders + orderSpan * tick / 4);
       var y = yFor(value);
       svg.push('<line class="brand-media-grid-line" x1="' + left + '" x2="' +
         (width - right) + '" y1="' + y + '" y2="' + y + '"></line>');
       svg.push('<text class="brand-media-axis-label" x="' + (left - 12) + '" y="' +
-        (y + 4) + '" text-anchor="end">' + escapeHtml(_brandMediaMoney(value)) + '</text>');
+        (y + 4) + '" text-anchor="end">' + escapeHtml(_brandMediaCount(value)) + '</text>');
     }
     var tickOffsets = [];
     for (var xTick = 0; xTick <= 4; xTick++) {
@@ -18289,7 +18300,7 @@ var _NUMERIC_COL_PATTERNS = [
       publisherSegments[index].forEach(function (segment) {
         var path = segment.map(function (point, pointIndex) {
           return (pointIndex ? "L" : "M") + xFor(point.date).toFixed(2) + " " +
-            yFor(point.revenue).toFixed(2);
+            yFor(point.orders).toFixed(2);
         }).join(" ");
         if (path) {
           svg.push('<path class="brand-media-series" d="' + path + '" stroke="' +
@@ -18297,18 +18308,18 @@ var _NUMERIC_COL_PATTERNS = [
         }
       });
     });
-    if (showAllRevenueLine) {
-      var totalPoints = Object.keys(allDailyTotals).sort().map(function (date) {
-        return { date: date, revenue: Number(allDailyTotals[date] || 0) };
+    if (showAllOrderLine) {
+      var totalPoints = Object.keys(allDailyOrderTotals).sort().map(function (date) {
+        return { date: date, orders: Number(allDailyOrderTotals[date] || 0) };
       });
       brandMediaLineSegments(totalPoints).forEach(function (segment) {
         var path = segment.map(function (point, pointIndex) {
           return (pointIndex ? "L" : "M") + xFor(point.date).toFixed(2) + " " +
-            yFor(point.revenue).toFixed(2);
+            yFor(point.orders).toFixed(2);
         }).join(" ");
         if (path) {
           svg.push('<path class="brand-media-total-series" d="' + path +
-            '" data-brand-media-total="true"></path>');
+            '" data-brand-media-total="true" data-brand-media-total-metric="orders"></path>');
         }
       });
     }
@@ -18334,9 +18345,16 @@ var _NUMERIC_COL_PATTERNS = [
       endOrdinal: endOrdinal,
       daySpan: daySpan,
       publishers: publishers,
-      dailyTotals: dailyTotals,
-      allDailyTotals: allDailyTotals,
-      showAllRevenueLine: showAllRevenueLine,
+      primaryMetric: "orders",
+      minOrders: minOrders,
+      maxOrders: maxOrders,
+      dailyTotals: dailyOrderTotals,
+      dailyOrderTotals: dailyOrderTotals,
+      dailyRevenueTotals: dailyRevenueTotals,
+      allDailyTotals: allDailyOrderTotals,
+      allDailyOrderTotals: allDailyOrderTotals,
+      allDailyRevenueTotals: allDailyRevenueTotals,
+      showAllOrderLine: showAllOrderLine,
       publisherPoints: publisherPoints,
       publisherPointsByIndex: publisherPointsByIndex,
       publisherByIndex: publisherByIndex,
@@ -18663,15 +18681,15 @@ var _NUMERIC_COL_PATTERNS = [
     var focusPoint = focusPoints
       ? focusPoints[dateKey]
       : null;
-    var fallbackValue = model.showAllRevenueLine
-      ? Number(model.allDailyTotals[dateKey] || 0)
+    var fallbackValue = model.showAllOrderLine
+      ? Number(model.allDailyOrderTotals[dateKey] || 0)
       : 0;
     if (focusPoint) {
-      fallbackValue = Number(focusPoint.revenue || 0);
-    } else if (!model.showAllRevenueLine) {
+      fallbackValue = Number(focusPoint.orders || 0);
+    } else if (!model.showAllOrderLine) {
       model.publisherPoints.forEach(function (points) {
         var point = points[dateKey];
-        if (point) fallbackValue = Math.max(fallbackValue, Number(point.revenue || 0));
+        if (point) fallbackValue = Math.max(fallbackValue, Number(point.orders || 0));
       });
     }
     var y = model.yFor(fallbackValue);
@@ -18688,25 +18706,34 @@ var _NUMERIC_COL_PATTERNS = [
 
     var tooltip = chart.querySelector(".brand-media-hover-tooltip");
     if (!tooltip) return;
-    var total = Number(model.dailyTotals[dateKey] || 0);
+    var totalOrders = Number((model.dailyOrderTotals || model.dailyTotals)[dateKey] || 0);
+    var totalRevenue = Number((model.dailyRevenueTotals || {})[dateKey] || 0);
     var totalLabel = _brandMediaLockedPublisherSet().size
       ? t("brandMedia.lockedMedia", "Locked media")
       : t("brandMedia.allMedia", "All media");
     var tooltipHtml = '<div class="brand-media-hover-date"><span>' +
       escapeHtml(_brandMediaDisplayDate(dateKey)) + '</span><strong>' +
-      escapeHtml(t("brandMedia.totalForDate", "Total revenue")) + '</strong></div>' +
+      escapeHtml(t("brandMedia.totalOrdersForDate", "Total orders")) + '</strong></div>' +
       '<div class="brand-media-hover-row"><span>' +
       escapeHtml(totalLabel) + '</span><strong>' +
-      escapeHtml(_brandMediaMoney(total)) + '</strong></div>';
+      escapeHtml(_brandMediaCount(totalOrders)) + '</strong></div>' +
+      '<div class="brand-media-hover-row brand-media-hover-secondary"><span>' +
+      escapeHtml(t("brandMedia.totalRevenueForDate", "Total revenue")) + '</span><strong>' +
+      escapeHtml(_brandMediaMoney(totalRevenue)) + '</strong></div>';
     if (focusedIndex != null && model.publisherByIndex && model.publisherByIndex[focusedIndex]) {
       var publisher = model.publisherByIndex[focusedIndex];
-      var pointText = focusPoint
-        ? _brandMediaMoney(focusPoint.revenue)
+      var orderText = focusPoint
+        ? _brandMediaCount(focusPoint.orders)
         : t("brandMedia.noRecord", "No source record");
       tooltipHtml += '<div class="brand-media-hover-row brand-media-hover-media"><span><i style="--brand-media-line:' +
         brandMediaColor(focusedIndex) + '"></i>' +
         escapeHtml(String(publisher.userName || publisher.userId)) + '</span><strong>' +
-        escapeHtml(pointText) + '</strong></div>';
+        escapeHtml(orderText) + '</strong></div>';
+      if (focusPoint) {
+        tooltipHtml += '<div class="brand-media-hover-row brand-media-hover-secondary"><span>' +
+          escapeHtml(t("brandMedia.mediaRevenueForDate", "Media revenue")) + '</span><strong>' +
+          escapeHtml(_brandMediaMoney(focusPoint.revenue)) + '</strong></div>';
+      }
     }
     tooltip.innerHTML = tooltipHtml;
     tooltip.hidden = false;
@@ -18814,7 +18841,7 @@ var _NUMERIC_COL_PATTERNS = [
         els.brandMediaChart.setAttribute("aria-label",
           String(payload.merchant && payload.merchant.merchantName || "") + ", " +
           _brandMediaDisplayDate(range.startDate) + " to " + _brandMediaDisplayDate(range.endDate) +
-          ", 0 publisher revenue lines");
+          ", 0 publisher order lines");
       } else {
         els.brandMediaChart._brandMediaChartModel = model;
         els.brandMediaChart.innerHTML = model.svg +
@@ -18822,7 +18849,7 @@ var _NUMERIC_COL_PATTERNS = [
         els.brandMediaChart.setAttribute("aria-label",
           String(payload.merchant && payload.merchant.merchantName || "") + ", " +
           _brandMediaDisplayDate(range.startDate) + " to " + _brandMediaDisplayDate(range.endDate) +
-          ", " + _brandMediaCount(publishers.length) + " publisher revenue lines");
+          ", " + _brandMediaCount(publishers.length) + " publisher order lines");
       }
     }
     if (els.brandMediaLineCount) els.brandMediaLineCount.textContent = _brandMediaLineCountText(publishers.length);
@@ -18861,7 +18888,7 @@ var _NUMERIC_COL_PATTERNS = [
       els.brandMediaTableRows.innerHTML = '<tr><td colspan="7" class="brand-media-empty-cell">' +
         escapeHtml(_brandMediaLockedPublisherSet().size
           ? t("brandMedia.noLockedData", "No locked media records in the selected range. Click a media in the right panel to unlock it.")
-          : t("brandMedia.selectBrand", "Select a brand to load its daily media revenue.")) +
+          : t("brandMedia.selectBrand", "Select a brand to load its daily media orders.")) +
         '</td></tr>';
       return;
     }
@@ -18914,8 +18941,8 @@ var _NUMERIC_COL_PATTERNS = [
       _brandMediaRenderTable(null);
       _brandMediaRenderClicksChart(null);
       if (els.brandMediaTotalKey) els.brandMediaTotalKey.classList.add("hidden");
-      _brandMediaEmptyChart(t("brandMedia.selectBrand", "Select a brand to load its daily media revenue."));
-      _brandMediaStatus(t("brandMedia.selectBrand", "Select a brand to load its daily media revenue."), "info");
+      _brandMediaEmptyChart(t("brandMedia.selectBrand", "Select a brand to load its daily media orders."));
+      _brandMediaStatus(t("brandMedia.selectBrand", "Select a brand to load its daily media orders."), "info");
       return;
     }
     if (!current.startDate || !current.endDate || current.startDate > current.endDate) {
@@ -18929,9 +18956,9 @@ var _NUMERIC_COL_PATTERNS = [
     current.loading = true;
     current.error = "";
     var sequence = ++current.requestSequence;
-    _brandMediaStatus(t("brandMedia.loading", "Loading brand media revenue trend..."), "loading");
+    _brandMediaStatus(t("brandMedia.loading", "Loading brand media order trend..."), "loading");
     _brandMediaRenderClicksChart(null);
-    _brandMediaEmptyChart(t("brandMedia.loading", "Loading brand media revenue trend..."));
+    _brandMediaEmptyChart(t("brandMedia.loading", "Loading brand media order trend..."));
     var params = new URLSearchParams({
       merchantId: merchantId,
       startDate: current.startDate,

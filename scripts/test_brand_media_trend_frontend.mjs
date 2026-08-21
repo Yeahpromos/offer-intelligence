@@ -115,10 +115,11 @@ const chartPayload = {
     userName: "Media Nine",
     adminName: "timmy",
     totalRevenue: 41,
+    totalOrders: 5,
     points: [
-      { date: "2026-05-01", revenue: 19 },
-      { date: "2026-05-02", revenue: 0 },
-      { date: "2026-05-05", revenue: 22 }
+      { date: "2026-05-01", revenue: 19, orders: 2 },
+      { date: "2026-05-02", revenue: 0, orders: 0 },
+      { date: "2026-05-05", revenue: 22, orders: 3 }
     ],
     clickPoints: [
       { date: "2026-05-01", clicks: 120 },
@@ -139,13 +140,19 @@ if (!chart.includes('class="brand-media-crosshair brand-media-crosshair-date"') 
   throw new Error("the chart should include crosshair and publisher interaction targets");
 }
 if (!chart.includes('class="brand-media-total-series"') ||
-    !chart.includes('data-brand-media-total="true"')) {
-  throw new Error("the unlocked revenue chart should include the black all-media total line");
+    !chart.includes('data-brand-media-total="true"') ||
+    !chart.includes('data-brand-media-total-metric="orders"')) {
+  throw new Error("the unlocked order chart should include the black all-media order line");
 }
 const chartModel = hooks.brandMediaChartModel(chartPayload);
 if (Math.round(chartModel.xFor("2026-05-01")) !== 82 ||
     Math.round(chartModel.xFor("2026-05-05")) !== 1152) {
   throw new Error("series points should share the same date-to-x coordinate as the axis");
+}
+if (chartModel.primaryMetric !== "orders" ||
+    chartModel.dailyOrderTotals["2026-05-01"] !== 2 ||
+    chartModel.dailyRevenueTotals["2026-05-01"] !== 19) {
+  throw new Error("the line model should plot orders while retaining daily revenue values");
 }
 
 const lockPayload = {
@@ -158,7 +165,7 @@ const lockPayload = {
       adminName: "stella",
       totalRevenue: 8,
       totalOrders: 2,
-      points: [{ date: "2026-05-03", revenue: 8 }],
+      points: [{ date: "2026-05-03", revenue: 8, orders: 1 }],
       clickPoints: [{ date: "2026-05-03", clicks: 40 }]
     }
   ]

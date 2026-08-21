@@ -21993,6 +21993,11 @@ body.dashboard-mode .dashboard-agent-page .agent-page-chat-panel .message.user {
   gap: 6px;
 }
 
+.brand-media-hover-secondary {
+  padding-left: 13px;
+  color: #7890ba;
+}
+
 .brand-media-hover-row i {
   display: inline-block;
   width: 7px;
