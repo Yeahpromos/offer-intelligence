@@ -1014,9 +1014,15 @@
               <div>
                 <span class="brand-media-section-index">01</span>
                 <h3 id="brandMediaChartTitle" data-i18n="brandMedia.chartTitle">Publisher revenue by day</h3>
-                <p id="brandMediaChartSubtitle" data-i18n="brandMedia.chartSubtitle">Click a media partner on the right to lock it; select multiple partners, and click again to unlock. Lines break when there is no daily source record.</p>
+                <p id="brandMediaChartSubtitle" data-i18n="brandMedia.chartSubtitle">Click a media partner on the right to lock it; select multiple partners, and click again to unlock. The black line shows all-media revenue before locking. Lines break when there is no daily source record.</p>
               </div>
-              <span class="brand-media-line-count" id="brandMediaLineCount" aria-live="polite"></span>
+              <div class="brand-media-chart-meta">
+                <span class="brand-media-total-key hidden" id="brandMediaTotalKey">
+                  <i aria-hidden="true"></i>
+                  <span data-i18n="brandMedia.allRevenueLine">All media revenue</span>
+                </span>
+                <span class="brand-media-line-count" id="brandMediaLineCount" aria-live="polite"></span>
+              </div>
             </div>
             <div class="brand-media-chart-layout">
               <div class="brand-media-chart-wrap" id="brandMediaChart" role="img" aria-live="polite"></div>
@@ -1024,10 +1030,22 @@
             </div>
           </section>
 
+          <section class="panel brand-media-clicks-panel hidden" id="brandMediaClicksPanel" aria-labelledby="brandMediaClicksTitle">
+            <div class="brand-media-panel-heading">
+              <div>
+                <span class="brand-media-section-index">02</span>
+                <h3 id="brandMediaClicksTitle" data-i18n="brandMedia.clicksTitle">Clicks by locked media</h3>
+                <p data-i18n="brandMedia.clicksSubtitle">One locked media uses a regular bar chart; multiple locked media are stacked to show cumulative daily clicks.</p>
+              </div>
+              <span class="brand-media-line-count" id="brandMediaClickChartCount" aria-live="polite"></span>
+            </div>
+            <div class="brand-media-click-chart-wrap" id="brandMediaClickChart" role="img" aria-live="polite"></div>
+          </section>
+
           <section class="panel brand-media-table-panel" aria-labelledby="brandMediaTableTitle">
             <div class="brand-media-panel-heading brand-media-table-heading">
               <div>
-                <span class="brand-media-section-index">02</span>
+                <span class="brand-media-section-index">03</span>
                 <h3 id="brandMediaTableTitle" data-i18n="brandMedia.tableTitle">Media summary</h3>
                 <p data-i18n="brandMedia.tableSubtitle">Range totals and source-record coverage for every line in the chart.</p>
               </div>

@@ -48,6 +48,26 @@ ROWS = [
         "all_commission": 0,
         "aff_commission": 0,
     },
+    {
+        "merchant_id": 101,
+        "merchant_name": "Alpha",
+        "user_id": 7,
+        "user_name": "Media Seven",
+        "admin_name": "timmy",
+        "order_day": 20260701,
+        "clicks": 120,
+        "metric_source": "clicks",
+    },
+    {
+        "merchant_id": 101,
+        "merchant_name": "Alpha",
+        "user_id": 7,
+        "user_name": "Media Seven",
+        "admin_name": "timmy",
+        "order_day": 20260702,
+        "clicks": 80,
+        "metric_source": "clicks",
+    },
 ]
 
 
@@ -73,12 +93,19 @@ def main():
     assert_equal(normalized["summary"]["activeDayCount"], 3, "active day count")
     assert_equal(normalized["summary"]["observationCount"], 3, "observation count")
     assert_close(normalized["summary"]["totalRevenue"], 100.5, "total revenue")
+    assert_equal(normalized["summary"]["totalClicks"], 200, "total clicks")
 
     media_seven = normalized["publishers"][0]
     media_eight = normalized["publishers"][1]
     assert_equal(media_seven["userId"], 7, "publisher ordering")
     assert_equal(media_seven["adminName"], "timmy", "publisher manager association")
     assert_equal(media_eight["adminName"], "stella", "second publisher manager association")
+    assert_equal(media_seven["totalClicks"], 200, "publisher click total")
+    assert_equal(
+        [point["date"] for point in media_seven["clickPoints"]],
+        ["2026-07-01", "2026-07-02"],
+        "click-only dates should be preserved for the click chart",
+    )
     assert_equal(
         [point["date"] for point in media_seven["points"]],
         ["2026-07-01", "2026-07-03"],
@@ -107,9 +134,11 @@ def main():
             raise AssertionError(f"{label}: expected ValueError")
 
     def fake_fetch_all(_conn, sql, params=None):
-        assert_equal(params, (101, 20260701, 20260731), "trend SQL params")
+        assert_equal(params, (101, 20260701, 20260731, 101, 20260701, 20260731), "trend SQL params")
         if "GROUP BY o.advert_id, o.user_id, o.order_time_day" not in sql:
             raise AssertionError("trend query must aggregate at merchant + publisher + day grain")
+        if "GROUP BY c.advert_id, c.user_id, c.time_day" not in sql:
+            raise AssertionError("trend query must aggregate clicks at merchant + publisher + day grain")
         if "FROM v_maxai_cnpscy_user" not in sql or "FROM cnpscy_user" in sql:
             raise AssertionError("trend query must read publisher names from v_maxai_cnpscy_user")
         if "cnpscy_admins" not in sql or "admin_id_look" not in sql or "admin_name" not in sql:
@@ -131,8 +160,9 @@ def main():
             end_date="2026-07-31",
         )
 
-    assert_equal(payload["source"], "cnpscy_amazon_order", "trend source")
-    assert_equal(payload["grain"], "advert_id + user_id + order_time_day", "trend grain")
+    assert_equal(payload["source"], "cnpscy_amazon_order + cnpscy_amazon_click", "trend source")
+    assert_equal(payload["grain"], "advert_id + user_id + day + metric", "trend grain")
+    assert_equal(payload["clickSource"], "cnpscy_amazon_click", "click source")
     assert_equal(payload["merchant"]["merchantName"], "Alpha", "payload merchant name")
     assert_equal(payload["dateRange"]["dayCount"], 31, "inclusive date range")
     assert_equal(payload["gapRule"], "No order-table row is emitted for a missing publisher/date.", "gap contract")

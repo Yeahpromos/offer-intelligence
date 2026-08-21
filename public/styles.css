@@ -21780,6 +21780,14 @@ body.dashboard-mode .dashboard-agent-page .agent-page-chat-panel .message.user {
   margin-bottom: 18px;
 }
 
+.brand-media-chart-meta {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 14px;
+  margin-top: 5px;
+}
+
 .brand-media-panel-heading h3 {
   margin: 4px 0 5px;
   color: #11284e;
@@ -21790,10 +21798,27 @@ body.dashboard-mode .dashboard-agent-page .agent-page-chat-panel .message.user {
 .brand-media-line-count,
 .brand-media-table-count {
   flex: 0 0 auto;
-  margin-top: 5px;
   color: #246bfe;
   font-size: 12px;
   font-weight: 800;
+}
+
+.brand-media-total-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #17202d;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.brand-media-total-key i {
+  display: inline-block;
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: #111827;
 }
 
 .brand-media-chart-layout {
@@ -21847,6 +21872,17 @@ body.dashboard-mode .dashboard-agent-page .agent-page-chat-panel .message.user {
 .brand-media-series:hover {
   stroke-width: 3.3;
   opacity: 1;
+}
+
+.brand-media-total-series {
+  fill: none;
+  stroke: #111827;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.94;
+  pointer-events: none;
 }
 
 .brand-media-hit-area {
@@ -21963,6 +21999,47 @@ body.dashboard-mode .dashboard-agent-page .agent-page-chat-panel .message.user {
   place-items: center;
   color: var(--muted);
   text-align: center;
+}
+
+.brand-media-clicks-panel {
+  margin-top: 14px;
+  padding: clamp(18px, 2.4vw, 30px);
+}
+
+.brand-media-click-chart-wrap {
+  position: relative;
+  min-height: 440px;
+  overflow: hidden;
+  border: 1px solid rgba(52, 77, 117, 0.1);
+  border-radius: 15px;
+  background: #fff;
+}
+
+.brand-media-click-svg {
+  display: block;
+  width: 100%;
+  height: 440px;
+  overflow: visible;
+}
+
+.brand-media-click-bar {
+  shape-rendering: crispEdges;
+  opacity: 0.88;
+  transition: opacity 140ms ease, filter 140ms ease;
+}
+
+.brand-media-click-bar:hover {
+  opacity: 1;
+  filter: brightness(0.92) saturate(1.15);
+}
+
+.brand-media-click-svg.is-cumulative .brand-media-click-bar {
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 0.7;
+}
+
+.brand-media-click-chart-wrap .brand-media-hover-tooltip {
+  top: 14px;
 }
 
 .brand-media-legend {
@@ -22178,9 +22255,21 @@ body.dashboard-mode .dashboard-agent-page .agent-page-chat-panel .message.user {
   .brand-media-chart-layout,
   .brand-media-chart-wrap,
   .brand-media-empty-chart,
-  .brand-media-svg {
+  .brand-media-svg,
+  .brand-media-click-chart-wrap,
+  .brand-media-click-svg {
     min-height: 440px;
     height: 440px;
+  }
+
+  .brand-media-chart-meta {
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .brand-media-total-key {
+    white-space: normal;
+    text-align: right;
   }
 
   .brand-media-legend {

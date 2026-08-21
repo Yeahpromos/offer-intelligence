@@ -119,6 +119,10 @@ const chartPayload = {
       { date: "2026-05-01", revenue: 19 },
       { date: "2026-05-02", revenue: 0 },
       { date: "2026-05-05", revenue: 22 }
+    ],
+    clickPoints: [
+      { date: "2026-05-01", clicks: 120 },
+      { date: "2026-05-02", clicks: 80 }
     ]
   }]
 };
@@ -133,6 +137,10 @@ if (!chart.includes('class="brand-media-crosshair brand-media-crosshair-date"') 
     !chart.includes('class="brand-media-crosshair brand-media-crosshair-value"') ||
     !chart.includes('data-brand-media-publisher-index="0"')) {
   throw new Error("the chart should include crosshair and publisher interaction targets");
+}
+if (!chart.includes('class="brand-media-total-series"') ||
+    !chart.includes('data-brand-media-total="true"')) {
+  throw new Error("the unlocked revenue chart should include the black all-media total line");
 }
 const chartModel = hooks.brandMediaChartModel(chartPayload);
 if (Math.round(chartModel.xFor("2026-05-01")) !== 82 ||
@@ -150,7 +158,8 @@ const lockPayload = {
       adminName: "stella",
       totalRevenue: 8,
       totalOrders: 2,
-      points: [{ date: "2026-05-03", revenue: 8 }]
+      points: [{ date: "2026-05-03", revenue: 8 }],
+      clickPoints: [{ date: "2026-05-03", clicks: 40 }]
     }
   ]
 };
@@ -168,6 +177,23 @@ if (!lockedChart || !lockedChart.publisherByIndex[0] || lockedChart.publisherByI
 if (!lockedChart.svg.includes('data-brand-media-publisher-index="0"') ||
     lockedChart.svg.includes('data-brand-media-publisher-index="1"')) {
   throw new Error("locked chart should render only the selected media line");
+}
+
+const singleClickChart = hooks.brandMediaClickChartModel(lockPayload, [lockedPublishers[0]]);
+if (!singleClickChart || singleClickChart.isCumulative || !singleClickChart.hasData) {
+  throw new Error("one locked media should render a regular click bar chart");
+}
+if ((singleClickChart.svg.match(/class="brand-media-click-bar/g) || []).length !== 2) {
+  throw new Error("the single-media click chart should render one bar per observed date");
+}
+
+const cumulativeClickChart = hooks.brandMediaClickChartModel(lockPayload, lockPayload.publishers);
+if (!cumulativeClickChart || !cumulativeClickChart.isCumulative || !cumulativeClickChart.hasData) {
+  throw new Error("multiple locked media should render a cumulative click bar chart");
+}
+if (!cumulativeClickChart.svg.includes("brand-media-click-svg is-cumulative") ||
+    !cumulativeClickChart.svg.includes("brand-media-click-bar is-cumulative")) {
+  throw new Error("the multi-media click chart should use cumulative stacked bars");
 }
 
 assertEqual(
@@ -191,6 +217,9 @@ const indexHtml = fs.readFileSync("public/index.html", "utf8");
   'id="brandMediaStartDate"',
   'id="brandMediaEndDate"',
   'id="brandMediaChart"',
+  'id="brandMediaTotalKey"',
+  'id="brandMediaClicksPanel"',
+  'id="brandMediaClickChart"',
   'id="brandMediaTableRows"'
 ].forEach(function (required) {
   if (!indexHtml.includes(required)) throw new Error("brand media page is missing " + required);
