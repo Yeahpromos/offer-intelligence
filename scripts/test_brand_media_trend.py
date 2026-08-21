@@ -17,6 +17,7 @@ ROWS = [
         "merchant_name": "Alpha",
         "user_id": 7,
         "user_name": "Media Seven",
+        "admin_name": "timmy",
         "order_day": 20260701,
         "revenue": 80.5,
         "orders": 2,
@@ -28,6 +29,7 @@ ROWS = [
         "merchant_name": "Alpha",
         "user_id": 7,
         "user_name": "Media Seven",
+        "admin_name": "timmy",
         "order_day": 20260703,
         "revenue": 20,
         "orders": 1,
@@ -39,6 +41,7 @@ ROWS = [
         "merchant_name": "Alpha",
         "user_id": 8,
         "user_name": "Media Eight",
+        "admin_name": "stella",
         "order_day": 20260702,
         "revenue": 0,
         "orders": 0,
@@ -74,6 +77,8 @@ def main():
     media_seven = normalized["publishers"][0]
     media_eight = normalized["publishers"][1]
     assert_equal(media_seven["userId"], 7, "publisher ordering")
+    assert_equal(media_seven["adminName"], "timmy", "publisher manager association")
+    assert_equal(media_eight["adminName"], "stella", "second publisher manager association")
     assert_equal(
         [point["date"] for point in media_seven["points"]],
         ["2026-07-01", "2026-07-03"],
@@ -107,6 +112,8 @@ def main():
             raise AssertionError("trend query must aggregate at merchant + publisher + day grain")
         if "FROM v_maxai_cnpscy_user" not in sql or "FROM cnpscy_user" in sql:
             raise AssertionError("trend query must read publisher names from v_maxai_cnpscy_user")
+        if "cnpscy_admins" not in sql or "admin_id_look" not in sql or "admin_name" not in sql:
+            raise AssertionError("trend query must associate publisher managers through cnpscy_admins")
         if "SUM(COALESCE(o.amount, 0)) AS revenue" not in sql:
             raise AssertionError("trend query must use the order amount as revenue")
         if "o.order_time_day BETWEEN %s AND %s" not in sql:

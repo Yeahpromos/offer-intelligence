@@ -403,6 +403,8 @@
       merchantId: "",
       merchantName: "",
       merchantSearch: "",
+      managerFilter: "",
+      lockedPublisherKeys: [],
       startDate: "",
       endDate: "",
       quickRange: "90",
@@ -554,6 +556,7 @@
     brandMediaPage: document.getElementById("brandMediaPage"),
     brandMediaMerchantSearch: document.getElementById("brandMediaMerchantSearch"),
     brandMediaMerchantDropdown: document.getElementById("brandMediaMerchantDropdown"),
+    brandMediaManagerFilter: document.getElementById("brandMediaManagerFilter"),
     brandMediaRangeButtons: document.getElementById("brandMediaRangeButtons"),
     brandMediaStartDate: document.getElementById("brandMediaStartDate"),
     brandMediaEndDate: document.getElementById("brandMediaEndDate"),
@@ -1134,12 +1137,14 @@
       "brandMedia.liveSource": "每日订单 Revenue",
       "brandMedia.brand": "品牌",
       "brandMedia.brandPlaceholder": "搜索品牌或商家 ID",
+      "brandMedia.manager": "媒介经理",
+      "brandMedia.allManagers": "全部经理",
       "brandMedia.timeRange": "时间跨度",
       "brandMedia.startDate": "开始日期",
       "brandMedia.endDate": "结束日期",
       "brandMedia.sourceNote": "Revenue 使用订单金额；缺少某媒体当天的源记录时，图表会断开而不会补为 0。",
       "brandMedia.chartTitle": "各媒体每日 Revenue",
-      "brandMedia.chartSubtitle": "每条线代表一家媒体；没有每日源记录时会断开。",
+      "brandMedia.chartSubtitle": "点击右侧媒体可锁定；可同时锁定多家，再次点击解除。没有每日源记录时会断开。",
       "brandMedia.tableTitle": "媒体汇总",
       "brandMedia.tableSubtitle": "展示图表中每条线在选定时间内的汇总和源记录覆盖情况。",
       "brandMedia.media": "媒体",
@@ -1157,6 +1162,11 @@
       "brandMedia.totalRevenue": "Revenue",
       "brandMedia.totalForDate": "当日总 Revenue",
       "brandMedia.allMedia": "全部媒体",
+      "brandMedia.lockedMedia": "已锁定媒体",
+      "brandMedia.lockedCount": "已锁定",
+      "brandMedia.lock": "点击锁定该媒体",
+      "brandMedia.unlock": "点击解除该媒体锁定",
+      "brandMedia.noLockedData": "当前锁定媒体在所选时间内没有源记录。点击右侧媒体可解除锁定。",
       "brandMedia.mediaForDate": "该媒体当日 Revenue",
       "brandMedia.noRecord": "无源记录",
       "brandMedia.observations": "媒体日期记录",
@@ -17869,6 +17879,142 @@ var _NUMERIC_COL_PATTERNS = [
     });
   }
 
+  function _brandMediaPublisherKey(publisher, index) {
+    var userId = publisher && publisher.userId != null
+      ? String(publisher.userId).trim()
+      : "";
+    if (userId) return "id:" + userId;
+    var userName = publisher && publisher.userName != null
+      ? String(publisher.userName).trim().toLowerCase()
+      : "";
+    return "name:" + userName + "|" + String(index);
+  }
+
+  function _brandMediaSourceIndex(publisher, index) {
+    var sourceIndex = Number(publisher && publisher._brandMediaSourceIndex);
+    return Number.isFinite(sourceIndex) ? sourceIndex : index;
+  }
+
+  function _brandMediaLockedPublisherSet() {
+    var keys = state.brandMedia && state.brandMedia.lockedPublisherKeys;
+    return new Set((Array.isArray(keys) ? keys : []).map(function (key) {
+      return String(key || "").trim();
+    }).filter(Boolean));
+  }
+
+  function _brandMediaPublisherManager(publisher) {
+    return String(publisher && publisher.adminName || "Unknown").trim() || "Unknown";
+  }
+
+  function _brandMediaManagerOptions(payload) {
+    var names = {};
+    ((payload && payload.publishers) || []).forEach(function (publisher) {
+      var manager = _brandMediaPublisherManager(publisher);
+      names[manager] = true;
+    });
+    return Object.keys(names).sort(function (a, b) {
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    });
+  }
+
+  function _brandMediaManagerFilteredPublishers(payload, managerOverride) {
+    var selectedManager = managerOverride == null
+      ? String(state.brandMedia && state.brandMedia.managerFilter || "").trim()
+      : String(managerOverride || "").trim();
+    var normalizedManager = selectedManager.toLowerCase();
+    return ((payload && payload.publishers) || []).map(function (publisher, index) {
+      return Object.assign({}, publisher, {
+        _brandMediaSourceIndex: index,
+        _brandMediaPublisherKey: _brandMediaPublisherKey(publisher, index),
+      });
+    }).filter(function (publisher) {
+      return !normalizedManager || _brandMediaPublisherManager(publisher).toLowerCase() === normalizedManager;
+    });
+  }
+
+  function _brandMediaVisiblePublishers(payload, lockedKeysOverride) {
+    var publishers = _brandMediaManagerFilteredPublishers(payload);
+    var lockedKeys = lockedKeysOverride == null
+      ? _brandMediaLockedPublisherSet()
+      : (lockedKeysOverride instanceof Set
+        ? lockedKeysOverride
+        : new Set((Array.isArray(lockedKeysOverride) ? lockedKeysOverride : []).map(String)));
+    return publishers.filter(function (publisher) {
+      return !lockedKeys.size || lockedKeys.has(publisher._brandMediaPublisherKey);
+    });
+  }
+
+  function _brandMediaSummaryForView(payload, publishers) {
+    if (!payload || !payload.summary) return null;
+    if (!_brandMediaLockedPublisherSet().size &&
+        !String(state.brandMedia && state.brandMedia.managerFilter || "").trim()) {
+      return payload.summary;
+    }
+    return publishers.reduce(function (summary, publisher) {
+      summary.totalRevenue += Number(publisher.totalRevenue || 0);
+      summary.totalOrders += Number(publisher.totalOrders || 0);
+      summary.observationCount += (publisher.points || []).length;
+      return summary;
+    }, {
+      activePublisherCount: publishers.length,
+      totalRevenue: 0,
+      totalOrders: 0,
+      observationCount: 0,
+    });
+  }
+
+  function _brandMediaLineCountText(count) {
+    var text = _brandMediaCount(count) + " " + t("brandMedia.lineCount", "media lines");
+    var lockedCount = _brandMediaLockedPublisherSet().size;
+    if (lockedCount) {
+      text += " · " + t("brandMedia.lockedCount", "locked") + " " +
+        _brandMediaCount(lockedCount);
+    }
+    return text;
+  }
+
+  function _brandMediaRenderManagerFilter(payload) {
+    if (!els.brandMediaManagerFilter) return;
+    var options = _brandMediaManagerOptions(payload);
+    var current = String(state.brandMedia && state.brandMedia.managerFilter || "").trim();
+    var matchingOption = options.find(function (manager) {
+      return manager.toLowerCase() === current.toLowerCase();
+    });
+    if (current && !matchingOption) {
+      current = "";
+      state.brandMedia.managerFilter = "";
+    } else if (matchingOption && matchingOption !== current) {
+      current = matchingOption;
+      state.brandMedia.managerFilter = matchingOption;
+    }
+    els.brandMediaManagerFilter.innerHTML = '<option value="">' +
+      escapeHtml(t("brandMedia.allManagers", "All managers")) +
+      '</option>' + options.map(function (manager) {
+        return '<option value="' + escapeHtml(manager) + '">' + escapeHtml(manager) + '</option>';
+      }).join("");
+    els.brandMediaManagerFilter.value = current;
+  }
+
+  function _brandMediaTogglePublisherLock(publisherKey) {
+    var key = String(publisherKey || "").trim();
+    if (!key) return;
+    var lockedKeys = _brandMediaLockedPublisherSet();
+    if (lockedKeys.has(key)) lockedKeys.delete(key);
+    else lockedKeys.add(key);
+    state.brandMedia.lockedPublisherKeys = Array.from(lockedKeys);
+    _brandMediaClearChartHover(els.brandMediaChart);
+    _brandMediaRenderCurrentView();
+  }
+
+  function _brandMediaRenderCurrentView() {
+    var payload = state.brandMedia && state.brandMedia.payload;
+    _brandMediaRenderManagerFilter(payload);
+    if (!payload) return;
+    _brandMediaRenderKpis(payload);
+    _brandMediaRenderChart(payload);
+    _brandMediaRenderTable(payload);
+  }
+
   function _brandMediaCatalogOptions(data) {
     return _publisherMerchantOptions(data).sort(function (a, b) {
       return Number(b.count || 0) - Number(a.count || 0) ||
@@ -17915,7 +18061,8 @@ var _NUMERIC_COL_PATTERNS = [
       els.brandMediaKpis.innerHTML = "";
       return;
     }
-    var summary = payload.summary;
+    var publishers = _brandMediaVisiblePublishers(payload);
+    var summary = _brandMediaSummaryForView(payload, publishers);
     var items = [
       [t("brandMedia.publisherCount", "Active media"), _brandMediaCount(summary.activePublisherCount)],
       [t("brandMedia.totalRevenue", "Revenue"), _brandMediaMoney(summary.totalRevenue)],
@@ -17929,18 +18076,20 @@ var _NUMERIC_COL_PATTERNS = [
     }).join("");
   }
 
-  function _brandMediaEmptyChart(message) {
+  function _brandMediaEmptyChart(message, preserveLegend) {
     if (els.brandMediaChart) {
       els.brandMediaChart._brandMediaChartModel = null;
       els.brandMediaChart.innerHTML = '<div class="brand-media-empty-chart">' +
         escapeHtml(message) + '</div>';
     }
-    if (els.brandMediaLegend) els.brandMediaLegend.innerHTML = "";
-    if (els.brandMediaLineCount) els.brandMediaLineCount.textContent = "";
+    if (!preserveLegend && els.brandMediaLegend) els.brandMediaLegend.innerHTML = "";
+    if (!preserveLegend && els.brandMediaLineCount) els.brandMediaLineCount.textContent = "";
   }
 
-  function _brandMediaBuildChartModel(payload) {
-    var publishers = (payload && payload.publishers) || [];
+  function _brandMediaBuildChartModel(payload, publishersOverride) {
+    var publishers = Array.isArray(publishersOverride)
+      ? publishersOverride
+      : ((payload && payload.publishers) || []);
     var range = (payload && payload.dateRange) || {};
     var startDate = brandMediaDateKey(range.startDate);
     var endDate = brandMediaDateKey(range.endDate);
@@ -17953,6 +18102,8 @@ var _NUMERIC_COL_PATTERNS = [
     var maxRevenue = 0;
     var dailyTotals = {};
     var publisherPoints = [];
+    var publisherPointsByIndex = {};
+    var publisherByIndex = {};
     var publisherSegments = [];
     publishers.forEach(function (publisher) {
       var points = (publisher.points || []).map(function (point) {
@@ -17967,10 +18118,14 @@ var _NUMERIC_COL_PATTERNS = [
       }).filter(Boolean).sort(function (a, b) {
         return a.date.localeCompare(b.date);
       });
-      publisherPoints.push(points.reduce(function (map, point) {
+      var pointsByDate = points.reduce(function (map, point) {
         map[point.date] = point;
         return map;
-      }, {}));
+      }, {});
+      var sourceIndex = _brandMediaSourceIndex(publisher, publisherPoints.length);
+      publisherPoints.push(pointsByDate);
+      publisherPointsByIndex[sourceIndex] = pointsByDate;
+      publisherByIndex[sourceIndex] = publisher;
       publisherSegments.push(brandMediaLineSegments(points));
     });
     if (maxRevenue === minRevenue) maxRevenue = minRevenue + 1;
@@ -18020,7 +18175,8 @@ var _NUMERIC_COL_PATTERNS = [
     svg.push('<rect class="brand-media-hit-area" x="' + left + '" y="' + top + '" width="' +
       plotWidth + '" height="' + plotHeight + '" tabindex="0" data-brand-media-hit-area="true" aria-label="Select a date"></rect>');
     publishers.forEach(function (publisher, index) {
-      var color = brandMediaColor(index);
+      var sourceIndex = _brandMediaSourceIndex(publisher, index);
+      var color = brandMediaColor(sourceIndex);
       publisherSegments[index].forEach(function (segment) {
         var path = segment.map(function (point, pointIndex) {
           return (pointIndex ? "L" : "M") + xFor(point.date).toFixed(2) + " " +
@@ -18028,7 +18184,7 @@ var _NUMERIC_COL_PATTERNS = [
         }).join(" ");
         if (path) {
           svg.push('<path class="brand-media-series" d="' + path + '" stroke="' +
-            color + '" data-brand-media-publisher-index="' + index + '"></path>');
+            color + '" data-brand-media-publisher-index="' + sourceIndex + '"></path>');
         }
       });
     });
@@ -18056,6 +18212,8 @@ var _NUMERIC_COL_PATTERNS = [
       publishers: publishers,
       dailyTotals: dailyTotals,
       publisherPoints: publisherPoints,
+      publisherPointsByIndex: publisherPointsByIndex,
+      publisherByIndex: publisherByIndex,
       xFor: xFor,
       yFor: yFor,
       dateForOffset: function (offset) {
@@ -18117,8 +18275,11 @@ var _NUMERIC_COL_PATTERNS = [
     var dateLine = svg.querySelector(".brand-media-crosshair-date");
     var valueLine = svg.querySelector(".brand-media-crosshair-value");
     var x = model.xFor(dateKey);
-    var focusPoint = focusedIndex != null && model.publisherPoints[focusedIndex]
-      ? model.publisherPoints[focusedIndex][dateKey]
+    var focusPoints = focusedIndex != null && model.publisherPointsByIndex
+      ? model.publisherPointsByIndex[focusedIndex]
+      : null;
+    var focusPoint = focusPoints
+      ? focusPoints[dateKey]
       : null;
     var fallbackValue = 0;
     if (focusPoint) {
@@ -18144,14 +18305,17 @@ var _NUMERIC_COL_PATTERNS = [
     var tooltip = chart.querySelector(".brand-media-hover-tooltip");
     if (!tooltip) return;
     var total = Number(model.dailyTotals[dateKey] || 0);
+    var totalLabel = _brandMediaLockedPublisherSet().size
+      ? t("brandMedia.lockedMedia", "Locked media")
+      : t("brandMedia.allMedia", "All media");
     var tooltipHtml = '<div class="brand-media-hover-date"><span>' +
       escapeHtml(_brandMediaDisplayDate(dateKey)) + '</span><strong>' +
       escapeHtml(t("brandMedia.totalForDate", "Total revenue")) + '</strong></div>' +
       '<div class="brand-media-hover-row"><span>' +
-      escapeHtml(t("brandMedia.allMedia", "All media")) + '</span><strong>' +
+      escapeHtml(totalLabel) + '</span><strong>' +
       escapeHtml(_brandMediaMoney(total)) + '</strong></div>';
-    if (focusedIndex != null && model.publishers[focusedIndex]) {
-      var publisher = model.publishers[focusedIndex];
+    if (focusedIndex != null && model.publisherByIndex && model.publisherByIndex[focusedIndex]) {
+      var publisher = model.publisherByIndex[focusedIndex];
       var pointText = focusPoint
         ? _brandMediaMoney(focusPoint.revenue)
         : t("brandMedia.noRecord", "No source record");
@@ -18215,7 +18379,7 @@ var _NUMERIC_COL_PATTERNS = [
       els.brandMediaLegend.addEventListener("pointerover", function (event) {
         var index = _brandMediaPublisherIndexFromTarget(event.target);
         var model = chart._brandMediaChartModel;
-        if (index == null || !model) return;
+        if (index == null || !model || !model.publisherByIndex || !model.publisherByIndex[index]) return;
         var dateKey = chart._brandMediaHoverDate || model.endDate;
         chart._brandMediaHoverDate = dateKey;
         chart._brandMediaFocusedIndex = index;
@@ -18225,40 +18389,74 @@ var _NUMERIC_COL_PATTERNS = [
       els.brandMediaLegend.addEventListener("pointerleave", function () {
         _brandMediaClearChartHover(chart);
       });
+      els.brandMediaLegend.addEventListener("click", function (event) {
+        var item = event.target.closest("[data-brand-media-publisher-index]");
+        if (!item || !state.brandMedia.payload) return;
+        var index = Number(item.getAttribute("data-brand-media-publisher-index"));
+        var publisher = state.brandMedia.payload.publishers && state.brandMedia.payload.publishers[index];
+        if (!publisher) return;
+        _brandMediaTogglePublisherLock(_brandMediaPublisherKey(publisher, index));
+      });
+      els.brandMediaLegend.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        var item = event.target.closest("[data-brand-media-publisher-index]");
+        if (!item) return;
+        event.preventDefault();
+        item.click();
+      });
     }
   }
 
   function _brandMediaRenderChart(payload) {
-    var publishers = (payload && payload.publishers) || [];
-    if (!publishers.length) {
+    var allPublishers = _brandMediaManagerFilteredPublishers(payload);
+    var publishers = _brandMediaVisiblePublishers(payload);
+    var lockedKeys = _brandMediaLockedPublisherSet();
+    if (!allPublishers.length) {
       _brandMediaEmptyChart(t("brandMedia.noData", "No media order records in this range."));
       return;
     }
+    var model = publishers.length ? _brandMediaBuildChartModel(payload, publishers) : null;
+    var range = payload.dateRange || {};
     if (els.brandMediaChart) {
-      var model = _brandMediaBuildChartModel(payload);
       if (!model) {
-        _brandMediaEmptyChart(t("brandMedia.noData", "No media order records in this range."));
-        return;
+        els.brandMediaChart._brandMediaChartModel = null;
+        els.brandMediaChart.innerHTML = '<div class="brand-media-empty-chart">' +
+          escapeHtml(t("brandMedia.noLockedData", "No locked media records in the selected range. Click a media in the right panel to unlock it.")) +
+          '</div>';
+        els.brandMediaChart.setAttribute("aria-label",
+          String(payload.merchant && payload.merchant.merchantName || "") + ", " +
+          _brandMediaDisplayDate(range.startDate) + " to " + _brandMediaDisplayDate(range.endDate) +
+          ", 0 publisher revenue lines");
+      } else {
+        els.brandMediaChart._brandMediaChartModel = model;
+        els.brandMediaChart.innerHTML = model.svg +
+          '<div class="brand-media-hover-tooltip" hidden aria-live="polite"></div>';
+        els.brandMediaChart.setAttribute("aria-label",
+          String(payload.merchant && payload.merchant.merchantName || "") + ", " +
+          _brandMediaDisplayDate(range.startDate) + " to " + _brandMediaDisplayDate(range.endDate) +
+          ", " + _brandMediaCount(publishers.length) + " publisher revenue lines");
       }
-      els.brandMediaChart._brandMediaChartModel = model;
-      els.brandMediaChart.innerHTML = model.svg +
-        '<div class="brand-media-hover-tooltip" hidden aria-live="polite"></div>';
-      var range = payload.dateRange || {};
-      els.brandMediaChart.setAttribute("aria-label",
-        String(payload.merchant && payload.merchant.merchantName || "") + ", " +
-        _brandMediaDisplayDate(range.startDate) + " to " + _brandMediaDisplayDate(range.endDate) +
-        ", " + _brandMediaCount(publishers.length) + " publisher revenue lines");
     }
-    if (els.brandMediaLineCount) {
-      els.brandMediaLineCount.textContent = _brandMediaCount(publishers.length) + " " +
-        t("brandMedia.lineCount", "media lines");
-    }
+    if (els.brandMediaLineCount) els.brandMediaLineCount.textContent = _brandMediaLineCountText(publishers.length);
     if (els.brandMediaLegend) {
-      els.brandMediaLegend.innerHTML = publishers.map(function (publisher, index) {
-        return '<div class="brand-media-legend-item" tabindex="0" role="button" data-brand-media-publisher-index="' + index + '"><i style="--brand-media-line:' +
-          brandMediaColor(index) + '"></i><span>' +
-          escapeHtml(String(publisher.userName || publisher.userId)) +
-          '</span><strong>' + escapeHtml(_brandMediaMoney(publisher.totalRevenue)) +
+      els.brandMediaLegend.innerHTML = allPublishers.map(function (publisher, index) {
+        var sourceIndex = _brandMediaSourceIndex(publisher, index);
+        var key = publisher._brandMediaPublisherKey || _brandMediaPublisherKey(publisher, sourceIndex);
+        var locked = lockedKeys.has(key);
+        var publisherName = String(publisher.userName || publisher.userId);
+        var managerName = _brandMediaPublisherManager(publisher);
+        var actionLabel = locked
+          ? t("brandMedia.unlock", "Click to unlock this media")
+          : t("brandMedia.lock", "Click to lock this media");
+        return '<div class="brand-media-legend-item' + (locked ? ' is-locked' : '') +
+          '" tabindex="0" role="button" aria-pressed="' + (locked ? 'true' : 'false') +
+          '" aria-label="' + escapeHtml(publisherName + " / " + managerName + ": " + actionLabel) +
+          '" title="' + escapeHtml(actionLabel) +
+          '" data-brand-media-publisher-index="' + sourceIndex + '"><i style="--brand-media-line:' +
+          brandMediaColor(sourceIndex) + '"></i><span class="brand-media-legend-details"><strong>' +
+          escapeHtml(publisherName) + '</strong><small>' + escapeHtml(managerName) +
+          '</small></span>' +
+          '<strong>' + escapeHtml(_brandMediaMoney(publisher.totalRevenue)) +
           '</strong></div>';
       }).join("");
     }
@@ -18266,24 +18464,26 @@ var _NUMERIC_COL_PATTERNS = [
   }
 
   function _brandMediaRenderTable(payload) {
-    var publishers = (payload && payload.publishers) || [];
+    var publishers = _brandMediaVisiblePublishers(payload);
     if (els.brandMediaTableCount) {
-      els.brandMediaTableCount.textContent = publishers.length
-        ? _brandMediaCount(publishers.length) + " " + t("brandMedia.lineCount", "media lines")
-        : "";
+      els.brandMediaTableCount.textContent = publishers.length ? _brandMediaLineCountText(publishers.length) : "";
     }
     if (!els.brandMediaTableRows) return;
     if (!publishers.length) {
-      els.brandMediaTableRows.innerHTML = '<tr><td colspan="6" class="brand-media-empty-cell">' +
-        escapeHtml(t("brandMedia.selectBrand", "Select a brand to load its daily media revenue.")) +
+      els.brandMediaTableRows.innerHTML = '<tr><td colspan="7" class="brand-media-empty-cell">' +
+        escapeHtml(_brandMediaLockedPublisherSet().size
+          ? t("brandMedia.noLockedData", "No locked media records in the selected range. Click a media in the right panel to unlock it.")
+          : t("brandMedia.selectBrand", "Select a brand to load its daily media revenue.")) +
         '</td></tr>';
       return;
     }
     els.brandMediaTableRows.innerHTML = publishers.map(function (publisher, index) {
+      var sourceIndex = _brandMediaSourceIndex(publisher, index);
       return '<tr><td><span class="brand-media-table-dot" style="--brand-media-line:' +
-        brandMediaColor(index) + '"></span><strong>' +
+        brandMediaColor(sourceIndex) + '"></span><strong>' +
         escapeHtml(String(publisher.userName || publisher.userId)) + '</strong><small>ID ' +
-        escapeHtml(String(publisher.userId)) + '</small></td><td class="brand-media-numeric">' +
+        escapeHtml(String(publisher.userId)) + '</small></td><td class="brand-media-manager-cell">' +
+        escapeHtml(_brandMediaPublisherManager(publisher)) + '</td><td class="brand-media-numeric">' +
         escapeHtml(_brandMediaMoney(publisher.totalRevenue)) + '</td><td class="brand-media-numeric">' +
         _brandMediaCount(publisher.totalOrders) + '</td><td class="brand-media-numeric">' +
         _brandMediaCount(publisher.activeDays) + '</td><td>' +
@@ -18321,6 +18521,7 @@ var _NUMERIC_COL_PATTERNS = [
       current.payload = null;
       current.error = "";
       current.loading = false;
+      _brandMediaRenderManagerFilter(null);
       _brandMediaRenderKpis(null);
       _brandMediaRenderTable(null);
       _brandMediaEmptyChart(t("brandMedia.selectBrand", "Select a brand to load its daily media revenue."));
@@ -18361,9 +18562,7 @@ var _NUMERIC_COL_PATTERNS = [
         current.error = "";
         current.merchantName = String((payload.merchant || {}).merchantName || current.merchantName || merchantId);
         _brandMediaSyncControls();
-        _brandMediaRenderKpis(payload);
-        _brandMediaRenderChart(payload);
-        _brandMediaRenderTable(payload);
+        _brandMediaRenderCurrentView();
         _brandMediaStatus("", "");
       })
       .catch(function (error) {
@@ -18371,6 +18570,7 @@ var _NUMERIC_COL_PATTERNS = [
         current.loading = false;
         current.payload = null;
         current.error = String(error && error.message || "load-error");
+        _brandMediaRenderManagerFilter(null);
         _brandMediaRenderKpis(null);
         _brandMediaRenderTable(null);
         _brandMediaEmptyChart(t("brandMedia.loadError", "Unable to load brand media trend. Adjust the date range and try again."));
@@ -18398,9 +18598,7 @@ var _NUMERIC_COL_PATTERNS = [
     _brandMediaSyncControls();
     _brandMediaLoadCatalog();
     if (state.brandMedia.payload) {
-      _brandMediaRenderKpis(state.brandMedia.payload);
-      _brandMediaRenderChart(state.brandMedia.payload);
-      _brandMediaRenderTable(state.brandMedia.payload);
+      _brandMediaRenderCurrentView();
       return;
     }
     if (!state.brandMedia.loading) _brandMediaLoadTrend();
@@ -18418,6 +18616,8 @@ var _NUMERIC_COL_PATTERNS = [
       if (value !== state.brandMedia.merchantName) {
         state.brandMedia.merchantId = "";
         state.brandMedia.merchantName = "";
+        state.brandMedia.managerFilter = "";
+        state.brandMedia.lockedPublisherKeys = [];
         state.brandMedia.payload = null;
       }
       _brandMediaShowMerchantDropdown();
@@ -18432,11 +18632,21 @@ var _NUMERIC_COL_PATTERNS = [
         state.brandMedia.merchantId = String(option.dataset.brandMediaMerchantId || "");
         state.brandMedia.merchantName = String(option.dataset.brandMediaMerchantName || "");
         state.brandMedia.merchantSearch = state.brandMedia.merchantName;
+        state.brandMedia.managerFilter = "";
+        state.brandMedia.lockedPublisherKeys = [];
         state.brandMedia.payload = null;
         state.brandMedia.requestKey = "";
         _brandMediaSyncControls();
         _brandMediaHideMerchantDropdown();
         _brandMediaLoadTrend();
+      });
+    }
+    if (els.brandMediaManagerFilter) {
+      els.brandMediaManagerFilter.addEventListener("change", function () {
+        state.brandMedia.managerFilter = String(els.brandMediaManagerFilter.value || "").trim();
+        state.brandMedia.lockedPublisherKeys = [];
+        _brandMediaClearChartHover(els.brandMediaChart);
+        _brandMediaRenderCurrentView();
       });
     }
     if (els.brandMediaRangeButtons) {
@@ -27968,6 +28178,11 @@ var _NUMERIC_COL_PATTERNS = [
       brandMediaDayOrdinal,
       brandMediaLineSegments,
       brandMediaColor,
+      brandMediaPublisherKey: _brandMediaPublisherKey,
+      brandMediaPublisherManager: _brandMediaPublisherManager,
+      brandMediaManagerOptions: _brandMediaManagerOptions,
+      brandMediaManagerFilteredPublishers: _brandMediaManagerFilteredPublishers,
+      brandMediaVisiblePublishers: _brandMediaVisiblePublishers,
       brandMediaCatalogOptions: _brandMediaCatalogOptions,
       brandMediaChartModel: _brandMediaBuildChartModel,
       brandMediaChartPayload: _brandMediaChartPayload,

@@ -113,6 +113,7 @@ const chartPayload = {
   publishers: [{
     userId: 9,
     userName: "Media Nine",
+    adminName: "timmy",
     totalRevenue: 41,
     points: [
       { date: "2026-05-01", revenue: 19 },
@@ -139,10 +140,54 @@ if (Math.round(chartModel.xFor("2026-05-01")) !== 82 ||
   throw new Error("series points should share the same date-to-x coordinate as the axis");
 }
 
+const lockPayload = {
+  dateRange: { startDate: "2026-05-01", endDate: "2026-05-05" },
+  publishers: [
+    chartPayload.publishers[0],
+    {
+      userId: 12,
+      userName: "Media Twelve",
+      adminName: "stella",
+      totalRevenue: 8,
+      totalOrders: 2,
+      points: [{ date: "2026-05-03", revenue: 8 }]
+    }
+  ]
+};
+const lockedKey = hooks.brandMediaPublisherKey(lockPayload.publishers[0], 0);
+const lockedPublishers = hooks.brandMediaVisiblePublishers(lockPayload, [lockedKey]);
+assertEqual(
+  lockedPublishers.map(function (publisher) { return publisher.userId; }),
+  [9],
+  "locking one media should hide other publishers from the chart view"
+);
+const lockedChart = hooks.brandMediaChartModel(lockPayload, lockedPublishers);
+if (!lockedChart || !lockedChart.publisherByIndex[0] || lockedChart.publisherByIndex[1]) {
+  throw new Error("locked chart model should keep the selected source index and exclude the other media");
+}
+if (!lockedChart.svg.includes('data-brand-media-publisher-index="0"') ||
+    lockedChart.svg.includes('data-brand-media-publisher-index="1"')) {
+  throw new Error("locked chart should render only the selected media line");
+}
+
+assertEqual(
+  hooks.brandMediaManagerOptions(lockPayload),
+  ["stella", "timmy"],
+  "manager options should be derived from brand media publishers"
+);
+assertEqual(
+  hooks.brandMediaManagerFilteredPublishers(lockPayload, "timmy").map(function (publisher) {
+    return publisher.userId;
+  }),
+  [9],
+  "manager filter should keep only publishers associated with the selected manager"
+);
+
 const indexHtml = fs.readFileSync("public/index.html", "utf8");
 [
   'id="brandMediaPage"',
   'id="brandMediaMerchantSearch"',
+  'id="brandMediaManagerFilter"',
   'id="brandMediaStartDate"',
   'id="brandMediaEndDate"',
   'id="brandMediaChart"',
@@ -150,5 +195,8 @@ const indexHtml = fs.readFileSync("public/index.html", "utf8");
 ].forEach(function (required) {
   if (!indexHtml.includes(required)) throw new Error("brand media page is missing " + required);
 });
+if (!indexHtml.includes('data-i18n="brandMedia.manager"')) {
+  throw new Error("media summary should expose the manager association");
+}
 
 console.log("Brand media trend frontend checks passed");

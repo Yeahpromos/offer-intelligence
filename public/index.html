@@ -974,6 +974,13 @@
                 </div>
               </label>
 
+              <label class="brand-media-field brand-media-manager-field">
+                <span data-i18n="brandMedia.manager">Media manager</span>
+                <select id="brandMediaManagerFilter" class="brand-media-select" aria-label="Filter by media manager">
+                  <option value="" data-i18n="brandMedia.allManagers">All managers</option>
+                </select>
+              </label>
+
               <div class="brand-media-field brand-media-range-field">
                 <span data-i18n="brandMedia.timeRange">Time range</span>
                 <div class="brand-media-range-buttons" id="brandMediaRangeButtons" aria-label="Quick date ranges">
@@ -1007,7 +1014,7 @@
               <div>
                 <span class="brand-media-section-index">01</span>
                 <h3 id="brandMediaChartTitle" data-i18n="brandMedia.chartTitle">Publisher revenue by day</h3>
-                <p id="brandMediaChartSubtitle" data-i18n="brandMedia.chartSubtitle">Every line is one media partner. Lines break when there is no daily source record.</p>
+                <p id="brandMediaChartSubtitle" data-i18n="brandMedia.chartSubtitle">Click a media partner on the right to lock it; select multiple partners, and click again to unlock. Lines break when there is no daily source record.</p>
               </div>
               <span class="brand-media-line-count" id="brandMediaLineCount" aria-live="polite"></span>
             </div>
@@ -1031,6 +1038,7 @@
                 <thead>
                   <tr>
                     <th data-i18n="brandMedia.media">Media</th>
+                    <th data-i18n="brandMedia.manager">Media manager</th>
                     <th class="brand-media-numeric" data-i18n="brandMedia.revenue">Revenue</th>
                     <th class="brand-media-numeric" data-i18n="brandMedia.orders">Orders</th>
                     <th class="brand-media-numeric" data-i18n="brandMedia.activeDays">Active days</th>

@@ -4176,6 +4176,7 @@ SELECT
     o.advert_id AS merchant_id,
     o.user_id,
     COALESCE(NULLIF(MAX(u.user_name), ''), CAST(o.user_id AS CHAR)) AS user_name,
+    COALESCE(NULLIF(MAX(u.admin_name), ''), 'Unknown') AS admin_name,
     COALESCE(NULLIF(MAX(a.advert_name), ''), CAST(o.advert_id AS CHAR)) AS merchant_name,
     o.order_time_day AS order_day,
     SUM(COALESCE(o.amount, 0)) AS revenue,
@@ -4184,9 +4185,15 @@ SELECT
     SUM(COALESCE(o.aff_payout, 0)) AS aff_commission
 FROM cnpscy_amazon_order o
 LEFT JOIN (
-    SELECT user_id, MAX(NULLIF(TRIM(user_name), '')) AS user_name
-    FROM v_maxai_cnpscy_user
-    GROUP BY user_id
+    SELECT
+        u.user_id,
+        MAX(NULLIF(TRIM(u.user_name), '')) AS user_name,
+        COALESCE(MAX(NULLIF(TRIM(ad.admin_name), '')), 'Unknown') AS admin_name
+    FROM v_maxai_cnpscy_user u
+    LEFT JOIN cnpscy_admins ad
+        ON CAST(u.admin_id_look AS CHAR) = CAST(ad.admin_code AS CHAR)
+        AND ad.is_delete = 0
+    GROUP BY u.user_id
 ) u ON o.user_id = u.user_id
 LEFT JOIN (
     SELECT advert_id, MAX(NULLIF(TRIM(advert_name), '')) AS advert_name
@@ -4247,6 +4254,7 @@ def brand_media_trend_from_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if row_merchant_name and not merchant_name:
             merchant_name = row_merchant_name
         user_name = str(row.get("user_name") or user_id).strip() or str(user_id)
+        admin_name = str(row.get("admin_name") or "Unknown").strip() or "Unknown"
         revenue = to_float(row.get("revenue"))
         orders = int(to_float(row.get("orders")))
         all_commission = to_float(row.get("all_commission"))
@@ -4257,6 +4265,7 @@ def brand_media_trend_from_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             {
                 "userId": user_id,
                 "userName": user_name,
+                "adminName": admin_name,
                 "_points": {},
                 "totalRevenue": 0.0,
                 "totalOrders": 0,
@@ -4266,6 +4275,8 @@ def brand_media_trend_from_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         )
         if publisher["userName"] == str(user_id) and user_name != str(user_id):
             publisher["userName"] = user_name
+        if publisher["adminName"] == "Unknown" and admin_name != "Unknown":
+            publisher["adminName"] = admin_name
 
         point = publisher["_points"].setdefault(
             day,
