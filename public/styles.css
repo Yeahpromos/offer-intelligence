@@ -346,6 +346,16 @@
   font-size: 11px;
 }
 
+.offer-tracker-date-status {
+  min-height: 12px;
+  color: #82939d;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: none;
+}
+
 .offer-tracker-filter-footer {
   display: flex;
   align-items: center;

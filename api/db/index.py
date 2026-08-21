@@ -215,7 +215,11 @@ def handle_ui_offers(target, query):
         send_json(
             target,
             200,
-            offers_payload(month=first_query_value(query, "month") or None),
+            offers_payload(
+                month=first_query_value(query, "month") or None,
+                start_date=first_query_value(query, "start_date") or None,
+                end_date=first_query_value(query, "end_date") or None,
+            ),
         )
     except ValueError as error:
         send_json(target, 400, {"ok": False, "error": str(error)})

@@ -1,5 +1,5 @@
 (function () {
-  const APP_SCRIPT = "./app.js?v=20260817-tier-merchant-list1";
+  const APP_SCRIPT = "./app.js?v=20260821-offer-tracker-range1";
   const AUTH_READY_CLASS = "auth-ready";
   const reduceMotionQuery = "(prefers-reduced-motion: reduce)";
 
@@ -204,7 +204,9 @@
         summary: offersResp.summary || {},
         offers: offersResp.offers || [],
         paymentRecords: offersResp.paymentRecords || [],
-        sources: { mode: "db", month: offersResp.month }
+        startDate: offersResp.startDate || "",
+        endDate: offersResp.endDate || "",
+        sources: { mode: "db", month: offersResp.month, startDate: offersResp.startDate || "", endDate: offersResp.endDate || "" }
       };
 
       window.SHEET_REPORT_DATA = {

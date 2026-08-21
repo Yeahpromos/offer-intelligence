@@ -2853,6 +2853,9 @@ _brand_media_trend_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _chatbot_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 # In-memory cache for offers payload (avoids 23MB disk read + json.loads per request)
 _offers_memory_cache: tuple[float, dict[str, Any]] | None = None
+# Explicit date-range offer payloads are kept separately so a one-off range
+# query never replaces the default month cache used by the rest of the app.
+_offers_range_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 # In-memory cache for publishers payload
 _publishers_memory_cache: tuple[float, dict[str, Any]] | None = None
 # ?? ThreadingHTTPServer ??????? offers ???? MySQL /tmp ??
@@ -2892,7 +2895,12 @@ def _save_cache(path: Path, payload: dict[str, Any]) -> None:
             pass
 
 
-def offers_payload(month: str | None = None, force_refresh: bool = False) -> dict[str, Any]:
+def offers_payload(
+    month: str | None = None,
+    force_refresh: bool = False,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
     """? cnpscy_oi_* ??/????? offer ?? + ???? + ?????
 
     ????? protected_data/db_offers_cache.json?TTL 6 ????
@@ -2902,6 +2910,30 @@ def offers_payload(month: str | None = None, force_refresh: bool = False) -> dic
     """
     global _offers_memory_cache
     now = time.time()
+
+    # Date-range requests are used by Offer List Tracker. They share the same
+    # heavy offer builder as the default payload, but stay out of the shared
+    # month cache because their metrics are intentionally scoped differently.
+    if start_date or end_date:
+        range_start, range_end = resolve_tier_report_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            month=month,
+        )
+        cache_key = f"{range_start.isoformat()}:{range_end.isoformat()}"
+        cached_range = _offers_range_cache.get(cache_key)
+        if not force_refresh and cached_range is not None:
+            ts, payload = cached_range
+            if now - ts < CACHE_TTL_SECONDS:
+                return payload
+        payload = _build_offers_payload(
+            month=range_end.strftime("%Y-%m"),
+            start_date=range_start.isoformat(),
+            end_date=range_end.isoformat(),
+            persist_cache=False,
+        )
+        _offers_range_cache[cache_key] = (time.time(), payload)
+        return payload
 
     # Memory cache ? avoid 23MB file read + json.loads on warm requests
     if not force_refresh and _offers_memory_cache is not None:
@@ -3069,13 +3101,24 @@ def offer_network_fallback_map(
     return network_map
 
 
-def _build_offers_payload(month: str | None = None) -> dict[str, Any]:
+def _build_offers_payload(
+    month: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    persist_cache: bool = True,
+) -> dict[str, Any]:
     """Internal: heavy DB query to build an offers payload from scratch."""
     with db_connection() as conn:
         if month is None:
             row = fetch_one(conn, "SELECT MAX(order_time_day) AS d FROM cnpscy_amazon_order")
             d = str(row["d"] or "").strip() if row else ""
             month = f"{d[:4]}-{d[4:6]}" if len(d) >= 6 else ""
+
+        range_start, range_end = resolve_tier_report_date_range(
+            start_date=start_date,
+            end_date=end_date,
+            month=month,
+        )
 
         # Derive two prior months for historical revenue columns
         prev_month1 = ""
@@ -3132,7 +3175,6 @@ def _build_offers_payload(month: str | None = None) -> dict[str, Any]:
         # Tier Sheet 口径的商家指标（明细表聚合），与 tier_sheet_payload 同口径
         metrics_map: dict[str, dict[str, Any]] = {}
         if month:
-            range_start, range_end = resolve_tier_report_date_range(month=month)
             start_day = int(range_start.strftime("%Y%m%d"))
             end_day = int(range_end.strftime("%Y%m%d"))
             metrics_map = tier_report_metrics_map(conn, start_day, end_day)
@@ -3606,12 +3648,15 @@ def _build_offers_payload(month: str | None = None) -> dict[str, Any]:
             "ok": True,
             "checkedAt": utc_now_iso(),
             "month": month,
+            "startDate": range_start.isoformat(),
+            "endDate": range_end.isoformat(),
             "offers": [compact_api_row(o) for o in offers],
             "paymentRecords": [compact_api_row(r) for r in payment_records],
             "sheets": sheets,
             "summary": summary,
         }
-        _save_cache(OFFERS_CACHE_FILE, result)
+        if persist_cache:
+            _save_cache(OFFERS_CACHE_FILE, result)
         return result
 
 

@@ -1331,6 +1331,15 @@
                   <div class="offer-tracker-network-menu hidden" id="offerTrackerCategoryMenu" role="group" aria-label="Categories"></div>
                 </div>
               </div>
+              <label class="offer-tracker-range-field offer-tracker-date-field">
+                <span data-i18n="offerTracker.timeRange">Time range</span>
+                <span class="offer-tracker-range-inputs">
+                  <input id="offerTrackerStartDate" type="date" aria-label="Offer tracker start date" />
+                  <i aria-hidden="true">–</i>
+                  <input id="offerTrackerEndDate" type="date" aria-label="Offer tracker end date" />
+                </span>
+                <small class="offer-tracker-date-status" id="offerTrackerDateStatus" role="status" aria-live="polite"></small>
+              </label>
               <label class="offer-tracker-range-field">
                 <span data-i18n="offerTracker.aovRange">AOV range</span>
                 <span class="offer-tracker-range-inputs">
@@ -1357,6 +1366,15 @@
                   <div class="offer-tracker-network-menu hidden" id="offerTrackerNetworkMenu" role="group" aria-label="Networks"></div>
                 </div>
               </div>
+              <label>
+                <span data-i18n="offerTracker.bbPreference">BB preference</span>
+                <select id="offerTrackerBbPolicy">
+                  <option value="all" data-i18n="offerTracker.bbAll">All BB preferences</option>
+                  <option value="mind" data-i18n="offerTracker.bbMind">Mind BB</option>
+                  <option value="open" data-i18n="offerTracker.bbOpen">Doesn't mind BB</option>
+                  <option value="unknown" data-i18n="offerTracker.bbUnknown">Unknown</option>
+                </select>
+              </label>
               <label>
                 <span data-i18n="offerTracker.revenueStatus">Revenue status</span>
                 <select id="offerTrackerRevenueStatus">
@@ -1842,7 +1860,7 @@
     <script src="./chatbot_welcome.js?v=20260813-chat-reminder-copy1"></script>
     <script src="./tier2_recommendation_rules.js?v=20260626-tier2pub1"></script>
     <script async src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-    <script src="./auth.js?v=20260817-tier-merchant-list1"></script>
+    <script src="./auth.js?v=20260821-offer-tracker-range1"></script>
     <script>
       // Dashboard 深浅主题切换：默认浅色；状态存 localStorage（键 oi-dash-theme），
       // "dark" = 深色，其他/无值 = 浅色（body 挂 data-dash-theme="light"，仅 dashboard 页生效）。

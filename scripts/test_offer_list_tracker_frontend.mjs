@@ -161,6 +161,19 @@ assertEqual(hooks.offerTrackerBbPolicyLabel(bbOpen, "en"), "Doesn't mind BB", "B
 assert(hooks.offerTrackerBbPolicyCellHtml(bbMind).includes("offer-tracker-bb-badge mind"), "BB-sensitive brands should render a red badge class");
 assert(hooks.offerTrackerBbPolicyCellHtml(bbOpen).includes("offer-tracker-bb-badge open"), "BB-open brands should render a green badge class");
 assert(hooks.offerTrackerBbPolicyCellHtml(bbUnknown).includes("offer-tracker-bb-badge unknown"), "unknown brands should render a gray badge class");
+assertEqual(hooks.offerTrackerDateRange("2026-08-01", "2026-08-31").ok, true, "valid tracker date ranges should be accepted");
+assertEqual(hooks.offerTrackerDateRange("2026-08-31", "2026-08-01").reason, "order", "reversed tracker date ranges should be rejected");
+assertEqual(hooks.offerTrackerDateRange("2025-01-01", "2026-08-01").reason, "length", "tracker date ranges should have a bounded length");
+assertEqual(
+  hooks.filterOfferTrackerRows([bbMind, bbOpen, bbUnknown], { bbPolicy: "mind" }).map((offer) => offer.merchantName),
+  ["Mammotion US"],
+  "BB-sensitive filter should keep only brands that mind BB"
+);
+assertEqual(
+  hooks.filterOfferTrackerRows([bbMind, bbOpen, bbUnknown], { bbPolicy: "open" }).map((offer) => offer.merchantName),
+  ["Ottocast"],
+  "BB-open filter should keep only brands that do not mind BB"
+);
 assertEqual(
   hooks.offerTrackerAsins(high),
   ["B012345678", "B087654321", "B011223344", "B055667788", "B099887766"],
@@ -384,6 +397,9 @@ assert(html.includes('id="offerTrackerExportSelected"'), "selected-row workbook 
 assert(html.includes('data-i18n="offerTracker.commissionRange">AFF Commission range</span>'), "commission filters should be labeled as AFF Commission");
 assert(html.includes('id="offerTrackerRevenueStatus"'), "revenue status filter should exist");
 assert(html.includes('id="offerTrackerRevenueSort"'), "revenue sort control should exist");
+assert(html.includes('id="offerTrackerStartDate"'), "tracker should provide a start date control");
+assert(html.includes('id="offerTrackerEndDate"'), "tracker should provide an end date control");
+assert(html.includes('id="offerTrackerBbPolicy"'), "tracker should provide a BB preference filter");
 assert(html.includes('id="offerTrackerTierMenu"'), "tier filter should provide a checkbox menu");
 assert(html.includes('aria-controls="offerTrackerTierMenu"'), "tier filter toggle should expose its menu to assistive technology");
 assert(html.includes('id="offerTrackerCategoryMenu"'), "category filter should provide a checkbox menu");
@@ -397,6 +413,7 @@ assert(appSource.includes('aria-label="Select current page"'), "the table header
 assert(appSource.includes('commission: "AFF Commission"'), "tracker table headers should identify AFF Commission");
 assert(appSource.includes('class="offer-tracker-aov-badge ${type}"'), "tracker AOV cells should render provenance badges");
 assert(appSource.includes('bbPolicy: "BB Preference"'), "tracker table headers should include the BB preference column");
+assert(appSource.includes('DB_OFFERS_UI_API'), "tracker should request the selected date range from the offers API");
 assert(appSource.includes('"Mammotion", "3W", "Gosovr"'), "tracker should preserve the confirmed prohibited-BB brand list");
 const selectionHandlerStart = appSource.indexOf("function handleOfferTrackerSelectionChange");
 const selectionHandlerEnd = appSource.indexOf("function toggleOfferTrackerFilteredSelection", selectionHandlerStart);

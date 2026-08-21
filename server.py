@@ -436,7 +436,12 @@ class Handler(BaseHTTPRequestHandler):
 
             if parsed.path == "/api/ui/db/offers":
                 force = first_query_value(query, "refresh") == "1"
-                self.send_json(200, offers_payload(month=first_query_value(query, "month") or None, force_refresh=force))
+                self.send_json(200, offers_payload(
+                    month=first_query_value(query, "month") or None,
+                    start_date=first_query_value(query, "start_date") or None,
+                    end_date=first_query_value(query, "end_date") or None,
+                    force_refresh=force,
+                ))
                 return
 
             if parsed.path == "/api/ui/db/chatbot-offers":

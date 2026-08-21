@@ -175,6 +175,7 @@
   const DB_TIER1_MERCHANTS_UI_API = "/api/ui/db/tier1-merchants";
   const DB_CHATBOT_OFFERS_UI_API = "/api/ui/db/chatbot-offers";
   const DB_MONTHLY_NEW_MERCHANTS_UI_API = "/api/ui/db/monthly-new-merchants";
+  const DB_OFFERS_UI_API = "/api/ui/db/offers";
   const DB_STATUS_AUTO_REFRESH_MS = 5 * 60 * 1000;
   const PAYMENT_TODAY = new Date(`${localDateKey(new Date())}T00:00:00`);
   const DEFAULT_TIER_REPORT_END_DATE = localDateKey(new Date());
@@ -223,6 +224,58 @@
     asins: true,
     recommendation: true
   });
+
+  function offerTrackerDateOrdinal(value) {
+    const text = String(value || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+    const [year, month, day] = text.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return Math.floor(date.getTime() / 86400000);
+  }
+
+  function offerTrackerDateRange(startDate = "", endDate = "") {
+    const start = String(startDate || "").trim();
+    const end = String(endDate || "").trim();
+    const startOrdinal = offerTrackerDateOrdinal(start);
+    const endOrdinal = offerTrackerDateOrdinal(end);
+    if (startOrdinal === null || endOrdinal === null) return { ok: false, reason: "invalid" };
+    if (startOrdinal > endOrdinal) return { ok: false, reason: "order" };
+    const dayCount = endOrdinal - startOrdinal + 1;
+    if (dayCount > 366) return { ok: false, reason: "length", dayCount };
+    return { ok: true, startDate: start, endDate: end, dayCount };
+  }
+
+  function offerTrackerDefaultDateRange(payload = data) {
+    const explicit = offerTrackerDateRange(payload.startDate, payload.endDate);
+    if (explicit.ok) return { startDate: explicit.startDate, endDate: explicit.endDate };
+    const sources = payload.sources || {};
+    const month = String(payload.month || sources.month || (payload.summary && payload.summary.month) || "").trim();
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      const [year, monthNumber] = month.split("-").map(Number);
+      const lastDay = new Date(Date.UTC(year, monthNumber, 0));
+      return {
+        startDate: `${month}-01`,
+        endDate: `${month}-${String(lastDay.getUTCDate()).padStart(2, "0")}`
+      };
+    }
+    const today = localDateKey(new Date()) || "1970-01-01";
+    return { startDate: `${today.slice(0, 7)}-01`, endDate: today };
+  }
+
+  function offerTrackerRangeKey(startDate, endDate) {
+    return `${String(startDate || "").trim()}|${String(endDate || "").trim()}`;
+  }
+
+  function offerTrackerRangeLabel(startDate, endDate) {
+    return `${startDate} ${offerTrackerText("–", "至")} ${endDate}`;
+  }
+
+  const OFFER_TRACKER_DEFAULT_DATE_RANGE = offerTrackerDefaultDateRange(data);
+  const OFFER_TRACKER_DEFAULT_RANGE_KEY = offerTrackerRangeKey(
+    OFFER_TRACKER_DEFAULT_DATE_RANGE.startDate,
+    OFFER_TRACKER_DEFAULT_DATE_RANGE.endDate
+  );
 
   const state = {
     page: "agent",
@@ -310,25 +363,37 @@
       draftFilters: {
         tiers: [],
         categories: [],
+        startDate: OFFER_TRACKER_DEFAULT_DATE_RANGE.startDate,
+        endDate: OFFER_TRACKER_DEFAULT_DATE_RANGE.endDate,
         minAov: "",
         maxAov: "",
         minCommission: "",
         maxCommission: "",
         networks: [],
+        bbPolicy: "all",
         revenueStatus: "all",
         revenueSort: "priority"
       },
       filters: {
         tiers: [],
         categories: [],
+        startDate: OFFER_TRACKER_DEFAULT_DATE_RANGE.startDate,
+        endDate: OFFER_TRACKER_DEFAULT_DATE_RANGE.endDate,
         minAov: "",
         maxAov: "",
         minCommission: "",
         maxCommission: "",
         networks: [],
+        bbPolicy: "all",
         revenueStatus: "all",
         revenueSort: "priority"
       },
+      defaultDateRange: { ...OFFER_TRACKER_DEFAULT_DATE_RANGE },
+      sourceRows: offers,
+      sourceRangeKey: OFFER_TRACKER_DEFAULT_RANGE_KEY,
+      sourceRowsByRange: new Map([[OFFER_TRACKER_DEFAULT_RANGE_KEY, offers]]),
+      loading: false,
+      requestSequence: 0,
       search: "",
       view: "offers",
       page: 1,
@@ -639,6 +704,9 @@
     offerTrackerCategoryToggle: document.getElementById("offerTrackerCategoryToggle"),
     offerTrackerCategorySummary: document.getElementById("offerTrackerCategorySummary"),
     offerTrackerCategoryMenu: document.getElementById("offerTrackerCategoryMenu"),
+    offerTrackerStartDate: document.getElementById("offerTrackerStartDate"),
+    offerTrackerEndDate: document.getElementById("offerTrackerEndDate"),
+    offerTrackerDateStatus: document.getElementById("offerTrackerDateStatus"),
     offerTrackerMinAov: document.getElementById("offerTrackerMinAov"),
     offerTrackerMaxAov: document.getElementById("offerTrackerMaxAov"),
     offerTrackerMinCommission: document.getElementById("offerTrackerMinCommission"),
@@ -647,6 +715,7 @@
     offerTrackerNetworkToggle: document.getElementById("offerTrackerNetworkToggle"),
     offerTrackerNetworkSummary: document.getElementById("offerTrackerNetworkSummary"),
     offerTrackerNetworkMenu: document.getElementById("offerTrackerNetworkMenu"),
+    offerTrackerBbPolicy: document.getElementById("offerTrackerBbPolicy"),
     offerTrackerRevenueStatus: document.getElementById("offerTrackerRevenueStatus"),
     offerTrackerRevenueSort: document.getElementById("offerTrackerRevenueSort"),
     offerTrackerFilterChips: document.getElementById("offerTrackerFilterChips"),
@@ -907,6 +976,15 @@
       "offerTracker.defineRange": "定义 Offer 范围",
       "offerTracker.defineRangeSubtitle": "先选择商业范围，再查看并导出对应的优先级清单。",
       "offerTracker.liveSource": "实时 Offer 缓存",
+      "offerTracker.timeRange": "时间范围",
+      "offerTracker.bbPreference": "是否介意 BB",
+      "offerTracker.bbAll": "全部 BB 偏好",
+      "offerTracker.bbMind": "介意 BB",
+      "offerTracker.bbOpen": "不介意 BB",
+      "offerTracker.bbUnknown": "未知",
+      "offerTracker.rangeLoading": "正在读取所选时间范围…",
+      "offerTracker.rangeLoaded": "数据范围：{range}",
+      "offerTracker.rangeError": "无法读取所选时间范围，请稍后重试。",
       "offerTracker.aovRange": "AOV 范围",
       "offerTracker.commissionRange": "AFF 佣金范围",
       "offerTracker.revenueStatus": "Revenue 状态",
@@ -25613,14 +25691,22 @@ var _NUMERIC_COL_PATTERNS = [
   }
 
   function normalizeOfferTrackerFilters(filters = {}) {
+    const defaultRange = state.offerListTracker && state.offerListTracker.defaultDateRange
+      ? state.offerListTracker.defaultDateRange
+      : OFFER_TRACKER_DEFAULT_DATE_RANGE;
+    const requestedRange = offerTrackerDateRange(filters.startDate, filters.endDate);
+    const bbPolicy = String(filters.bbPolicy || "all").trim().toLowerCase();
     return {
       tiers: offerTrackerSelectedTiers(filters),
       categories: offerTrackerSelectedCategories(filters),
+      startDate: requestedRange.ok ? requestedRange.startDate : defaultRange.startDate,
+      endDate: requestedRange.ok ? requestedRange.endDate : defaultRange.endDate,
       minAov: filters.minAov == null ? "" : String(filters.minAov),
       maxAov: filters.maxAov == null ? "" : String(filters.maxAov),
       minCommission: filters.minCommission == null ? "" : String(filters.minCommission),
       maxCommission: filters.maxCommission == null ? "" : String(filters.maxCommission),
       networks: offerTrackerSelectedNetworks(filters),
+      bbPolicy: ["mind", "open", "unknown"].includes(bbPolicy) ? bbPolicy : "all",
       revenueStatus: filters.revenueStatus || "all",
       revenueSort: filters.revenueSort || "priority"
     };
@@ -25754,6 +25840,8 @@ var _NUMERIC_COL_PATTERNS = [
     const selectedTiers = offerTrackerSelectedTiers(filters);
     const selectedCategories = offerTrackerSelectedCategories(filters);
     const selectedNetworks = offerTrackerSelectedNetworks(filters);
+    const requestedBbPolicy = String(filters.bbPolicy || "all").trim().toLowerCase();
+    const selectedBbPolicy = ["mind", "open", "unknown"].includes(requestedBbPolicy) ? requestedBbPolicy : "all";
     const query = String(search || "").trim().toLowerCase();
     return (sourceRows || []).filter((offer) => {
       const tier = canonicalTierName(offer.tier);
@@ -25764,6 +25852,7 @@ var _NUMERIC_COL_PATTERNS = [
       if (selectedTiers.length && !selectedTiers.includes(tier)) return false;
       if (selectedCategories.length && !selectedCategories.includes(category)) return false;
       if (selectedNetworks.length && !selectedNetworks.includes(String(offer.network || ""))) return false;
+      if (selectedBbPolicy !== "all" && offerTrackerBbPolicyKey(offer) !== selectedBbPolicy) return false;
       if (minAov !== null && aov < minAov) return false;
       if (maxAov !== null && aov > maxAov) return false;
       if (minCommission !== null && commission < minCommission) return false;
@@ -25794,7 +25883,7 @@ var _NUMERIC_COL_PATTERNS = [
 
   function offerTrackerFilteredRows() {
     return filterOfferTrackerRows(
-      offers,
+      state.offerListTracker.sourceRows || offers,
       state.offerListTracker.filters,
       state.offerListTracker.search,
       state.offerListTracker.rules
@@ -26190,6 +26279,71 @@ var _NUMERIC_COL_PATTERNS = [
     els.offerTrackerNotice.classList.toggle("hidden", !message);
   }
 
+  function normalizeOfferTrackerSourceRows(rows) {
+    const normalized = Array.isArray(rows) ? rows.map((offer) => ({ ...(offer || {}) })) : [];
+    const merged = mergeProductKeywordsIntoOffers(normalized, productKeywordData);
+    merged.forEach((offer) => {
+      offer.originalTier = offer.originalTier || offer.tier || "Unknown";
+      applyTierOverrideToOffer(offer);
+      if (offer.affCommission === undefined && offer.affiliatePayout !== undefined) {
+        offer.affCommission = offer.affiliatePayout;
+      }
+      offer.paymentCycle = resolveOfferPaymentCycle(offer);
+      offer.region = normalizeRegion(offer.region || offer.country || inferRegionFromText(offer.brand));
+    });
+    return merged;
+  }
+
+  async function loadOfferTrackerRange(range) {
+    const tracker = state.offerListTracker;
+    const normalizedRange = offerTrackerDateRange(range && range.startDate, range && range.endDate);
+    if (!normalizedRange.ok) return false;
+    const key = offerTrackerRangeKey(normalizedRange.startDate, normalizedRange.endDate);
+    if (tracker.sourceRowsByRange.has(key)) {
+      tracker.requestSequence += 1;
+      tracker.loading = false;
+      tracker.sourceRows = tracker.sourceRowsByRange.get(key) || [];
+      tracker.sourceRangeKey = key;
+      syncOfferTrackerControls();
+      return true;
+    }
+
+    const sequence = ++tracker.requestSequence;
+    tracker.loading = true;
+    setOfferTrackerNotice(offerTrackerText("Loading selected date range…", "正在读取所选时间范围…"));
+    syncOfferTrackerControls();
+    try {
+      const params = new URLSearchParams({
+        start_date: normalizedRange.startDate,
+        end_date: normalizedRange.endDate
+      });
+      const response = await fetch(`${DB_OFFERS_UI_API}?${params.toString()}`, {
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false || !Array.isArray(payload.offers)) {
+        throw new Error("offer range request failed");
+      }
+      if (sequence !== tracker.requestSequence) return false;
+      const rows = normalizeOfferTrackerSourceRows(payload.offers);
+      tracker.sourceRowsByRange.set(key, rows);
+      tracker.sourceRows = rows;
+      tracker.sourceRangeKey = key;
+      return true;
+    } catch (error) {
+      if (sequence === tracker.requestSequence) {
+        setOfferTrackerNotice(offerTrackerText("Could not load the selected date range. Try again later.", "无法读取所选时间范围，请稍后重试。"));
+      }
+      return false;
+    } finally {
+      if (sequence === tracker.requestSequence) {
+        tracker.loading = false;
+        syncOfferTrackerControls();
+      }
+    }
+  }
+
   function downloadOfferTrackerWorkbook(selectedOnly = false) {
     openOfferTrackerExportDialog(
       selectedOnly,
@@ -26312,14 +26466,30 @@ var _NUMERIC_COL_PATTERNS = [
   }
 
   function syncOfferTrackerControls() {
+    const tracker = state.offerListTracker;
     const draft = state.offerListTracker.draftFilters;
     offerTrackerMultiSelectConfigs().forEach(syncOfferTrackerMultiSelectControl);
+    if (els.offerTrackerStartDate) els.offerTrackerStartDate.value = draft.startDate || "";
+    if (els.offerTrackerEndDate) els.offerTrackerEndDate.value = draft.endDate || "";
+    if (els.offerTrackerBbPolicy) els.offerTrackerBbPolicy.value = draft.bbPolicy || "all";
     if (els.offerTrackerRevenueStatus) els.offerTrackerRevenueStatus.value = draft.revenueStatus || "all";
     if (els.offerTrackerRevenueSort) els.offerTrackerRevenueSort.value = draft.revenueSort || "priority";
     if (els.offerTrackerMinAov) els.offerTrackerMinAov.value = draft.minAov;
     if (els.offerTrackerMaxAov) els.offerTrackerMaxAov.value = draft.maxAov;
     if (els.offerTrackerMinCommission) els.offerTrackerMinCommission.value = draft.minCommission;
     if (els.offerTrackerMaxCommission) els.offerTrackerMaxCommission.value = draft.maxCommission;
+    if (els.offerTrackerDateStatus) {
+      const range = offerTrackerDateRange(draft.startDate, draft.endDate);
+      els.offerTrackerDateStatus.textContent = tracker.loading
+        ? offerTrackerText("Loading selected date range…", "正在读取所选时间范围…")
+        : range.ok
+          ? offerTrackerText(
+            `Data range: ${offerTrackerRangeLabel(range.startDate, range.endDate)}`,
+            `数据范围：${offerTrackerRangeLabel(range.startDate, range.endDate)}`
+          )
+          : offerTrackerText("Select a valid date range", "请选择有效的日期范围");
+    }
+    if (els.offerTrackerApplyFilters) els.offerTrackerApplyFilters.disabled = tracker.loading;
     if (els.offerTrackerSearch && els.offerTrackerSearch.value !== state.offerListTracker.search) {
       els.offerTrackerSearch.value = state.offerListTracker.search;
     }
@@ -26329,11 +26499,14 @@ var _NUMERIC_COL_PATTERNS = [
     return {
       tiers: offerTrackerMultiSelectSelectionFromControl(offerTrackerMultiSelectConfig("tiers")),
       categories: offerTrackerMultiSelectSelectionFromControl(offerTrackerMultiSelectConfig("categories")),
+      startDate: String((els.offerTrackerStartDate && els.offerTrackerStartDate.value) || "").trim(),
+      endDate: String((els.offerTrackerEndDate && els.offerTrackerEndDate.value) || "").trim(),
       minAov: els.offerTrackerMinAov.value.trim(),
       maxAov: els.offerTrackerMaxAov.value.trim(),
       minCommission: els.offerTrackerMinCommission.value.trim(),
       maxCommission: els.offerTrackerMaxCommission.value.trim(),
       networks: offerTrackerMultiSelectSelectionFromControl(offerTrackerMultiSelectConfig("networks")),
+      bbPolicy: (els.offerTrackerBbPolicy && els.offerTrackerBbPolicy.value) || "all",
       revenueStatus: els.offerTrackerRevenueStatus.value || "all",
       revenueSort: els.offerTrackerRevenueSort.value || "priority"
     };
@@ -26344,6 +26517,11 @@ var _NUMERIC_COL_PATTERNS = [
     offerTrackerSelectedTiers(filters).forEach((tier) => chips.push(tier));
     offerTrackerSelectedCategories(filters).forEach((category) => chips.push(category));
     offerTrackerSelectedNetworks(filters).forEach((network) => chips.push(network));
+    const dateRange = offerTrackerDateRange(filters.startDate, filters.endDate);
+    if (dateRange.ok) chips.push(`${offerTrackerText("Date", "日期")} ${offerTrackerRangeLabel(dateRange.startDate, dateRange.endDate)}`);
+    if (filters.bbPolicy === "mind") chips.push(offerTrackerText("Mind BB", "介意 BB"));
+    if (filters.bbPolicy === "open") chips.push(offerTrackerText("Doesn't mind BB", "不介意 BB"));
+    if (filters.bbPolicy === "unknown") chips.push(offerTrackerText("Unknown BB preference", "未知 BB 偏好"));
     if (filters.revenueStatus === "positive") chips.push(offerTrackerText("Revenue > $0", "已产生 Revenue"));
     if (filters.revenueStatus === "none") chips.push(offerTrackerText("Revenue = $0", "未产生 Revenue"));
     if (filters.revenueSort === "revenue-desc") chips.push(offerTrackerText("Revenue high to low", "Revenue 从高到低"));
@@ -26470,7 +26648,7 @@ var _NUMERIC_COL_PATTERNS = [
     }
   }
 
-  function applyOfferTrackerFilters() {
+  async function applyOfferTrackerFilters() {
     const filters = readOfferTrackerDraftFilters();
     const minAov = offerTrackerOptionalNumber(filters.minAov);
     const maxAov = offerTrackerOptionalNumber(filters.maxAov);
@@ -26480,17 +26658,46 @@ var _NUMERIC_COL_PATTERNS = [
       setOfferTrackerNotice(offerTrackerText("A minimum value cannot be greater than its maximum.", "最小值不能大于最大值。"));
       return;
     }
-    state.offerListTracker.draftFilters = { ...filters };
-    state.offerListTracker.filters = { ...filters };
+    const dateRange = offerTrackerDateRange(filters.startDate, filters.endDate);
+    if (!dateRange.ok) {
+      const message = dateRange.reason === "order"
+        ? offerTrackerText("The start date cannot be after the end date.", "开始日期不能晚于结束日期。")
+        : dateRange.reason === "length"
+          ? offerTrackerText("The date range cannot exceed 366 days.", "日期范围不能超过 366 天。")
+          : offerTrackerText("Select a valid date range.", "请选择有效的日期范围。" );
+      setOfferTrackerNotice(message);
+      return;
+    }
+    const normalizedFilters = normalizeOfferTrackerFilters(filters);
+    state.offerListTracker.draftFilters = { ...normalizedFilters };
+    if (!await loadOfferTrackerRange(dateRange)) return;
+    state.offerListTracker.filters = { ...normalizedFilters };
     state.offerListTracker.page = 1;
     closeOfferTrackerMultiSelectMenus();
     setOfferTrackerNotice("");
     renderOfferListTrackerPage();
   }
 
-  function resetOfferTrackerFilters() {
-    const filters = { tiers: [], categories: [], minAov: "", maxAov: "", minCommission: "", maxCommission: "", networks: [], revenueStatus: "all", revenueSort: "priority" };
+  async function resetOfferTrackerFilters() {
+    const tracker = state.offerListTracker;
+    tracker.requestSequence += 1;
+    tracker.loading = false;
+    const filters = {
+      tiers: [],
+      categories: [],
+      startDate: tracker.defaultDateRange.startDate,
+      endDate: tracker.defaultDateRange.endDate,
+      minAov: "",
+      maxAov: "",
+      minCommission: "",
+      maxCommission: "",
+      networks: [],
+      bbPolicy: "all",
+      revenueStatus: "all",
+      revenueSort: "priority"
+    };
     state.offerListTracker.draftFilters = { ...filters };
+    if (!await loadOfferTrackerRange(filters)) return;
     state.offerListTracker.filters = { ...filters };
     state.offerListTracker.search = "";
     state.offerListTracker.page = 1;
@@ -26554,14 +26761,16 @@ var _NUMERIC_COL_PATTERNS = [
     setOfferTrackerNotice(offerTrackerText(`Saved view “${name}”.`, `已保存视图“${name}”。`));
   }
 
-  function handleOfferTrackerSavedViewsClick(event) {
+  async function handleOfferTrackerSavedViewsClick(event) {
     const loadButton = event.target.closest("[data-offer-tracker-load-view]");
     const deleteButton = event.target.closest("[data-offer-tracker-delete-view]");
     if (loadButton) {
       const saved = state.offerListTracker.savedViews.find((view) => view.id === loadButton.dataset.offerTrackerLoadView);
       if (!saved) return;
-      state.offerListTracker.filters = normalizeOfferTrackerFilters(saved.filters || {});
-      state.offerListTracker.draftFilters = normalizeOfferTrackerFilters(state.offerListTracker.filters);
+      const filters = normalizeOfferTrackerFilters(saved.filters || {});
+      if (!await loadOfferTrackerRange(filters)) return;
+      state.offerListTracker.filters = filters;
+      state.offerListTracker.draftFilters = { ...filters };
       state.offerListTracker.search = saved.search || "";
       state.offerListTracker.view = saved.view === "products" ? "products" : "offers";
       state.offerListTracker.page = 1;
@@ -27027,6 +27236,7 @@ var _NUMERIC_COL_PATTERNS = [
     if (els.offerTrackerApplyFilters) els.offerTrackerApplyFilters.addEventListener("click", applyOfferTrackerFilters);
     if (els.offerTrackerResetFilters) els.offerTrackerResetFilters.addEventListener("click", resetOfferTrackerFilters);
     [
+      els.offerTrackerBbPolicy,
       els.offerTrackerRevenueStatus,
       els.offerTrackerRevenueSort
     ].filter(Boolean).forEach((select) => {
@@ -27060,12 +27270,17 @@ var _NUMERIC_COL_PATTERNS = [
         }
       });
     });
-    [els.offerTrackerMinAov, els.offerTrackerMaxAov, els.offerTrackerMinCommission, els.offerTrackerMaxCommission].filter(Boolean).forEach((input) => {
+    [els.offerTrackerStartDate, els.offerTrackerEndDate, els.offerTrackerMinAov, els.offerTrackerMaxAov, els.offerTrackerMinCommission, els.offerTrackerMaxCommission].filter(Boolean).forEach((input) => {
       input.addEventListener("input", () => {
         state.offerListTracker.draftFilters = readOfferTrackerDraftFilters();
       });
+      if (input.type === "date") {
+        input.addEventListener("change", () => {
+          state.offerListTracker.draftFilters = readOfferTrackerDraftFilters();
+        });
+      }
     });
-    [els.offerTrackerMinAov, els.offerTrackerMaxAov, els.offerTrackerMinCommission, els.offerTrackerMaxCommission].filter(Boolean).forEach((input) => {
+    [els.offerTrackerStartDate, els.offerTrackerEndDate, els.offerTrackerMinAov, els.offerTrackerMaxAov, els.offerTrackerMinCommission, els.offerTrackerMaxCommission].filter(Boolean).forEach((input) => {
       input.addEventListener("keydown", (event) => {
         if (event.key === "Enter") applyOfferTrackerFilters();
       });
@@ -28324,6 +28539,8 @@ var _NUMERIC_COL_PATTERNS = [
       offerTrackerAovType,
       offerTrackerAovTypeLabel,
       offerTrackerAovCellHtml,
+      offerTrackerDateRange,
+      offerTrackerRangeLabel,
       offerTrackerBbPolicyKey,
       offerTrackerBbPolicyLabel,
       offerTrackerBbPolicyCellHtml,

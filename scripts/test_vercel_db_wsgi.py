@@ -106,9 +106,11 @@ def main():
             "startDate": start_date,
             "endDate": end_date,
         }
-        module.offers_payload = lambda month=None: {
+        module.offers_payload = lambda month=None, start_date=None, end_date=None: {
             "route": "ui-offers",
             "month": month,
+            "startDate": start_date,
+            "endDate": end_date,
         }
         module.tier_sheet_payload = lambda tier, month=None, start_date=None, end_date=None, compact=False: {
             "route": "ui-tier-sheet",
@@ -214,6 +216,16 @@ def main():
         offers = request(module.app, "ui-offers", "month=2026-07", token="")
         assert_equal(offers["status"], 200, "UI offers response code")
         assert b'"month":"2026-07"' in offers["body"], offers["body"]
+
+        offers_range = request(
+            module.app,
+            "ui-offers",
+            "start_date=2026-07-01&end_date=2026-07-28",
+            token="",
+        )
+        assert_equal(offers_range["status"], 200, "UI offers date-range response code")
+        assert b'"startDate":"2026-07-01"' in offers_range["body"], offers_range["body"]
+        assert b'"endDate":"2026-07-28"' in offers_range["body"], offers_range["body"]
 
         publishers = request(module.app, "ui-publishers", "refresh=1", token="")
         assert_equal(publishers["status"], 200, "UI publishers response code")
