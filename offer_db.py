@@ -369,6 +369,13 @@ def qualified(alias: str, column: str) -> str:
     return f"{q(alias)}.{q(column)}"
 
 
+def _normalized_date_key_sql(alias: str, column: str) -> str:
+    """Normalize compact and ISO date values to YYYYMMDD for range filters."""
+    raw_value = f"LEFT(CAST({qualified(alias, column)} AS CHAR), 10)"
+    compact_value = f"REPLACE(REPLACE({raw_value}, '-', ''), '/', '')"
+    return f"CAST({compact_value} AS UNSIGNED)"
+
+
 def fetch_all(conn, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
     with conn.cursor() as cursor:
         cursor.execute(sql, params)
@@ -4840,6 +4847,7 @@ def brand_media_sankey_payload(
         else:
             revenue_expr = f"COALESCE({qualified('o', revenue_column)}, 0)"
             product_expr = f"CAST({qualified('o', product_column)} AS CHAR)"
+            date_key_expr = _normalized_date_key_sql("o", date_column)
             rows = fetch_all(
                 conn,
                 f"""
@@ -4873,7 +4881,7 @@ def brand_media_sankey_payload(
                   AND {qualified('o', user_column)} > 0
                   AND {qualified('o', product_column)} IS NOT NULL
                   AND TRIM(CAST({qualified('o', product_column)} AS CHAR)) != ''
-                  AND {qualified('o', date_column)} BETWEEN %s AND %s
+                  AND {date_key_expr} BETWEEN %s AND %s
                 GROUP BY
                     {qualified('o', merchant_column)},
                     {qualified('o', user_column)},
@@ -4887,7 +4895,11 @@ def brand_media_sankey_payload(
                     int(range_end.strftime("%Y%m%d")),
                 ),
             )
-            product_rows = merchant_products(conn, str(normalized_merchant_id), limit=5000)
+            try:
+                product_rows = merchant_products(conn, str(normalized_merchant_id), limit=5000)
+            except Exception:
+                # Product labels enrich the chart but must not make the Revenue flow fail.
+                product_rows = []
             merchant_name = str(
                 rows[0].get("merchant_name") if rows else normalized_merchant_id
             ).strip() or str(normalized_merchant_id)

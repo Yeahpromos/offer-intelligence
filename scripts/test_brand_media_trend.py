@@ -254,12 +254,18 @@ def main():
             return {"advert_id", "user_id", "order_time_day", "amount", "asin"}
         return set()
 
+    sankey_params = []
+
     def fake_sankey_fetch_all(_conn, sql, params=None):
-        assert_equal(params, (101, 20260701, 20260731), "Sankey SQL params")
+        sankey_params.append(params)
+        if params is None or params[0] != 101 or params[1] > params[2]:
+            raise AssertionError(f"invalid Sankey SQL params: {params!r}")
         if "product_key" not in sql or "GROUP BY" not in sql or "HAVING SUM" not in sql:
             raise AssertionError("Sankey query must aggregate by product and media")
         if "asin" not in sql:
             raise AssertionError("Sankey query must use the discovered product identifier")
+        if "CAST(REPLACE(REPLACE(LEFT(CAST(" not in sql or "AS UNSIGNED) BETWEEN %s AND %s" not in sql:
+            raise AssertionError("Sankey query must normalize DATE/DATETIME and YYYYMMDD date values")
         return SANKEY_ROWS
 
     with (
@@ -274,7 +280,18 @@ def main():
             start_date="2026-07-01",
             end_date="2026-07-31",
         )
+        single_day_sankey_payload = offer_db.brand_media_sankey_payload(
+            101,
+            start_date="2026-07-01",
+            end_date="2026-07-01",
+        )
 
+    assert_equal(
+        sankey_params,
+        [(101, 20260701, 20260731), (101, 20260701, 20260701)],
+        "Sankey inclusive SQL ranges",
+    )
+    assert_equal(single_day_sankey_payload["dateRange"]["dayCount"], 1, "single-day Sankey range")
     assert_equal(sankey_payload["source"], "cnpscy_amazon_order + cnpscy_amazon_product", "Sankey source")
     assert_equal(sankey_payload["grain"], "advert_id + product + user_id", "Sankey grain")
     assert_equal(sankey_payload["merchant"]["merchantName"], "Alpha", "Sankey payload merchant")
