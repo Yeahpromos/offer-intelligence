@@ -92,6 +92,17 @@ assertEqual(
   { merchantId: "362653", name: "Shokz Official", count: 3 },
   "brand selection should surface the exact merchant ID and associated media count"
 );
+assertEqual(
+  hooks.revenueFlowSelectedIds({
+    merchants: [
+      { merchantId: "101", name: "Alpha" },
+      { merchantId: 202, merchantName: "Beta" },
+      { merchantId: "101", name: "Duplicate Alpha" }
+    ]
+  }),
+  ["101", "202"],
+  "Revenue flow should preserve a deduplicated multi-brand selection"
+);
 
 if (hooks.brandMediaColor(0) === hooks.brandMediaColor(1)) {
   throw new Error("different media should receive different line colors");
@@ -272,6 +283,44 @@ if (!sankeyTileLayout || sankeyTileLayout.tileHeight !== 160 || sankeyTileLayout
   throw new Error("Sankey should split the full graph into independently drawable Canvas tiles");
 }
 
+const multiBrandSankeyPayload = {
+  merchants: [
+    { merchantId: 101, merchantName: "Alpha" },
+    { merchantId: 202, merchantName: "Beta" }
+  ],
+  sankey: {
+    available: true,
+    nodes: [
+      { id: "brand:101", type: "brand", label: "Alpha", merchantId: "101", value: 140 },
+      { id: "brand:202", type: "brand", label: "Beta", merchantId: "202", value: 60 },
+      { id: "product:101:ASIN-A", type: "product", label: "Alpha product", productKey: "ASIN-A", merchantId: "101", value: 140 },
+      { id: "product:202:ASIN-A", type: "product", label: "Beta product", productKey: "ASIN-A", merchantId: "202", value: 60 },
+      { id: "media:9", type: "media", label: "Media Nine", value: 200 }
+    ],
+    links: [
+      { source: "brand:101", target: "product:101:ASIN-A", value: 140 },
+      { source: "brand:202", target: "product:202:ASIN-A", value: 60 },
+      { source: "product:101:ASIN-A", target: "media:9", value: 140 },
+      { source: "product:202:ASIN-A", target: "media:9", value: 60 }
+    ],
+    summary: { brandCount: 2, productCount: 2, mediaCount: 1, totalRevenue: 200 }
+  }
+};
+const multiBrandModel = hooks.brandMediaSankeyModel(multiBrandSankeyPayload);
+if (!multiBrandModel || multiBrandModel.brandCount !== 2 || multiBrandModel.brands.length !== 2) {
+  throw new Error("Sankey model should preserve multiple selected brands");
+}
+assertEqual(
+  Array.from(hooks.brandMediaSankeyHoverState(multiBrandModel, "media:9").nodeIds).sort(),
+  ["brand:101", "brand:202", "media:9", "product:101:ASIN-A", "product:202:ASIN-A"].sort(),
+  "media hover should include products and brands from every selected merchant"
+);
+const responsiveLayout = hooks.brandMediaSankeyLayout(multiBrandModel, 1480);
+if (responsiveLayout.width !== 1480 || responsiveLayout.columnX.product <= 500 ||
+    responsiveLayout.columnX.media <= 1000 || responsiveLayout.surfaceWidth < 1480) {
+  throw new Error("Sankey columns should expand across a wide chart instead of staying pinned left");
+}
+
 
 const lockPayload = {
   dateRange: { startDate: "2026-05-01", endDate: "2026-05-05" },
@@ -336,8 +385,8 @@ assertEqual(
 
 const indexHtml = fs.readFileSync("public/index.html", "utf8");
 const authSource = fs.readFileSync("public/auth.js", "utf8");
-if (!indexHtml.includes("styles.css?v=20260825-revenue-flow-pan") ||
-    !authSource.includes("app.js?v=20260825-revenue-flow-pan")) {
+if (!indexHtml.includes("styles.css?v=20260825-revenue-flow-multibrand") ||
+    !authSource.includes("app.js?v=20260825-revenue-flow-multibrand")) {
   throw new Error("Revenue flow should invalidate the cached app and stylesheet assets");
 }
 [
@@ -360,6 +409,7 @@ if (!indexHtml.includes("styles.css?v=20260825-revenue-flow-pan") ||
   'id="revenueFlowPage"',
   'id="revenueFlowMerchantSearch"',
   'id="revenueFlowMerchantDropdown"',
+  'id="revenueFlowSelectedBrands"',
   'id="revenueFlowRangeButtons"',
   'id="revenueFlowStartDate"',
   'id="revenueFlowEndDate"',
@@ -381,9 +431,20 @@ const appSource = fs.readFileSync("public/app.js", "utf8");
 if (!appSource.includes("/api/ui/db/brand-media-sankey?") || !appSource.includes('switchPage("revenue-flow")')) {
   throw new Error("Revenue flow should use the selected brand/date endpoint from its standalone page");
 }
-if (!appSource.includes("var graphWidth = Number(width || 1160)") ||
-    !appSource.includes("var columnX = { brand: 36, product: 400, media: 820 }")) {
-  throw new Error("Revenue flow layout should preserve the three-column width and spacing");
+if (!appSource.includes("var graphWidth = Math.max(1160, Number(width || 0))") ||
+    !appSource.includes("responsiveExtra") ||
+    !appSource.includes("_brandMediaSankeyLayoutWidth(chart)")) {
+  throw new Error("Revenue flow layout should fill wide chart viewports responsively");
+}
+if (!appSource.includes("merchantIds: merchantIds.join(\",\")") ||
+    !appSource.includes("_revenueFlowPayloadCache") ||
+    !appSource.includes("_revenueFlowOfferCatalogOptions") ||
+    !appSource.includes("_publishersRequest")) {
+  throw new Error("Revenue flow should batch multi-brand requests and reuse catalog/payload requests");
+}
+if (!indexHtml.includes('aria-multiselectable="true"') ||
+    !appSource.includes("_revenueFlowToggleMerchant")) {
+  throw new Error("Revenue flow should expose checkbox-style multi-brand selection with removable chips");
 }
 if (!appSource.includes("_revenueFlowSetChartExpanded") ||
     !appSource.includes("revenue-flow-chart-expanded")) {
@@ -432,6 +493,10 @@ if (sankeyScrollSource.includes("_brandMediaSankeyScheduleFrame")) {
   throw new Error("Sankey scroll should move pre-rendered tiles without scheduling Canvas redraws");
 }
 const stylesSource = fs.readFileSync("public/styles.css", "utf8");
+if (!stylesSource.includes(".revenue-flow-brand-chip") ||
+    !stylesSource.includes(".revenue-flow-option-check")) {
+  throw new Error("Revenue flow should style selected brand chips and checkbox options");
+}
 if (!/\.brand-media-sankey-chart-wrap\s*\{[^}]*height:\s*clamp\(/s.test(stylesSource) ||
     !/\.brand-media-sankey-chart-wrap\s*\{[^}]*overflow:\s*hidden/s.test(stylesSource) ||
     !/\.brand-media-sankey-canvas-viewport\s*\{[^}]*overflow:\s*auto/s.test(stylesSource)) {

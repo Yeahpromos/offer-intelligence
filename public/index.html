@@ -7,7 +7,7 @@
     <link rel="icon" href="data:," />
     <link rel="preload" href="./fonts/plus-jakarta-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./fonts/plus-jakarta-sans-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
-      <link rel="stylesheet" href="./styles.css?v=20260825-revenue-flow-pan" />
+    <link rel="stylesheet" href="./styles.css?v=20260825-revenue-flow-multibrand" />
   </head>
   <body class="auth-pending app-loading">
     <section class="auth-shell" id="authShell" aria-labelledby="authTitle">
@@ -1087,7 +1087,7 @@
             <div>
               <span class="brand-media-eyebrow">REVENUE ATTRIBUTION</span>
               <h2 data-i18n="revenueFlow.title">Revenue flow</h2>
-              <p data-i18n="revenueFlow.subtitle">Trace a brand's revenue from products to the media that generated it.</p>
+              <p data-i18n="revenueFlow.subtitle">Trace one or more brands' revenue from products to the media that generated it.</p>
             </div>
             <div class="brand-media-header-note">
               <span aria-hidden="true">●</span>
@@ -1097,13 +1097,13 @@
 
           <section class="panel brand-media-controls revenue-flow-controls" aria-label="Revenue flow controls">
             <div class="brand-media-controls-grid">
-              <label class="brand-media-field brand-media-merchant-field">
-                <span data-i18n="revenueFlow.brand">Brand</span>
+              <div class="brand-media-field brand-media-merchant-field">
+                <span data-i18n="revenueFlow.brand">Brands (multi-select)</span>
                 <div class="brand-media-combobox">
                   <input
                     id="revenueFlowMerchantSearch"
                     type="text"
-                    placeholder="Search brand or Merchant ID"
+                    placeholder="Search and select brands or Merchant IDs"
                     data-i18n-placeholder="revenueFlow.brandPlaceholder"
                     autocomplete="off"
                     role="combobox"
@@ -1111,9 +1111,10 @@
                     aria-controls="revenueFlowMerchantDropdown"
                     aria-expanded="false"
                   />
-                  <div class="brand-media-combobox-dropdown" id="revenueFlowMerchantDropdown" role="listbox"></div>
+                  <div class="brand-media-combobox-dropdown" id="revenueFlowMerchantDropdown" role="listbox" aria-multiselectable="true"></div>
                 </div>
-              </label>
+                <div class="revenue-flow-selected-brands" id="revenueFlowSelectedBrands" aria-live="polite"></div>
+              </div>
 
               <div class="brand-media-field brand-media-range-field">
                 <span data-i18n="revenueFlow.timeRange">Time range</span>

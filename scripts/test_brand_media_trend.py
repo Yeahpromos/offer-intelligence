@@ -133,6 +133,18 @@ PRODUCT_ROWS = [
     {"asin": "ASIN-B", "productName": "Widget B"},
 ]
 
+MULTI_SANKEY_ROWS = SANKEY_ROWS + [
+    {
+        "merchant_id": 202,
+        "merchant_name": "Beta",
+        "user_id": 7,
+        "user_name": "Media Seven",
+        "admin_name": "timmy",
+        "product_key": "ASIN-A",
+        "revenue": 60,
+    }
+]
+
 
 def assert_equal(actual, expected, label):
     if actual != expected:
@@ -181,6 +193,21 @@ def main():
         if str(link["source"]).startswith("product:")
     )
     assert_close(product_media_revenue, 155, "Sankey product-media reconciliation")
+
+    multi_sankey = offer_db.brand_media_sankey_from_rows(
+        MULTI_SANKEY_ROWS,
+        product_rows=PRODUCT_ROWS,
+        merchant_ids=[101, 202],
+        merchant_names={"101": "Alpha", "202": "Beta"},
+    )
+    assert_equal(multi_sankey["summary"]["brandCount"], 2, "multi-brand Sankey brand count")
+    assert_equal(multi_sankey["summary"]["productCount"], 3, "multi-brand products stay merchant-scoped")
+    assert_close(multi_sankey["summary"]["totalRevenue"], 215, "multi-brand total revenue")
+    assert_equal(
+        {node["id"] for node in multi_sankey["nodes"] if node["type"] == "product"},
+        {"product:101:ASIN-A", "product:101:ASIN-B", "product:202:ASIN-A"},
+        "duplicate ASINs should remain separate across brands",
+    )
 
     media_seven = normalized["publishers"][0]
     media_eight = normalized["publishers"][1]
@@ -258,7 +285,7 @@ def main():
 
     def fake_sankey_fetch_all(_conn, sql, params=None):
         sankey_params.append(params)
-        if params is None or params[0] != 101 or params[1] > params[2]:
+        if params is None or params[0] != 101 or params[-2] > params[-1]:
             raise AssertionError(f"invalid Sankey SQL params: {params!r}")
         if "product_key" not in sql or "GROUP BY" not in sql or "HAVING SUM" not in sql:
             raise AssertionError("Sankey query must aggregate by product and media")
@@ -266,7 +293,7 @@ def main():
             raise AssertionError("Sankey query must use the discovered product identifier")
         if "CAST(REPLACE(REPLACE(LEFT(CAST(" not in sql or "AS UNSIGNED) BETWEEN %s AND %s" not in sql:
             raise AssertionError("Sankey query must normalize DATE/DATETIME and YYYYMMDD date values")
-        return SANKEY_ROWS
+        return MULTI_SANKEY_ROWS if len(params) == 4 else SANKEY_ROWS
 
     with (
         patch.object(offer_db, "db_connection", fake_connection),
@@ -285,10 +312,15 @@ def main():
             start_date="2026-07-01",
             end_date="2026-07-01",
         )
+        multi_sankey_payload = offer_db.brand_media_sankey_payload(
+            "101,202",
+            start_date="2026-07-01",
+            end_date="2026-07-31",
+        )
 
     assert_equal(
         sankey_params,
-        [(101, 20260701, 20260731), (101, 20260701, 20260701)],
+        [(101, 20260701, 20260731), (101, 20260701, 20260701), (101, 202, 20260701, 20260731)],
         "Sankey inclusive SQL ranges",
     )
     assert_equal(single_day_sankey_payload["dateRange"]["dayCount"], 1, "single-day Sankey range")
@@ -297,6 +329,8 @@ def main():
     assert_equal(sankey_payload["merchant"]["merchantName"], "Alpha", "Sankey payload merchant")
     assert_equal(sankey_payload["dateRange"]["dayCount"], 31, "Sankey inclusive date range")
     assert_equal(sankey_payload["sankey"]["summary"]["productCount"], 2, "Sankey payload products")
+    assert_equal(multi_sankey_payload["merchant"]["merchantIds"], [101, 202], "multi-brand payload merchant IDs")
+    assert_equal(multi_sankey_payload["sankey"]["summary"]["brandCount"], 2, "multi-brand payload brands")
 
     assert_equal(payload["source"], "cnpscy_amazon_order + cnpscy_amazon_click", "trend source")
     assert_equal(payload["grain"], "advert_id + user_id + day + metric", "trend grain")

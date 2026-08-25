@@ -102,7 +102,8 @@ def main():
         }
         module.brand_media_sankey_payload = lambda merchant_id, start_date=None, end_date=None: {
             "route": "ui-brand-media-sankey",
-            "merchantId": int(merchant_id),
+            "merchantId": int(str(merchant_id).split(",")[0]),
+            "merchantIds": [int(value) for value in str(merchant_id).split(",")],
             "startDate": start_date,
             "endDate": end_date,
         }
@@ -258,6 +259,15 @@ def main():
         assert b'"route":"ui-brand-media-sankey"' in brand_media_sankey["body"], brand_media_sankey["body"]
         assert b'"merchantId":42' in brand_media_sankey["body"], brand_media_sankey["body"]
         assert b'"endDate":"2026-07-28"' in brand_media_sankey["body"], brand_media_sankey["body"]
+
+        multi_brand_media_sankey = request(
+            module.app,
+            "ui-brand-media-sankey",
+            "merchantIds=42%2C99&startDate=2026-07-01&endDate=2026-07-28",
+            token="",
+        )
+        assert_equal(multi_brand_media_sankey["status"], 200, "multi-brand Sankey response code")
+        assert b'"merchantIds":[42,99]' in multi_brand_media_sankey["body"], multi_brand_media_sankey["body"]
 
         missing_brand_media_sankey_merchant = request(module.app, "ui-brand-media-sankey", token="")
         assert_equal(missing_brand_media_sankey_merchant["status"], 400, "missing brand media Sankey merchant response code")

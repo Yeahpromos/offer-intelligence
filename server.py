@@ -510,12 +510,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if parsed.path == "/api/ui/db/brand-media-sankey":
-                merchant_id = first_query_value(query, "merchantId")
-                if not merchant_id:
-                    self.send_json(400, {"ok": False, "error": "merchantId is required"})
+                merchant_ids = first_query_value(query, "merchantIds") or first_query_value(query, "merchantId")
+                if not merchant_ids:
+                    self.send_json(400, {"ok": False, "error": "merchantIds is required"})
                     return
                 self.send_json(200, brand_media_sankey_payload(
-                    merchant_id,
+                    merchant_ids,
                     start_date=first_query_value(query, "startDate") or None,
                     end_date=first_query_value(query, "endDate") or None,
                 ))

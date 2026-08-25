@@ -1550,6 +1550,56 @@ def merchant_products(conn, merchant_id: str, limit: int = 50) -> list[dict[str,
     return [compact_api_row(row) for row in rows]
 
 
+def merchant_products_for_ids(
+    conn,
+    merchant_ids: list[int],
+    limit_per_merchant: int = 5000,
+) -> list[dict[str, Any]]:
+    """Read product labels for several merchants in one query."""
+    normalized_ids = list(dict.fromkeys(int(value) for value in merchant_ids if int(value) > 0))
+    if not normalized_ids:
+        return []
+    product_cols = table_columns(conn, "cnpscy_amazon_product")
+    id_column = pick_column(product_cols, ["advert_id", "merchant_id"])
+    if not id_column:
+        return []
+    extra_cols = table_columns(conn, "cnpscy_amazon_product_extra")
+    sources = [("p", product_cols)]
+    joins = []
+    extra_id = pick_column(extra_cols, ["advert_id", "merchant_id"])
+    product_asin = pick_column(product_cols, ["asin", "product_asin"])
+    extra_asin = pick_column(extra_cols, ["asin", "product_asin"])
+    if extra_id:
+        conditions = [f"e.{q(extra_id)} = p.{q(id_column)}"]
+        if product_asin and extra_asin:
+            conditions.append(f"e.{q(extra_asin)} = p.{q(product_asin)}")
+        joins.append(f"LEFT JOIN {q('cnpscy_amazon_product_extra')} e ON {' AND '.join(conditions)}")
+        sources.append(("e", extra_cols))
+
+    selects = [
+        f"p.{q(id_column)} AS {q('merchantId')}",
+        first_expr(sources, ["asin", "product_asin"], "asin"),
+        first_expr(sources, ["product_name", "title", "name"], "productName"),
+    ]
+    order_column = pick_column(product_cols, ["updated_at", "update_time", "created_at"])
+    order_sql = f"ORDER BY p.{q(order_column)} DESC" if order_column else ""
+    placeholders = ", ".join(["%s"] * len(normalized_ids))
+    total_limit = min(50000, max(1, int(limit_per_merchant)) * len(normalized_ids))
+    rows = fetch_all(
+        conn,
+        f"""
+        SELECT {", ".join(selects)}
+        FROM {q("cnpscy_amazon_product")} p
+        {" ".join(joins)}
+        WHERE p.{q(id_column)} IN ({placeholders})
+        {order_sql}
+        LIMIT {total_limit}
+        """,
+        tuple(normalized_ids),
+    )
+    return [compact_api_row(row) for row in rows]
+
+
 def merchant_amazon_metrics(conn, merchant_id: str, months: int = 12) -> list[dict[str, Any]]:
     order_cols = table_columns(conn, "cnpscy_amazon_order")
     id_column = pick_column(order_cols, ["advert_id", "merchant_id"])
@@ -2850,6 +2900,7 @@ TIER_REPORT_CACHE_TTL = int(os.environ.get("OFFER_DB_TIER_REPORT_CACHE_TTL", "30
 PUBLISHERS_CACHE_TTL = int(os.environ.get("OFFER_DB_PUBLISHERS_CACHE_TTL", "3600"))  # 1 hour
 BRAND_MEDIA_TREND_CACHE_TTL = int(os.environ.get("OFFER_DB_BRAND_MEDIA_TREND_CACHE_TTL", "300"))
 BRAND_MEDIA_SANKEY_CACHE_TTL = int(os.environ.get("OFFER_DB_BRAND_MEDIA_SANKEY_CACHE_TTL", "300"))
+MAX_BRAND_MEDIA_SANKEY_MERCHANTS = int(os.environ.get("OFFER_DB_BRAND_MEDIA_SANKEY_MAX_MERCHANTS", "12"))
 CHATBOT_CACHE_TTL = int(os.environ.get("OFFER_DB_CHATBOT_CACHE_TTL", "300"))  # 5 minutes
 _bg_refresh_running: dict[str, bool] = {}
 _merchant_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -4598,14 +4649,63 @@ def brand_media_trend_payload(
 
 
 
+def _brand_media_sankey_merchant_ids(
+    merchant_id: int | str | list[int | str] | tuple[int | str, ...],
+) -> list[int]:
+    raw_values: list[Any]
+    if isinstance(merchant_id, (list, tuple, set)):
+        raw_values = list(merchant_id)
+    else:
+        raw_values = str(merchant_id or "").split(",")
+    normalized: list[int] = []
+    for raw_value in raw_values:
+        try:
+            value = int(str(raw_value).strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("merchantIds must contain positive integers") from exc
+        if value <= 0:
+            raise ValueError("merchantIds must contain positive integers")
+        if value not in normalized:
+            normalized.append(value)
+    if not normalized:
+        raise ValueError("merchantIds must contain at least one merchant")
+    if len(normalized) > MAX_BRAND_MEDIA_SANKEY_MERCHANTS:
+        raise ValueError(
+            f"merchantIds cannot contain more than {MAX_BRAND_MEDIA_SANKEY_MERCHANTS} merchants"
+        )
+    return normalized
+
+
 def brand_media_sankey_from_rows(
     rows: list[dict[str, Any]],
     product_rows: list[dict[str, Any]] | None = None,
     merchant_id: int | str | None = None,
     merchant_name: str | None = None,
+    merchant_ids: list[int | str] | None = None,
+    merchant_names: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Aggregate positive Revenue from one brand into product and media flows."""
-    product_labels: dict[str, str] = {}
+    """Aggregate positive Revenue from one or more brands into product and media flows."""
+    selected_ids = [str(value).strip() for value in (merchant_ids or []) if str(value).strip()]
+    fallback_merchant_id = str(merchant_id or "").strip()
+    if fallback_merchant_id and fallback_merchant_id not in selected_ids:
+        selected_ids.append(fallback_merchant_id)
+    if not selected_ids:
+        selected_ids = list(dict.fromkeys(
+            str(row.get("merchant_id") or row.get("merchantId") or "").strip()
+            for row in rows
+            if str(row.get("merchant_id") or row.get("merchantId") or "").strip()
+        )) or ["selected"]
+    selected_ids = list(dict.fromkeys(selected_ids))
+    multi_brand = len(selected_ids) > 1
+    names = {
+        str(key): str(value).strip()
+        for key, value in (merchant_names or {}).items()
+        if str(key).strip() and str(value).strip()
+    }
+    if merchant_name and len(selected_ids) == 1:
+        names.setdefault(selected_ids[0], str(merchant_name).strip())
+
+    product_labels: dict[tuple[str, str], str] = {}
     for row in product_rows or []:
         product_key = str(
             row.get("asin")
@@ -4619,15 +4719,18 @@ def brand_media_sankey_from_rows(
             or row.get("title")
             or ""
         ).strip()
+        product_merchant_id = str(
+            row.get("merchantId")
+            or row.get("merchant_id")
+            or (selected_ids[0] if len(selected_ids) == 1 else "")
+        ).strip()
         if product_key and product_name:
-            product_labels.setdefault(product_key, product_name)
+            product_labels.setdefault((product_merchant_id, product_key), product_name)
 
-    merchant_key = str(merchant_id or "").strip() or "selected"
-    brand_key = f"brand:{merchant_key}"
-    brand_label = str(merchant_name or "").strip() or merchant_key
+    brand_totals: dict[str, float] = {}
     product_totals: dict[str, float] = {}
     media_totals: dict[str, float] = {}
-    brand_product_totals: dict[str, float] = {}
+    brand_product_totals: dict[tuple[str, str], float] = {}
     product_media_totals: dict[tuple[str, str], float] = {}
     product_meta: dict[str, dict[str, Any]] = {}
     media_meta: dict[str, dict[str, Any]] = {}
@@ -4635,6 +4738,13 @@ def brand_media_sankey_from_rows(
     for row in rows:
         revenue = to_float(row.get("revenue"))
         if revenue <= 0:
+            continue
+        row_merchant_id = str(
+            row.get("merchant_id")
+            or row.get("merchantId")
+            or selected_ids[0]
+        ).strip()
+        if not row_merchant_id or (selected_ids and row_merchant_id not in selected_ids):
             continue
         user_id = str(
             row.get("user_id")
@@ -4651,12 +4761,21 @@ def brand_media_sankey_from_rows(
         if not user_id or not product_key:
             continue
 
-        product_id = f"product:{product_key}"
+        brand_id = f"brand:{row_merchant_id}"
+        product_id = (
+            f"product:{row_merchant_id}:{product_key}"
+            if multi_brand
+            else f"product:{product_key}"
+        )
         media_id = f"media:{user_id}"
+        row_brand_name = str(row.get("merchant_name") or "").strip()
+        if row_brand_name:
+            names.setdefault(row_merchant_id, row_brand_name)
         product_name = str(
             row.get("product_name")
             or row.get("productName")
-            or product_labels.get(product_key)
+            or product_labels.get((row_merchant_id, product_key))
+            or product_labels.get(("", product_key))
             or product_key
         ).strip() or product_key
         media_name = str(
@@ -4667,16 +4786,19 @@ def brand_media_sankey_from_rows(
         ).strip() or user_id
         manager_name = str(row.get("admin_name") or "").strip()
 
+        brand_totals[brand_id] = brand_totals.get(brand_id, 0.0) + revenue
         product_totals[product_id] = product_totals.get(product_id, 0.0) + revenue
         media_totals[media_id] = media_totals.get(media_id, 0.0) + revenue
-        brand_product_totals[product_id] = brand_product_totals.get(product_id, 0.0) + revenue
-        pair = (product_id, media_id)
-        product_media_totals[pair] = product_media_totals.get(pair, 0.0) + revenue
+        brand_pair = (brand_id, product_id)
+        brand_product_totals[brand_pair] = brand_product_totals.get(brand_pair, 0.0) + revenue
+        media_pair = (product_id, media_id)
+        product_media_totals[media_pair] = product_media_totals.get(media_pair, 0.0) + revenue
         product_meta.setdefault(
             product_id,
             {
                 "productKey": product_key,
                 "label": product_name,
+                "merchantId": row_merchant_id,
             },
         )
         media_meta.setdefault(
@@ -4689,18 +4811,24 @@ def brand_media_sankey_from_rows(
         )
         if manager_name and not media_meta[media_id].get("manager"):
             media_meta[media_id]["manager"] = manager_name
-        if brand_label == merchant_key:
-            row_brand = str(row.get("merchant_name") or "").strip()
-            if row_brand:
-                brand_label = row_brand
 
-    total_revenue = sum(product_totals.values())
+    brand_nodes = [
+        {
+            "id": brand_id,
+            "type": "brand",
+            "label": names.get(brand_id.split(":", 1)[1]) or brand_id.split(":", 1)[1],
+            "merchantId": brand_id.split(":", 1)[1],
+            "value": round(value, 2),
+        }
+        for brand_id, value in brand_totals.items()
+    ]
     product_nodes = [
         {
             "id": product_id,
             "type": "product",
             "label": product_meta[product_id]["label"],
             "productKey": product_meta[product_id]["productKey"],
+            "merchantId": product_meta[product_id]["merchantId"],
             "value": round(value, 2),
         }
         for product_id, value in product_totals.items()
@@ -4716,27 +4844,19 @@ def brand_media_sankey_from_rows(
         }
         for media_id, value in media_totals.items()
     ]
+    brand_nodes.sort(key=lambda node: (-float(node["value"]), str(node["label"]).casefold()))
     product_nodes.sort(key=lambda node: (-float(node["value"]), str(node["label"]).casefold()))
     media_nodes.sort(key=lambda node: (-float(node["value"]), str(node["label"]).casefold()))
-    nodes = [
-        {
-            "id": brand_key,
-            "type": "brand",
-            "label": brand_label,
-            "value": round(total_revenue, 2),
-        },
-        *product_nodes,
-        *media_nodes,
-    ]
+    nodes = [*brand_nodes, *product_nodes, *media_nodes]
     links = [
         {
-            "source": brand_key,
+            "source": brand_id,
             "target": product_id,
             "value": round(value, 2),
         }
-        for product_id, value in sorted(
+        for (brand_id, product_id), value in sorted(
             brand_product_totals.items(),
-            key=lambda item: (-float(item[1]), str(item[0])),
+            key=lambda item: (-float(item[1]), str(item[0][0]), str(item[0][1])),
         )
     ]
     links.extend(
@@ -4750,16 +4870,15 @@ def brand_media_sankey_from_rows(
             key=lambda item: (-float(item[1]), str(item[0][0]), str(item[0][1])),
         )
     )
+    total_revenue = sum(brand_totals.values())
     return {
         "available": True,
-        "brand": {
-            "id": brand_key,
-            "label": brand_label,
-            "value": round(total_revenue, 2),
-        },
+        "brand": brand_nodes[0] if brand_nodes else None,
+        "brands": brand_nodes,
         "nodes": nodes,
         "links": links,
         "summary": {
+            "brandCount": len(brand_nodes),
             "productCount": len(product_nodes),
             "mediaCount": len(media_nodes),
             "linkCount": len(links),
@@ -4769,17 +4888,12 @@ def brand_media_sankey_from_rows(
 
 
 def brand_media_sankey_payload(
-    merchant_id: int,
+    merchant_id: int | str | list[int | str] | tuple[int | str, ...],
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict[str, Any]:
-    """Return product-to-media Revenue attribution for one brand and date range."""
-    try:
-        normalized_merchant_id = int(merchant_id)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("merchantId must be a positive integer") from exc
-    if normalized_merchant_id <= 0:
-        raise ValueError("merchantId must be a positive integer")
+    """Return product-to-media Revenue attribution for one or more brands."""
+    normalized_merchant_ids = _brand_media_sankey_merchant_ids(merchant_id)
 
     raw_start = str(start_date or "").strip()
     raw_end = str(end_date or "").strip()
@@ -4804,14 +4918,14 @@ def brand_media_sankey_payload(
 
     cache_key = "|".join(
         [
-            str(normalized_merchant_id),
+            ",".join(str(value) for value in sorted(normalized_merchant_ids)),
             range_start.isoformat(),
             range_end.isoformat(),
         ]
     )
     now = time.time()
     cached = _brand_media_sankey_cache.get(cache_key)
-    if cached is not None and now - cached[0] < BRAND_MEDIA_TREND_CACHE_TTL:
+    if cached is not None and now - cached[0] < BRAND_MEDIA_SANKEY_CACHE_TTL:
         return cached[1]
 
     with db_connection() as conn:
@@ -4835,8 +4949,7 @@ def brand_media_sankey_payload(
         if not merchant_column or not user_column or not date_column or not revenue_column or not product_column:
             normalized = brand_media_sankey_from_rows(
                 [],
-                merchant_id=normalized_merchant_id,
-                merchant_name=str(normalized_merchant_id),
+                merchant_ids=normalized_merchant_ids,
             )
             normalized.update(
                 {
@@ -4848,6 +4961,7 @@ def brand_media_sankey_payload(
             revenue_expr = f"COALESCE({qualified('o', revenue_column)}, 0)"
             product_expr = f"CAST({qualified('o', product_column)} AS CHAR)"
             date_key_expr = _normalized_date_key_sql("o", date_column)
+            merchant_placeholders = ", ".join(["%s"] * len(normalized_merchant_ids))
             rows = fetch_all(
                 conn,
                 f"""
@@ -4876,7 +4990,7 @@ def brand_media_sankey_payload(
                     FROM cnpscy_advert
                     GROUP BY advert_id
                 ) a ON {qualified('o', merchant_column)} = a.advert_id
-                WHERE {qualified('o', merchant_column)} = %s
+                WHERE {qualified('o', merchant_column)} IN ({merchant_placeholders})
                   AND {qualified('o', user_column)} IS NOT NULL
                   AND {qualified('o', user_column)} > 0
                   AND {qualified('o', product_column)} IS NOT NULL
@@ -4890,25 +5004,47 @@ def brand_media_sankey_payload(
                 ORDER BY revenue DESC, product_key ASC, user_id ASC
                 """,
                 (
-                    normalized_merchant_id,
+                    *normalized_merchant_ids,
                     int(range_start.strftime("%Y%m%d")),
                     int(range_end.strftime("%Y%m%d")),
                 ),
             )
             try:
-                product_rows = merchant_products(conn, str(normalized_merchant_id), limit=5000)
+                product_rows = (
+                    merchant_products(conn, str(normalized_merchant_ids[0]), limit=5000)
+                    if len(normalized_merchant_ids) == 1
+                    else merchant_products_for_ids(conn, normalized_merchant_ids, limit_per_merchant=5000)
+                )
             except Exception:
                 # Product labels enrich the chart but must not make the Revenue flow fail.
                 product_rows = []
-            merchant_name = str(
-                rows[0].get("merchant_name") if rows else normalized_merchant_id
-            ).strip() or str(normalized_merchant_id)
+            merchant_names = {
+                str(row.get("merchant_id")): str(row.get("merchant_name") or "").strip()
+                for row in rows
+                if row.get("merchant_id") is not None and str(row.get("merchant_name") or "").strip()
+            }
             normalized = brand_media_sankey_from_rows(
                 rows,
                 product_rows=product_rows,
-                merchant_id=normalized_merchant_id,
-                merchant_name=merchant_name,
+                merchant_ids=normalized_merchant_ids,
+                merchant_names=merchant_names,
             )
+
+    normalized_brands = {
+        str(brand.get("merchantId")): brand
+        for brand in normalized.get("brands", [])
+        if brand.get("merchantId") is not None
+    }
+    merchants = [
+        {
+            "merchantId": merchant_value,
+            "merchantName": str(
+                normalized_brands.get(str(merchant_value), {}).get("label")
+                or merchant_value
+            ),
+        }
+        for merchant_value in normalized_merchant_ids
+    ]
 
     result = {
         "ok": True,
@@ -4918,12 +5054,11 @@ def brand_media_sankey_payload(
         "metric": "amount",
         "metricLabel": "Revenue",
         "merchant": {
-            "merchantId": normalized_merchant_id,
-            "merchantName": str(
-                normalized.get("brand", {}).get("label")
-                or normalized_merchant_id
-            ),
+            "merchantId": normalized_merchant_ids[0] if len(normalized_merchant_ids) == 1 else None,
+            "merchantIds": normalized_merchant_ids,
+            "merchantName": merchants[0]["merchantName"] if len(merchants) == 1 else f"{len(merchants)} brands",
         },
+        "merchants": merchants,
         "dateRange": {
             "startDate": range_start.isoformat(),
             "endDate": range_end.isoformat(),

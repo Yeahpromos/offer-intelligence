@@ -486,6 +486,8 @@
       merchantId: "",
       merchantName: "",
       merchantSearch: "",
+      merchantIds: [],
+      merchants: [],
       chartExpanded: false,
       startDate: "",
       endDate: "",
@@ -660,6 +662,7 @@
     revenueFlowPage: document.getElementById("revenueFlowPage"),
     revenueFlowMerchantSearch: document.getElementById("revenueFlowMerchantSearch"),
     revenueFlowMerchantDropdown: document.getElementById("revenueFlowMerchantDropdown"),
+    revenueFlowSelectedBrands: document.getElementById("revenueFlowSelectedBrands"),
     revenueFlowRangeButtons: document.getElementById("revenueFlowRangeButtons"),
     revenueFlowStartDate: document.getElementById("revenueFlowStartDate"),
     revenueFlowEndDate: document.getElementById("revenueFlowEndDate"),
@@ -1310,10 +1313,14 @@
       "brandMedia.observations": "媒体日期记录",
       "brandMedia.coverage": "数据覆盖",
       "revenueFlow.title": "Revenue 流向",
-      "revenueFlow.subtitle": "追踪一个品牌的 Revenue 如何从单品流向产生 Revenue 的媒体。",
+      "revenueFlow.subtitle": "追踪一个或多个品牌的 Revenue 如何从单品流向产生 Revenue 的媒体。",
       "revenueFlow.liveSource": "订单级 Revenue",
-      "revenueFlow.brand": "品牌",
-      "revenueFlow.brandPlaceholder": "搜索品牌或商家 ID",
+      "revenueFlow.brand": "品牌（可复选）",
+      "revenueFlow.brandPlaceholder": "搜索并复选品牌或商家 ID",
+      "revenueFlow.selectedBrands": "已选品牌",
+      "revenueFlow.clearBrands": "清空",
+      "revenueFlow.brandLimit": "最多可选择 12 个品牌。",
+      "revenueFlow.brandCount": "个品牌",
       "revenueFlow.timeRange": "时间跨度",
       "revenueFlow.startDate": "开始日期",
       "revenueFlow.endDate": "结束日期",
@@ -1329,7 +1336,7 @@
       "revenueFlow.error": "无法读取 Revenue 流向，请调整日期范围后重试。",
       "revenueFlow.empty": "当前时间跨度没有可展示的 Revenue 单品—媒体流向。",
       "revenueFlow.unavailable": "订单数据暂未提供单品字段，无法生成 Revenue 流向。",
-      "revenueFlow.selectBrand": "先选择一个品牌，即可加载该品牌的 Revenue 流向。",
+      "revenueFlow.selectBrand": "请至少选择一个品牌，即可加载 Revenue 流向。",
       "revenueFlow.totalRevenue": "Revenue",
       "revenueFlow.linkCount": "条流向",
       "revenueFlow.expandChart": "展开图表",
@@ -18246,6 +18253,7 @@ var _NUMERIC_COL_PATTERNS = [
   // ===== Publisher functions =====
 
   var _publishersCache = null;
+  var _publishersRequest = null;
 
   function _fillPublishersSelect(selectEl, values, currentValue, defaultText) {
     if (!selectEl) return;
@@ -18528,17 +18536,26 @@ var _NUMERIC_COL_PATTERNS = [
 
   function loadPublishersData(forceRefresh) {
     if (_publishersCache && !forceRefresh) return Promise.resolve(_publishersCache);
-    return fetch("/api/ui/db/publishers" + (forceRefresh ? "?refresh=1" : ""))
+    if (_publishersRequest && !forceRefresh) return _publishersRequest;
+    var request = fetch("/api/ui/db/publishers" + (forceRefresh ? "?refresh=1" : ""))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.ok === false) throw new Error(data.error || "Failed to load publishers data");
         _publishersCache = data;
         return data;
+      }).finally(function () {
+        if (_publishersRequest === request) _publishersRequest = null;
       });
+    if (!forceRefresh) _publishersRequest = request;
+    return request;
   }
 
   var BRAND_MEDIA_COLOR_GOLDEN_ANGLE = 137.508;
   var _brandMediaMerchantOptions = [];
+  var REVENUE_FLOW_MAX_BRANDS = 12;
+  var _revenueFlowPayloadCache = new Map();
+  var _revenueFlowRequests = new Map();
+  var _revenueFlowLoadTimer = null;
 
   function brandMediaColor(index) {
     var hue = Math.round((Number(index || 0) * BRAND_MEDIA_COLOR_GOLDEN_ANGLE) % 360);
@@ -19612,14 +19629,15 @@ var _NUMERIC_COL_PATTERNS = [
         label: String(node.label || node.id),
         value: Number(node.value || 0),
         productKey: String(node.productKey || ""),
+        merchantId: String(node.merchantId || ""),
         userId: String(node.userId || ""),
         manager: String(node.manager || "")
       };
     });
-    var brand = nodes.filter(function (node) { return node.type === "brand"; })[0] || null;
+    var brands = nodes.filter(function (node) { return node.type === "brand"; });
     var products = nodes.filter(function (node) { return node.type === "product"; });
     var media = nodes.filter(function (node) { return node.type === "media"; });
-    if (!brand || !products.length || !media.length) return null;
+    if (!brands.length || !products.length || !media.length) return null;
 
     var nodeById = {};
     nodes.forEach(function (node) { nodeById[node.id] = node; });
@@ -19635,6 +19653,9 @@ var _NUMERIC_COL_PATTERNS = [
     products.sort(function (a, b) {
       return b.value - a.value || a.label.localeCompare(b.label);
     });
+    brands.sort(function (a, b) {
+      return b.value - a.value || a.label.localeCompare(b.label);
+    });
     media.sort(function (a, b) {
       return b.value - a.value || a.label.localeCompare(b.label);
     });
@@ -19642,26 +19663,25 @@ var _NUMERIC_COL_PATTERNS = [
     products.forEach(function (node) { productIds[node.id] = true; });
     var mediaIds = {};
     media.forEach(function (node) { mediaIds[node.id] = true; });
+    var brandIds = {};
+    brands.forEach(function (node) { brandIds[node.id] = true; });
     links = links.filter(function (link) {
-      return (link.source === brand.id && productIds[link.target]) ||
+      return (brandIds[link.source] && productIds[link.target]) ||
         (productIds[link.source] && mediaIds[link.target]);
     });
     if (!links.length) return null;
 
     var hoverIndex = {};
-    var allNodeIds = new Set();
-    var allLinkIndexes = new Set();
     var brandLinkIndexByProductId = {};
+    var brandIdByProductId = {};
     var mediaProductsById = {};
     nodes.forEach(function (node) {
-      allNodeIds.add(node.id);
       hoverIndex[node.id] = {
-        nodeIds: new Set([brand.id, node.id]),
+        nodeIds: new Set([node.id]),
         linkIndexes: new Set()
       };
     });
     links.forEach(function (link, index) {
-      allLinkIndexes.add(index);
       var sourceState = hoverIndex[link.source];
       var targetState = hoverIndex[link.target];
       if (sourceState) {
@@ -19672,8 +19692,9 @@ var _NUMERIC_COL_PATTERNS = [
         targetState.nodeIds.add(link.source);
         targetState.linkIndexes.add(index);
       }
-      if (link.source === brand.id && productIds[link.target]) {
+      if (brandIds[link.source] && productIds[link.target]) {
         brandLinkIndexByProductId[link.target] = index;
+        brandIdByProductId[link.target] = link.source;
       } else if (productIds[link.source] && mediaIds[link.target]) {
         if (!mediaProductsById[link.target]) mediaProductsById[link.target] = new Set();
         mediaProductsById[link.target].add(link.source);
@@ -19684,28 +19705,33 @@ var _NUMERIC_COL_PATTERNS = [
       var productIdsForMedia = mediaProductsById[mediaNode.id];
       if (!state || !productIdsForMedia) return;
       productIdsForMedia.forEach(function (productId) {
+        if (brandIdByProductId[productId]) state.nodeIds.add(brandIdByProductId[productId]);
         if (brandLinkIndexByProductId[productId] != null) {
           state.linkIndexes.add(brandLinkIndexByProductId[productId]);
         }
       });
     });
-    hoverIndex[brand.id] = {
-      nodeIds: allNodeIds,
-      linkIndexes: allLinkIndexes
-    };
+    products.forEach(function (productNode) {
+      var state = hoverIndex[productNode.id];
+      if (state && brandIdByProductId[productNode.id]) {
+        state.nodeIds.add(brandIdByProductId[productNode.id]);
+      }
+    });
     var totalRevenue = Number(
       sankey.summary && sankey.summary.totalRevenue ||
-      brand.value ||
+      brands.reduce(function (sum, node) { return sum + node.value; }, 0) ||
       products.reduce(function (sum, node) { return sum + node.value; }, 0)
     );
     return {
-      brand: brand,
+      brand: brands[0],
+      brands: brands,
       products: products,
       media: media,
       links: links,
       nodeById: nodeById,
       hoverIndex: hoverIndex,
       totalRevenue: totalRevenue,
+      brandCount: brands.length,
       productCount: products.length,
       mediaCount: media.length
     };
@@ -19713,18 +19739,21 @@ var _NUMERIC_COL_PATTERNS = [
 
   function _brandMediaBuildSankeyLayout(model, width) {
     if (!model) return null;
-    var graphWidth = Number(width || 1160);
-    var itemCount = Math.max(model.products.length, model.media.length, 1);
+    var graphWidth = Math.max(1160, Number(width || 0));
+    var itemCount = Math.max(model.brands.length, model.products.length, model.media.length, 1);
     var height = Math.max(390, 128 + itemCount * 31);
     var top = 70;
     var bottom = 26;
     var innerHeight = height - top - bottom;
-    var columnX = { brand: 36, product: 400, media: 820 };
+    var responsiveExtra = Math.max(0, graphWidth - 1160);
+    var columnX = {
+      brand: 36,
+      product: Math.round(400 + responsiveExtra * 0.45),
+      media: Math.round(820 + responsiveExtra * 0.65)
+    };
     var nodeWidth = 12;
-    // Keep the historical layout width for the graph coordinates, but give the
-    // right-most media labels their own horizontal breathing room. Without
-    // this extra surface, the label layer ends exactly at the scroll boundary
-    // and the last part of a media name is visually clipped.
+    // Expand the graph with its viewport and reserve label space after the
+    // right-most media column so labels never end at the scroll boundary.
     var surfaceWidth = Math.max(graphWidth, columnX.media + nodeWidth + 26 + 360 + 28);
     var nodeGap = Math.min(14, Math.max(5, 10 - itemCount / 40));
 
@@ -19757,7 +19786,9 @@ var _NUMERIC_COL_PATTERNS = [
       return layout;
     }
 
-    var brandLayout = layoutColumn([model.brand], columnX.brand, "brand", "#17233d");
+    var brandLayout = layoutColumn(model.brands, columnX.brand, "brand", function (index) {
+      return model.brands.length === 1 ? "#17233d" : brandMediaColor(index * 2);
+    });
     var productLayout = layoutColumn(model.products, columnX.product, "product", "#246bfe");
     var mediaLayout = layoutColumn(model.media, columnX.media, "media", function (index) {
       return brandMediaColor(index);
@@ -19783,7 +19814,7 @@ var _NUMERIC_COL_PATTERNS = [
       var startX = source.x + source.width;
       var endX = target.x;
       var curve = Math.max(60, (endX - startX) * 0.46);
-      var color = source.node.type === "brand" ? "#17233d" : "#246bfe";
+      var color = source.node.type === "brand" ? source.color : "#246bfe";
       links.push({
         index: linkIndex,
         source: link.source,
@@ -20391,8 +20422,37 @@ var _NUMERIC_COL_PATTERNS = [
     chart._brandMediaSankeyCanvasInteractionsBound = false;
   }
 
+  function _brandMediaSankeyLayoutWidth(chart) {
+    var available = chart ? Number(chart.clientWidth || 0) - 18 : 0;
+    return Math.max(1160, Math.floor(available || 1160));
+  }
+
+  function _brandMediaObserveSankeyWidth(chart) {
+    if (!chart || chart._brandMediaSankeyResizeObserver || typeof ResizeObserver !== "function") return;
+    chart._brandMediaSankeyResizeObserver = new ResizeObserver(function (entries) {
+      var width = entries && entries[0] && entries[0].contentRect
+        ? Number(entries[0].contentRect.width || 0)
+        : Number(chart.clientWidth || 0);
+      var nextWidth = Math.max(1160, Math.floor(width - 18));
+      if (!chart._brandMediaSankeyModel || Math.abs(nextWidth - Number(chart._brandMediaSankeyRenderedWidth || 0)) < 24) return;
+      var args = chart._brandMediaSankeyRenderArgs;
+      if (!args) return;
+      requestAnimationFrame(function () {
+        _brandMediaRenderSankeyChart(args.payload, chart, args.countElement, args.currentState, args.copyPrefix);
+      });
+    });
+    chart._brandMediaSankeyResizeObserver.observe(chart);
+  }
+
   function _brandMediaRenderSankeyChart(payload, chart, countElement, currentState, copyPrefix) {
     if (!chart) return;
+    chart._brandMediaSankeyRenderArgs = {
+      payload: payload,
+      countElement: countElement,
+      currentState: currentState,
+      copyPrefix: copyPrefix
+    };
+    _brandMediaObserveSankeyWidth(chart);
     var previousLockedNodeId = String(chart._brandMediaSankeyLockedNodeId || "");
     _brandMediaSankeyResetRenderState(chart);
     var prefix = String(copyPrefix || "brandMedia");
@@ -20401,7 +20461,7 @@ var _NUMERIC_COL_PATTERNS = [
     }
     var current = currentState || {};
     var message = "";
-    if (!String(current.merchantId || "").trim()) {
+    if (!_revenueFlowSelectedIds(current).length) {
       message = copy("selectBrand", "Select a brand to load its Revenue flow.");
     } else if (current.loading && !payload) {
       message = copy("loading", "Loading Revenue flow by brand, product and media...");
@@ -20422,7 +20482,9 @@ var _NUMERIC_COL_PATTERNS = [
       : "";
     if (countElement) {
       countElement.textContent = model
-        ? _brandMediaCount(model.productCount) + " " +
+        ? (model.brandCount > 1
+          ? _brandMediaCount(model.brandCount) + " " + copy("brandCount", "brands") + " · "
+          : "") + _brandMediaCount(model.productCount) + " " +
           copy("productCount", "products") + " · " +
           _brandMediaCount(model.mediaCount) + " " +
           copy("mediaCount", "media")
@@ -20436,7 +20498,9 @@ var _NUMERIC_COL_PATTERNS = [
       return;
     }
 
-    var layout = _brandMediaBuildSankeyLayout(model, 1160);
+    var layoutWidth = _brandMediaSankeyLayoutWidth(chart);
+    var layout = _brandMediaBuildSankeyLayout(model, layoutWidth);
+    chart._brandMediaSankeyRenderedWidth = layoutWidth;
     chart._brandMediaSankeyLayout = layout;
     chart._brandMediaSankeyLabels = {
       brand: copy("brandColumn", "Brand"),
@@ -20730,6 +20794,149 @@ var _NUMERIC_COL_PATTERNS = [
     });
   }
 
+  function _revenueFlowSelectedMerchants(currentState) {
+    var current = currentState || state.revenueFlow || {};
+    var selected = Array.isArray(current.merchants) ? current.merchants : [];
+    if (!selected.length && String(current.merchantId || "").trim()) {
+      selected = [{
+        merchantId: String(current.merchantId).trim(),
+        name: String(current.merchantName || current.merchantId).trim()
+      }];
+    }
+    var seen = new Set();
+    return selected.map(function (merchant) {
+      return {
+        merchantId: String(merchant && (merchant.merchantId || merchant.id) || "").trim(),
+        name: String(merchant && (merchant.name || merchant.merchantName) || "").trim()
+      };
+    }).filter(function (merchant) {
+      if (!merchant.merchantId || seen.has(merchant.merchantId)) return false;
+      seen.add(merchant.merchantId);
+      if (!merchant.name) merchant.name = merchant.merchantId;
+      return true;
+    });
+  }
+
+  function _revenueFlowSelectedIds(currentState) {
+    return _revenueFlowSelectedMerchants(currentState).map(function (merchant) {
+      return merchant.merchantId;
+    });
+  }
+
+  function _revenueFlowSetSelectedMerchants(merchants) {
+    var current = state.revenueFlow;
+    var selected = _revenueFlowSelectedMerchants({ merchants: merchants }).slice(0, REVENUE_FLOW_MAX_BRANDS);
+    current.merchants = selected;
+    current.merchantIds = selected.map(function (merchant) { return merchant.merchantId; });
+    current.merchantId = selected.length === 1 ? selected[0].merchantId : "";
+    current.merchantName = selected.length === 1 ? selected[0].name : "";
+  }
+
+  function _revenueFlowInvalidateData() {
+    var current = state.revenueFlow;
+    current.requestSequence += 1;
+    current.loading = false;
+    current.payload = null;
+    current.error = "";
+    current.requestKey = "";
+  }
+
+  function _revenueFlowScheduleLoad(delay) {
+    if (_revenueFlowLoadTimer) clearTimeout(_revenueFlowLoadTimer);
+    _revenueFlowLoadTimer = setTimeout(function () {
+      _revenueFlowLoadTimer = null;
+      _revenueFlowLoad();
+    }, Math.max(0, Number(delay || 0)));
+  }
+
+  function _revenueFlowToggleMerchant(merchant) {
+    var selected = _revenueFlowSelectedMerchants(state.revenueFlow);
+    var merchantId = String(merchant && merchant.merchantId || "").trim();
+    if (!merchantId) return false;
+    var existingIndex = selected.findIndex(function (item) { return item.merchantId === merchantId; });
+    if (existingIndex >= 0) {
+      selected.splice(existingIndex, 1);
+    } else {
+      if (selected.length >= REVENUE_FLOW_MAX_BRANDS) {
+        _revenueFlowStatus(t("revenueFlow.brandLimit", "Select up to 12 brands."), "error");
+        return false;
+      }
+      selected.push({ merchantId: merchantId, name: String(merchant.name || merchantId) });
+    }
+    _revenueFlowSetSelectedMerchants(selected);
+    state.revenueFlow.merchantSearch = "";
+    if (els.revenueFlowMerchantSearch) els.revenueFlowMerchantSearch.value = "";
+    _revenueFlowInvalidateData();
+    _revenueFlowSyncControls();
+    _revenueFlowRenderCurrentView();
+    _revenueFlowScheduleLoad(160);
+    return true;
+  }
+
+  function _revenueFlowRenderSelectedBrands() {
+    if (!els.revenueFlowSelectedBrands) return;
+    var selected = _revenueFlowSelectedMerchants(state.revenueFlow);
+    if (!selected.length) {
+      els.revenueFlowSelectedBrands.innerHTML = "";
+      return;
+    }
+    var label = t("revenueFlow.selectedBrands", "Selected brands");
+    var clear = t("revenueFlow.clearBrands", "Clear all");
+    els.revenueFlowSelectedBrands.innerHTML = '<span class="revenue-flow-selected-label">' +
+      escapeHtml(label) + ' (' + selected.length + ')</span>' + selected.map(function (merchant) {
+        return '<button type="button" class="revenue-flow-brand-chip" data-revenue-flow-remove-merchant="' +
+          escapeHtml(merchant.merchantId) + '" title="' + escapeHtml(merchant.name) + '">' +
+          '<span>' + escapeHtml(merchant.name) + '</span><i aria-hidden="true">×</i></button>';
+      }).join("") + (selected.length > 1
+        ? '<button type="button" class="revenue-flow-clear-brands" data-revenue-flow-clear-merchants>' + escapeHtml(clear) + '</button>'
+        : "");
+  }
+
+  function _revenueFlowOfferCatalogOptions() {
+    var options = [];
+    offersByMerchantId.forEach(function (offer, merchantId) {
+      var name = String(
+        offer && (offer.merchantName || offer.brand || offer.advertName || offer.name) || merchantId
+      ).trim() || merchantId;
+      options.push({
+        merchantId: String(merchantId),
+        name: name,
+        count: Number((offerGroupsByMerchantId.get(String(merchantId)) || []).length || 0)
+      });
+    });
+    return options.sort(function (a, b) {
+      return a.name.localeCompare(b.name) || a.merchantId.localeCompare(b.merchantId);
+    });
+  }
+
+  function _revenueFlowFetchPayload(key, params) {
+    if (_revenueFlowPayloadCache.has(key)) return Promise.resolve(_revenueFlowPayloadCache.get(key));
+    if (_revenueFlowRequests.has(key)) return _revenueFlowRequests.get(key);
+    var request = fetch("/api/ui/db/brand-media-sankey?" + params.toString())
+      .then(function (response) {
+        return response.text().then(function (text) {
+          var payload = {};
+          try { payload = text ? JSON.parse(text) : {}; } catch (parseError) {
+            throw new Error("Revenue flow endpoint returned an invalid response");
+          }
+          if (!response.ok || payload.ok === false) {
+            throw new Error(payload.error || "Failed to load Revenue flow");
+          }
+          return payload;
+        });
+      }).then(function (payload) {
+        _revenueFlowPayloadCache.set(key, payload);
+        while (_revenueFlowPayloadCache.size > 12) {
+          _revenueFlowPayloadCache.delete(_revenueFlowPayloadCache.keys().next().value);
+        }
+        return payload;
+      }).finally(function () {
+        _revenueFlowRequests.delete(key);
+      });
+    _revenueFlowRequests.set(key, request);
+    return request;
+  }
+
   function _revenueFlowSetQuickRange(days) {
     var end = new Date();
     end.setHours(12, 0, 0, 0);
@@ -20745,8 +20952,9 @@ var _NUMERIC_COL_PATTERNS = [
     var current = state.revenueFlow;
     if (!current.startDate || !current.endDate) _revenueFlowSetQuickRange(current.quickRange || 90);
     if (els.revenueFlowMerchantSearch && document.activeElement !== els.revenueFlowMerchantSearch) {
-      els.revenueFlowMerchantSearch.value = current.merchantName || current.merchantSearch || "";
+      els.revenueFlowMerchantSearch.value = current.merchantSearch || "";
     }
+    _revenueFlowRenderSelectedBrands();
     if (els.revenueFlowStartDate) els.revenueFlowStartDate.value = current.startDate || "";
     if (els.revenueFlowEndDate) els.revenueFlowEndDate.value = current.endDate || "";
     if (els.revenueFlowRangeButtons) {
@@ -20769,14 +20977,15 @@ var _NUMERIC_COL_PATTERNS = [
       return !query || String(merchant.name || "").toLowerCase().indexOf(query) !== -1 ||
         String(merchant.merchantId || "").toLowerCase().indexOf(query) !== -1;
     }).slice(0, 80);
-    var selectedId = String(state.revenueFlow.merchantId || "");
+    var selectedIds = new Set(_revenueFlowSelectedIds(state.revenueFlow));
     var html = options.map(function (merchant) {
-      var selected = selectedId === String(merchant.merchantId);
+      var selected = selectedIds.has(String(merchant.merchantId));
       return '<button type="button" class="brand-media-merchant-option' +
         (selected ? ' selected' : '') + '" role="option" aria-selected="' +
         (selected ? 'true' : 'false') + '" data-revenue-flow-merchant-id="' +
         escapeHtml(String(merchant.merchantId)) + '" data-revenue-flow-merchant-name="' +
         escapeHtml(String(merchant.name)) + '">' +
+        '<i class="revenue-flow-option-check" aria-hidden="true">' + (selected ? '✓' : '') + '</i>' +
         '<span>' + escapeHtml(String(merchant.name)) + '</span><small>ID ' +
         escapeHtml(String(merchant.merchantId)) + ' · ' + _brandMediaCount(merchant.count) +
         '</small></button>';
@@ -20797,11 +21006,11 @@ var _NUMERIC_COL_PATTERNS = [
 
   function _revenueFlowLoadCatalog() {
     var current = state.revenueFlow;
-    if (current.catalogLoading) return;
-    if (_brandMediaMerchantOptions.length) {
-      if (document.activeElement === els.revenueFlowMerchantSearch) _revenueFlowShowMerchantDropdown();
-      return;
+    if (!_brandMediaMerchantOptions.length) {
+      _brandMediaMerchantOptions = _revenueFlowOfferCatalogOptions();
     }
+    if (document.activeElement === els.revenueFlowMerchantSearch) _revenueFlowShowMerchantDropdown();
+    if (current.catalogLoading || _publishersCache) return;
     current.catalogLoading = true;
     current.catalogError = "";
     loadPublishersData().then(function (data) {
@@ -20815,14 +21024,15 @@ var _NUMERIC_COL_PATTERNS = [
     });
   }
 
-  function _revenueFlowRenderKpis(payload) {
+  function _revenueFlowRenderKpis(payload, renderedModel) {
     if (!els.revenueFlowKpis) return;
-    var model = _brandMediaBuildSankeyModel(payload);
+    var model = renderedModel || _brandMediaBuildSankeyModel(payload);
     if (!model) {
       els.revenueFlowKpis.innerHTML = "";
       return;
     }
     var items = [
+      [t("revenueFlow.brandCount", "brands"), _brandMediaCount(model.brandCount)],
       [t("revenueFlow.totalRevenue", "Revenue"), _brandMediaMoney(model.totalRevenue)],
       [t("revenueFlow.productCount", "products"), _brandMediaCount(model.productCount)],
       [t("revenueFlow.mediaCount", "media"), _brandMediaCount(model.mediaCount)],
@@ -20862,6 +21072,9 @@ var _NUMERIC_COL_PATTERNS = [
       document.body.classList.toggle("revenue-flow-chart-expanded", state.revenueFlow.chartExpanded);
     }
     _revenueFlowSyncChartExpandButton();
+    if (state.revenueFlow.payload) {
+      requestAnimationFrame(function () { _revenueFlowRenderCurrentView(); });
+    }
   }
 
   function _revenueFlowRenderCurrentView() {
@@ -20872,18 +21085,21 @@ var _NUMERIC_COL_PATTERNS = [
       state.revenueFlow,
       "revenueFlow"
     );
-    _revenueFlowRenderKpis(state.revenueFlow.payload);
+    _revenueFlowRenderKpis(
+      state.revenueFlow.payload,
+      els.revenueFlowChart && els.revenueFlowChart._brandMediaSankeyModel
+    );
   }
 
   function _revenueFlowLoad() {
     var current = state.revenueFlow;
-    var merchantId = String(current.merchantId || "").trim();
-    if (!merchantId) {
+    var merchantIds = _revenueFlowSelectedIds(current);
+    if (!merchantIds.length) {
       current.payload = null;
       current.loading = false;
       current.error = "";
       _revenueFlowRenderCurrentView();
-      _revenueFlowStatus(t("revenueFlow.selectBrand", "Select a brand to load its Revenue flow."), "info");
+      _revenueFlowStatus(t("revenueFlow.selectBrand", "Select at least one brand to load Revenue flow."), "info");
       return;
     }
     if (!current.startDate || !current.endDate || current.startDate > current.endDate) {
@@ -20894,9 +21110,18 @@ var _NUMERIC_COL_PATTERNS = [
       _revenueFlowStatus(t("revenueFlow.error", "Unable to load the Revenue flow. Adjust the date range and try again."), "error");
       return;
     }
-    var key = merchantId + "|" + current.startDate + "|" + current.endDate;
+    var key = merchantIds.slice().sort().join(",") + "|" + current.startDate + "|" + current.endDate;
     if (current.requestKey === key && current.payload && !current.error) {
       _revenueFlowRenderCurrentView();
+      return;
+    }
+    if (_revenueFlowPayloadCache.has(key)) {
+      current.requestKey = key;
+      current.loading = false;
+      current.error = "";
+      current.payload = _revenueFlowPayloadCache.get(key);
+      _revenueFlowRenderCurrentView();
+      _revenueFlowStatus("", "");
       return;
     }
     current.requestKey = key;
@@ -20907,29 +21132,29 @@ var _NUMERIC_COL_PATTERNS = [
     _revenueFlowStatus(t("revenueFlow.loading", "Loading Revenue flow by brand, product and media..."), "loading");
     _revenueFlowRenderCurrentView();
     var params = new URLSearchParams({
-      merchantId: merchantId,
+      merchantIds: merchantIds.join(","),
       startDate: current.startDate,
       endDate: current.endDate,
     });
-    fetch("/api/ui/db/brand-media-sankey?" + params.toString())
-      .then(function (response) {
-        return response.text().then(function (text) {
-          var payload = {};
-          try { payload = text ? JSON.parse(text) : {}; } catch (parseError) {
-            throw new Error("Revenue flow endpoint returned an invalid response");
-          }
-          if (!response.ok || payload.ok === false) {
-            throw new Error(payload.error || "Failed to load Revenue flow");
-          }
-          return payload;
-        });
-      })
+    _revenueFlowFetchPayload(key, params)
       .then(function (payload) {
         if (sequence !== current.requestSequence) return;
         current.loading = false;
         current.payload = payload;
         current.error = "";
-        current.merchantName = String((payload.merchant || {}).merchantName || current.merchantName || merchantId);
+        var payloadMerchants = Array.isArray(payload.merchants) ? payload.merchants : [];
+        if (payloadMerchants.length) {
+          var namesById = {};
+          payloadMerchants.forEach(function (merchant) {
+            namesById[String(merchant.merchantId)] = String(merchant.merchantName || merchant.merchantId);
+          });
+          _revenueFlowSetSelectedMerchants(_revenueFlowSelectedMerchants(current).map(function (merchant) {
+            return {
+              merchantId: merchant.merchantId,
+              name: namesById[merchant.merchantId] || merchant.name
+            };
+          }));
+        }
         _revenueFlowSyncControls();
         _revenueFlowRenderCurrentView();
         _revenueFlowStatus("", "");
@@ -20946,10 +21171,12 @@ var _NUMERIC_COL_PATTERNS = [
 
   function renderRevenueFlowPage() {
     var current = state.revenueFlow;
-    if (!current.merchantId && state.brandMedia && state.brandMedia.merchantId) {
-      current.merchantId = state.brandMedia.merchantId;
-      current.merchantName = state.brandMedia.merchantName;
-      current.merchantSearch = state.brandMedia.merchantSearch || state.brandMedia.merchantName;
+    if (!_revenueFlowSelectedIds(current).length && state.brandMedia && state.brandMedia.merchantId) {
+      _revenueFlowSetSelectedMerchants([{
+        merchantId: state.brandMedia.merchantId,
+        name: state.brandMedia.merchantName || state.brandMedia.merchantId
+      }]);
+      current.merchantSearch = "";
       current.startDate = state.brandMedia.startDate || current.startDate;
       current.endDate = state.brandMedia.endDate || current.endDate;
     }
@@ -20972,14 +21199,6 @@ var _NUMERIC_COL_PATTERNS = [
     els.revenueFlowMerchantSearch.addEventListener("input", function () {
       var value = String(els.revenueFlowMerchantSearch.value || "");
       state.revenueFlow.merchantSearch = value;
-      if (value !== state.revenueFlow.merchantName) {
-        state.revenueFlow.merchantId = "";
-        state.revenueFlow.merchantName = "";
-        state.revenueFlow.payload = null;
-        state.revenueFlow.error = "";
-        state.revenueFlow.requestKey = "";
-        _revenueFlowRenderCurrentView();
-      }
       _revenueFlowShowMerchantDropdown();
     });
     els.revenueFlowMerchantSearch.addEventListener("keydown", function (event) {
@@ -20989,15 +21208,31 @@ var _NUMERIC_COL_PATTERNS = [
       els.revenueFlowMerchantDropdown.addEventListener("click", function (event) {
         var option = event.target.closest("[data-revenue-flow-merchant-id]");
         if (!option) return;
-        state.revenueFlow.merchantId = String(option.dataset.revenueFlowMerchantId || "");
-        state.revenueFlow.merchantName = String(option.dataset.revenueFlowMerchantName || "");
-        state.revenueFlow.merchantSearch = state.revenueFlow.merchantName;
-        state.revenueFlow.payload = null;
-        state.revenueFlow.error = "";
-        state.revenueFlow.requestKey = "";
-        _revenueFlowSyncControls();
-        _revenueFlowHideMerchantDropdown();
-        _revenueFlowLoad();
+        _revenueFlowToggleMerchant({
+          merchantId: String(option.dataset.revenueFlowMerchantId || ""),
+          name: String(option.dataset.revenueFlowMerchantName || "")
+        });
+        _revenueFlowShowMerchantDropdown();
+      });
+    }
+    if (els.revenueFlowSelectedBrands) {
+      els.revenueFlowSelectedBrands.addEventListener("click", function (event) {
+        var clear = event.target.closest("[data-revenue-flow-clear-merchants]");
+        if (clear) {
+          _revenueFlowSetSelectedMerchants([]);
+          _revenueFlowInvalidateData();
+          _revenueFlowSyncControls();
+          _revenueFlowRenderCurrentView();
+          _revenueFlowScheduleLoad(0);
+          return;
+        }
+        var remove = event.target.closest("[data-revenue-flow-remove-merchant]");
+        if (!remove) return;
+        var merchantId = String(remove.getAttribute("data-revenue-flow-remove-merchant") || "");
+        var merchant = _revenueFlowSelectedMerchants(state.revenueFlow).find(function (item) {
+          return item.merchantId === merchantId;
+        });
+        if (merchant) _revenueFlowToggleMerchant(merchant);
       });
     }
     if (els.revenueFlowRangeButtons) {
@@ -21005,11 +21240,9 @@ var _NUMERIC_COL_PATTERNS = [
         var button = event.target.closest("[data-revenue-flow-range]");
         if (!button) return;
         _revenueFlowSetQuickRange(button.dataset.revenueFlowRange);
-        state.revenueFlow.payload = null;
-        state.revenueFlow.error = "";
-        state.revenueFlow.requestKey = "";
+        _revenueFlowInvalidateData();
         _revenueFlowSyncControls();
-        _revenueFlowLoad();
+        _revenueFlowScheduleLoad(0);
       });
     }
     [els.revenueFlowStartDate, els.revenueFlowEndDate].filter(Boolean).forEach(function (input) {
@@ -21017,11 +21250,9 @@ var _NUMERIC_COL_PATTERNS = [
         state.revenueFlow.startDate = els.revenueFlowStartDate.value || "";
         state.revenueFlow.endDate = els.revenueFlowEndDate.value || "";
         state.revenueFlow.quickRange = "";
-        state.revenueFlow.payload = null;
-        state.revenueFlow.error = "";
-        state.revenueFlow.requestKey = "";
+        _revenueFlowInvalidateData();
         _revenueFlowSyncControls();
-        _revenueFlowLoad();
+        _revenueFlowScheduleLoad(0);
       });
     });
     if (els.revenueFlowChartExpand) {
@@ -30712,6 +30943,8 @@ var _NUMERIC_COL_PATTERNS = [
       brandMediaSankeyProductAsin: _brandMediaSankeyProductAsin,
       brandMediaSankeyHoverState: _brandMediaSankeyHoverState,
       brandMediaSankeyToggleSelection: _brandMediaSankeyToggleSelection,
+      revenueFlowSelectedMerchants: _revenueFlowSelectedMerchants,
+      revenueFlowSelectedIds: _revenueFlowSelectedIds,
       brandMediaSankeyPayload: function (payload) {
         return _brandMediaBuildSankeyModel(payload);
       },

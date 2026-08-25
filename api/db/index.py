@@ -212,16 +212,16 @@ def handle_ui_brand_media_trend(target, query):
 
 
 def handle_ui_brand_media_sankey(target, query):
-    merchant_id = first_query_value(query, "merchantId")
-    if not merchant_id:
-        send_json(target, 400, {"ok": False, "error": "merchantId is required"})
+    merchant_ids = first_query_value(query, "merchantIds") or first_query_value(query, "merchantId")
+    if not merchant_ids:
+        send_json(target, 400, {"ok": False, "error": "merchantIds is required"})
         return
     try:
         send_json(
             target,
             200,
             brand_media_sankey_payload(
-                merchant_id,
+                merchant_ids,
                 start_date=first_query_value(query, "startDate") or None,
                 end_date=first_query_value(query, "endDate") or None,
             ),
