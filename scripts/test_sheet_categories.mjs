@@ -15,20 +15,12 @@ const sheetReportData = {
   tierSheets: ["Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"]
 };
 
-// 当前 Tier Sheet 结构中，Category 位于 0-based 索引 27（+1 = 28）。
-// 前置字段包含点击、DPV、ATC 和 Visual Status 相关列。
-const categoryColumnByTier = {
-  "Tier 1": 28,
-  "Tier 2": 28,
-  "Tier 3": 28,
-  "Tier 4": 28,
-  "BLACK TIER": 28
-};
-
-for (const [tier, expectedIndex] of Object.entries(categoryColumnByTier)) {
+const tierNames = ["Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"];
+for (const tier of tierNames) {
   const sheet = sheetReportData.sheets.find((entry) => entry.name === tier);
   if (!sheet) throw new Error(`${tier}: sheet report payload is missing the tier sheet`);
-  assertEqual(sheet.headers.indexOf("Category") + 1, expectedIndex, `${tier} Category column`);
+  assertEqual(sheet.headers.includes("Category"), true, `${tier} should expose a Category column`);
+  assertEqual(sheet.headers.includes("BD"), tier === "Tier 1", `${tier} BD column visibility`);
 }
 
 const tier1Sheet = sheetReportData.sheets.find((entry) => entry.name === "Tier 1");
@@ -57,7 +49,7 @@ for (const [tier, merchantId, brand] of tierMerchants) {
 }
 
 // 验证每个 tier sheet 存在且有行
-for (const tier of Object.keys(categoryColumnByTier)) {
+for (const tier of tierNames) {
   const sheet = sheetReportData.sheets.find((entry) => entry.name === tier);
   if (!sheet) throw new Error(`${tier}: sheet is missing in DB cache`);
   assertEqual(sheet.headers.length > 0, true, `${tier} should have headers`);

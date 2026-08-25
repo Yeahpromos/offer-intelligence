@@ -17,13 +17,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from offer_db import offers_payload, product_keywords_payload, _save_cache, OFFERS_CACHE_FILE, KEYWORDS_CACHE_FILE
+from offer_db import (
+    KEYWORDS_CACHE_FILE,
+    OFFERS_CACHE_FILE,
+    _save_cache,
+    offers_payload,
+    product_keywords_payload,
+    sync_amazon_offer_base_merchants_to_tier1,
+)
 
 
 def main() -> None:
     print("=== refresh_api_caches ===\n")
 
-    print("[1/2] Rebuilding offers cache (force_refresh=True) ...", flush=True)
+    print("[1/4] Syncing new Amazon offer-base merchants to Tier 1 ...", flush=True)
+    tier1_sync = sync_amazon_offer_base_merchants_to_tier1()
+    print(
+        "  "
+        f"candidates: {tier1_sync['candidateCount']}; "
+        f"inserted: {tier1_sync['insertedCount']}; "
+        f"skipped: {tier1_sync['skippedCount']}\n"
+    )
+
+    print("[2/4] Rebuilding offers cache (force_refresh=True) ...", flush=True)
     t0 = time.time()
     offers = offers_payload(force_refresh=True)
     elapsed = time.time() - t0
@@ -37,7 +53,7 @@ def main() -> None:
     _save_cache(OFFERS_CACHE_FILE, offers)
     print(f"  saved to {OFFERS_CACHE_FILE}\n")
 
-    print("[2/2] Rebuilding keywords cache (force_refresh=True) ...", flush=True)
+    print("[3/4] Rebuilding keywords cache (force_refresh=True) ...", flush=True)
     t0 = time.time()
     kw = product_keywords_payload(force_refresh=True)
     elapsed = time.time() - t0
@@ -47,7 +63,7 @@ def main() -> None:
     _save_cache(KEYWORDS_CACHE_FILE, kw)
     print(f"  saved to {KEYWORDS_CACHE_FILE}\n")
 
-    print("[3/3] Rebuilding publishers cache (scripts/build_publishers_data.py) ...", flush=True)
+    print("[4/4] Rebuilding publishers cache (scripts/build_publishers_data.py) ...", flush=True)
     t0 = time.time()
     import subprocess
     result = subprocess.run(

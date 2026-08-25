@@ -34,6 +34,10 @@ DEFAULT_MONTHLY_TREND_MONTHS = 6
 MAX_TIER_REPORT_RANGE_DAYS = 366
 MAX_BRAND_MEDIA_TREND_RANGE_DAYS = 731
 TIER1_MANUAL_SOURCE = "offer-intelligence-tier1-add"
+TIER1_AMAZON_AUTO_SOURCE = "offer-base-amazon-auto"
+TIER1_AMAZON_BACKFILL_SOURCE = "offer-base-amazon-backfill"
+TIER1_AMAZON_CUTOVER = "2026-07-15 00:00:00"
+TIER1_AMAZON_BUSINESS_MANAGER = "Timmy"
 TIER1_NAME = "Tier 1"
 DEFAULT_AFF_PROPORTION = 0.75
 MANAGED_TIER_NAMES = {"Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"}
@@ -2008,6 +2012,157 @@ def add_merchant_to_tier1(
     }
 
 
+def _tier1_amazon_sync_epoch(value: str | dt.datetime) -> int:
+    if isinstance(value, dt.datetime):
+        parsed = value
+    else:
+        parsed = dt.datetime.fromisoformat(str(value or "").strip())
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=REPORTING_TZ)
+    return int(parsed.timestamp())
+
+
+def sync_amazon_offer_base_merchants_to_tier1(
+    *,
+    start_at: str | dt.datetime = TIER1_AMAZON_CUTOVER,
+    source: str = TIER1_AMAZON_AUTO_SOURCE,
+    updated_by: str = "offer-intelligence-cache-refresh",
+    business_manager: str = TIER1_AMAZON_BUSINESS_MANAGER,
+    now: dt.datetime | None = None,
+) -> dict[str, Any]:
+    """Add new, active Amazon offer-base merchants to Tier 1 without overwrites.
+
+    ``cnpscy_oi_offer_base.network`` can be NULL for direct Amazon merchants, so
+    network identity is resolved through ``cnpscy_advert.advert_advertiser`` and
+    ``cnpscy_advert_type``. Existing Tier assignments are never changed.
+    """
+    source = str(source or TIER1_AMAZON_AUTO_SOURCE).strip()[:32]
+    updated_by = str(updated_by or "offer-intelligence-cache-refresh").strip()[:128]
+    business_manager = str(business_manager or "").strip()[:128]
+    if not source:
+        raise ValueError("source is required")
+    if not updated_by:
+        raise ValueError("updated_by is required")
+
+    start_epoch = _tier1_amazon_sync_epoch(start_at)
+    current = now or dt.datetime.now(REPORTING_TZ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=REPORTING_TZ)
+    end_epoch = int(current.timestamp())
+    if start_epoch > end_epoch:
+        raise ValueError("start_at must not be after now")
+    moved_at = current.astimezone(dt.timezone.utc).replace(tzinfo=None)
+
+    candidate_sql = """
+        SELECT DISTINCT
+            CAST(a.advert_id AS CHAR) AS merchantId,
+            a.advert_name AS merchantName
+        FROM cnpscy_advert a
+        INNER JOIN cnpscy_advert_type at
+            ON at.advert_type_id = a.advert_advertiser
+            AND at.advert_type_parent_id = 53
+            AND LOWER(TRIM(at.advert_type_name)) = 'amazon'
+        INNER JOIN (
+            SELECT DISTINCT merchantId
+            FROM cnpscy_oi_offer_base
+        ) ob ON ob.merchantId = CAST(a.advert_id AS CHAR)
+        LEFT JOIN cnpscy_oi_tier_assignments t
+            ON t.merchantId = CAST(a.advert_id AS CHAR)
+        WHERE CAST(a.advert_input_time AS UNSIGNED) >= %s
+          AND CAST(a.advert_input_time AS UNSIGNED) <= %s
+          AND a.advert_isdel = 1
+          AND a.advert_status = 1
+          AND a.is_published = 1
+          AND t.merchantId IS NULL
+        ORDER BY CAST(a.advert_id AS UNSIGNED)
+    """
+
+    inserted: list[dict[str, Any]] = []
+    skipped_ids: list[str] = []
+    manager_updates = 0
+    with db_connection() as conn:
+        try:
+            conn.begin()
+            candidates = fetch_all(conn, candidate_sql, (start_epoch, end_epoch))
+            with conn.cursor() as cursor:
+                for candidate in candidates:
+                    merchant_id = str(candidate.get("merchantId") or "").strip()
+                    merchant_name = str(candidate.get("merchantName") or "").strip()
+                    cursor.execute(
+                        """
+                        INSERT IGNORE INTO cnpscy_oi_tier_assignments
+                            (merchantId, tier, source, movedFromTier, movedAt, updatedBy)
+                        VALUES (%s, %s, %s, NULL, %s, %s)
+                        """,
+                        (merchant_id, TIER1_NAME, source, moved_at, updated_by),
+                    )
+                    if cursor.rowcount != 1:
+                        skipped_ids.append(merchant_id)
+                        continue
+                    cursor.execute(
+                        """
+                        INSERT INTO cnpscy_oi_tier_move_history
+                            (merchantId, merchantName, sourceTier, targetTier, source, movedAt, movedBy)
+                        VALUES (%s, %s, NULL, %s, %s, %s, %s)
+                        """,
+                        (
+                            merchant_id,
+                            merchant_name or None,
+                            TIER1_NAME,
+                            source,
+                            moved_at,
+                            updated_by,
+                        ),
+                    )
+                    if business_manager:
+                        cursor.execute(
+                            """
+                            INSERT INTO cnpscy_oi_offer_sheet_metadata
+                                (merchantId, businessManager, sourceSheet)
+                            VALUES (%s, %s, %s)
+                            ON DUPLICATE KEY UPDATE
+                                businessManager = CASE
+                                    WHEN businessManager IS NULL OR TRIM(businessManager) = ''
+                                    THEN VALUES(businessManager)
+                                    ELSE businessManager
+                                END,
+                                sourceSheet = CASE
+                                    WHEN sourceSheet IS NULL OR TRIM(sourceSheet) = ''
+                                    THEN VALUES(sourceSheet)
+                                    ELSE sourceSheet
+                                END
+                            """,
+                            (merchant_id, business_manager, TIER1_NAME),
+                        )
+                        if cursor.rowcount:
+                            manager_updates += 1
+                    inserted.append({
+                        "merchantId": merchant_id,
+                        "merchantName": merchant_name,
+                        "businessManager": business_manager,
+                    })
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    if inserted:
+        _tier_sheet_cache.clear()
+    return {
+        "ok": True,
+        "tier": TIER1_NAME,
+        "source": source,
+        "startAt": dt.datetime.fromtimestamp(start_epoch, REPORTING_TZ),
+        "endAt": dt.datetime.fromtimestamp(end_epoch, REPORTING_TZ),
+        "candidateCount": len(candidates),
+        "insertedCount": len(inserted),
+        "skippedCount": len(skipped_ids),
+        "managerUpdatedCount": manager_updates,
+        "inserted": inserted,
+        "skippedMerchantIds": skipped_ids,
+    }
+
+
 def normalize_monthly_new_merchant_month(value: Any = None) -> str:
     text = str(value or "").strip()
     if not text:
@@ -3208,6 +3363,8 @@ def _build_offers_payload(
         )
         cat_map: dict = {r["merchantId"]: r for r in cat_rows}
 
+        previous_offers_cache = _load_any_cache(OFFERS_CACHE_FILE)
+
         # Sheet metadata (select only needed columns, avoid TEXT bloat)
         sm_rows = fetch_all(
             conn,
@@ -3217,7 +3374,7 @@ def _build_offers_payload(
                       successRateJune, completionRate, timeline,
                       bestSubCategoryBsr, mainCategoryBsr, subcategoryBsr,
                       sheetCategory, categorySource, backendMatchStatus,
-                      hasDiscount, discountInfo, dealInfo, cpc
+                      hasDiscount, discountInfo, dealInfo, cpc, businessManager
                FROM cnpscy_oi_offer_sheet_metadata""",
         )
         sm_map: dict = {r["merchantId"]: r for r in sm_rows}
@@ -3254,7 +3411,7 @@ def _build_offers_payload(
         network_map = offer_network_fallback_map(
             conn,
             missing_network_ids,
-            _load_any_cache(OFFERS_CACHE_FILE),
+            previous_offers_cache,
         )
 
         # ?? merge all into offers ??
@@ -3331,7 +3488,7 @@ def _build_offers_payload(
                             "successRateJune", "completionRate", "timeline",
                             "bestSubCategoryBsr", "mainCategoryBsr", "subcategoryBsr",
                             "backendMatchStatus", "hasDiscount", "discountInfo",
-                            "dealInfo", "cpc"):
+                            "dealInfo", "cpc", "businessManager"):
                     o[key] = sm.get(key)
                 # tracking issue
                 reason_text = (sm.get("reason") or "") + (sm.get("recommendation") or "")
@@ -3342,7 +3499,7 @@ def _build_offers_payload(
                             "publisherCount", "successRate", "publisherCountJune",
                             "successRateJune", "completionRate", "timeline",
                             "bestSubCategoryBsr", "mainCategoryBsr", "subcategoryBsr",
-                            "backendMatchStatus"):
+                            "backendMatchStatus", "businessManager"):
                     o[key] = None
                 o["hasDiscount"] = 0
                 o["discountInfo"] = None
@@ -3364,18 +3521,41 @@ def _build_offers_payload(
 
             offers.append(o)
 
-        # ?? top ASINs per merchant (aggregated from products view) ??
-        asin_rows = fetch_all(
-            conn,
-            """
-            SELECT merchantId,
-                   GROUP_CONCAT(DISTINCT asin ORDER BY asin SEPARATOR ',') AS topAsins,
-                   COUNT(DISTINCT asin) AS asinCount
-            FROM cnpscy_oi_offer_products
-            GROUP BY merchantId
-            """,
-        )
-        asin_map: dict[str, dict] = {r["merchantId"]: r for r in asin_rows}
+        # Reuse cached ASIN summaries and query only newly visible merchants.
+        # A full GROUP BY on the product view can exceed the remote MySQL timeout.
+        asin_map: dict[str, dict] = {}
+        for cached_offer in (previous_offers_cache or {}).get("offers", []):
+            cached_mid = str(cached_offer.get("merchantId") or "").strip()
+            cached_asins = cached_offer.get("topAsins") or []
+            if not cached_mid:
+                continue
+            if isinstance(cached_asins, list):
+                cached_asins = ",".join(str(value).strip() for value in cached_asins if str(value).strip())
+            asin_map[cached_mid] = {
+                "merchantId": cached_mid,
+                "topAsins": cached_asins,
+                "asinCount": cached_offer.get("asinCount"),
+            }
+        missing_asin_ids = [
+            str(offer.get("merchantId") or "").strip()
+            for offer in core_offers
+            if str(offer.get("merchantId") or "").strip() not in asin_map
+        ]
+        for batch in chunks(missing_asin_ids, 100):
+            placeholders = ", ".join(["%s"] * len(batch))
+            asin_rows = fetch_all(
+                conn,
+                f"""
+                SELECT merchantId,
+                       GROUP_CONCAT(DISTINCT asin ORDER BY asin SEPARATOR ',') AS topAsins,
+                       COUNT(DISTINCT asin) AS asinCount
+                FROM cnpscy_oi_offer_products
+                WHERE merchantId IN ({placeholders})
+                GROUP BY merchantId
+                """,
+                tuple(batch),
+            )
+            asin_map.update({str(row["merchantId"]): row for row in asin_rows})
 
         # ?? payment records (?? 24 ??????????? /tmp) ??
         payment_records_raw = fetch_all(
@@ -3629,8 +3809,6 @@ def _build_offers_payload(
             ("payout", "Payout"),
             ("affiliatePayout", "Affiliate Payout"),
         ]
-        sheet_headers = [col_name for _, col_name in SHEET_COLUMNS]
-
         def _fmt(val: Any) -> str:
             if val is None:
                 return ""
@@ -3643,13 +3821,16 @@ def _build_offers_payload(
             tier_offers = [o for o in offers if o.get("tier") == tier_name]
             if not tier_offers:
                 continue
+            tier_sheet_columns = list(SHEET_COLUMNS)
+            if tier_name == TIER1_NAME:
+                tier_sheet_columns.insert(4, ("businessManager", "BD"))
             tier_rows = []
             for o in tier_offers:
-                row = {col_name: _fmt(o.get(field)) for field, col_name in SHEET_COLUMNS}
+                row = {col_name: _fmt(o.get(field)) for field, col_name in tier_sheet_columns}
                 tier_rows.append(row)
             sheets.append({
                 "name": tier_name,
-                "headers": sheet_headers,
+                "headers": [col_name for _, col_name in tier_sheet_columns],
                 "rows": tier_rows,
             })
 
