@@ -94,100 +94,73 @@
           </button>
         </div>
 
-        <button class="language-toggle" id="languageToggle" type="button">Chinese</button>
-
-        <button class="language-toggle auth-logout" id="logoutButton" type="button">Sign out</button>
+        <div class="sidebar-actions" aria-label="Sidebar controls">
+          <button class="language-toggle" id="languageToggle" type="button">Chinese</button>
+          <button class="language-toggle auth-logout" id="logoutButton" type="button">Sign out</button>
+        </div>
 
         <nav class="page-nav" aria-label="Pages">
-          <div class="nav-group dashboard-nav-group">
-            <button class="page-nav-button report-nav active" id="dashboardNav" type="button" aria-expanded="true" aria-controls="dashboardSubnav">
+          <div class="nav-group dashboard-nav-group is-current" data-nav-group="workspace">
+            <button class="page-nav-button nav-group-toggle active" id="dashboardNav" type="button" aria-expanded="true" aria-controls="dashboardSubnav" data-nav-group-toggle>
               <span class="nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>
               </span>
-              <span data-i18n="nav.dashboard">Dashboard</span>
+              <span class="nav-group-copy">
+                <span data-i18n="nav.workspace">Workspace</span>
+                <small data-i18n="nav.workspaceHint">AI tools</small>
+              </span>
+              <span class="nav-group-count" aria-hidden="true">02</span>
               <span class="nav-chevron" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg>
               </span>
             </button>
             <div class="nav-subnav" id="dashboardSubnav" aria-label="Dashboard pages">
-              <button class="page-nav-button" id="chatbotNav" type="button">
-                <span class="nav-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M5 6h14v10H9l-4 3z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>
-                </span>
-                <span data-i18n="nav.chatbot">Chatbot</span>
-              </button>
               <button class="page-nav-button active" id="agentNav" type="button">
                 <span class="nav-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-7 7v2a7 7 0 0 0 7 7 7 7 0 0 0 7-7v-2a7 7 0 0 0-7-7z"/><path d="M9 11h.01M15 11h.01M9 15c1.8 1.2 4.2 1.2 6 0"/><path d="M5 12H3M21 12h-2"/></svg>
                 </span>
                 <span data-i18n="nav.agent">Agent</span>
               </button>
+              <button class="page-nav-button" id="chatbotNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M5 6h14v10H9l-4 3z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>
+                </span>
+                <span data-i18n="nav.chatbot">Chatbot</span>
+              </button>
             </div>
           </div>
-          <button class="page-nav-button" id="paymentsNav" type="button">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 7h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M4 9h16"/><path d="M8 14h4"/></svg>
-            </span>
-            <span data-i18n="nav.payments">Payments</span>
-          </button>
-          <button class="page-nav-button" id="publishersNav" type="button">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-            </span>
-            <span data-i18n="nav.publishers">Publishers</span>
-          </button>
-          <button class="page-nav-button" id="googleAdsNav" type="button">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M8.5 5 3 15.5A3 3 0 0 0 5.6 20h.2a3 3 0 0 0 2.7-1.7L14 7.8"/><path d="m12.2 5 5.5 10.5"/><circle cx="18.3" cy="17" r="3"/></svg>
-            </span>
-            <span data-i18n="nav.googleAds">Google Ads</span>
-          </button>
-          <button class="page-nav-button" id="brandMediaNav" type="button">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M7 15l3-4 3 2 5-7"/><path d="M15 6h3v3"/></svg>
-            </span>
-            <span data-i18n="nav.brandMedia">Brand media</span>
-          </button>
-          <button class="page-nav-button" id="revenueFlowNav" type="button">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 6h5v12H4zM15 6h5v12h-5z"/><path d="M9 9h6M9 15h6"/><path d="m12 7 3 2-3 2M12 13l3 2-3 2"/></svg>
-            </span>
-            <span data-i18n="nav.revenueFlow">Revenue flow</span>
-          </button>
-          <button class="page-nav-button" id="targetNav" type="button">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/><path d="M9 5v14"/><path d="M5 10h14"/></svg>
-            </span>
-            <span data-i18n="nav.targets">Targets</span>
-          </button>
-          <button class="page-nav-button" id="monthlyNewMerchantsNav" type="button">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 2v4M16 2v4M5 9h14"/><path d="M12 12v5M9.5 14.5h5"/></svg>
-            </span>
-            <span data-i18n="nav.monthlyNewMerchants">New merchants</span>
-          </button>
-          <button class="page-nav-button" id="offerListTrackerNav" type="button">
-            <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M7 4h10v3H7z"/><path d="M5 6h14v14H5z"/><path d="m8 12 2 2 4-4"/><path d="M8 17h8"/></svg>
-            </span>
-            <span data-i18n="nav.offerListTracker">Offer List Tracker</span>
-          </button>
-          <div class="nav-group">
-            <button class="page-nav-button report-nav" id="sheetsNav" type="button" aria-expanded="true" aria-controls="reportsSubnav">
+          <div class="nav-group" data-nav-group="merchants">
+            <button class="page-nav-button nav-group-toggle" id="sheetsNav" type="button" aria-expanded="false" aria-controls="reportsSubnav" data-nav-group-toggle>
               <span class="nav-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-4"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M5 20v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               </span>
-              <span data-i18n="nav.reports">Reports</span>
+              <span class="nav-group-copy">
+                <span data-i18n="nav.merchantOperations">Merchants</span>
+                <small data-i18n="nav.merchantOperationsHint">Operations & tiers</small>
+              </span>
+              <span class="nav-group-count" aria-hidden="true">08</span>
               <span class="nav-chevron" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg>
               </span>
             </button>
-            <div class="nav-subnav" id="reportsSubnav" aria-label="Report pages">
-              <button class="page-nav-button" id="categoryNav" type="button">
+            <div class="nav-subnav collapsed" id="reportsSubnav" aria-label="Merchant pages" aria-hidden="true">
+              <button class="page-nav-button" id="targetNav" type="button">
                 <span class="nav-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>
+                  <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/><path d="M9 5v14"/><path d="M5 10h14"/></svg>
                 </span>
-                <span data-i18n="nav.category">Category</span>
+                <span data-i18n="nav.targets">Targets</span>
+              </button>
+              <button class="page-nav-button" id="monthlyNewMerchantsNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 2v4M16 2v4M5 9h14"/><path d="M12 12v5M9.5 14.5h5"/></svg>
+                </span>
+                <span data-i18n="nav.monthlyNewMerchants">New merchants</span>
+              </button>
+              <button class="page-nav-button" id="paymentsNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M4 7h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M4 9h16"/><path d="M8 14h4"/></svg>
+                </span>
+                <span data-i18n="nav.payments">Payments</span>
               </button>
               <button class="page-nav-button tier-nav-button" data-tier-page="Tier 1" type="button">
                 <span class="nav-icon" aria-hidden="true">
@@ -221,25 +194,79 @@
               </button>
             </div>
           </div>
-        </nav>
 
-        <section class="panel source-panel" aria-label="Source status">
-          <div class="panel-title">
-            <span data-i18n="sidebar.status">Status</span>
+          <div class="nav-group" data-nav-group="media">
+            <button class="page-nav-button nav-group-toggle" id="mediaNav" type="button" aria-expanded="false" aria-controls="mediaSubnav" data-nav-group-toggle>
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3C9.6 5.5 8.4 8.5 8.4 12S9.6 18.5 12 21"/></svg>
+              </span>
+              <span class="nav-group-copy">
+                <span data-i18n="nav.mediaIntelligence">Media</span>
+                <small data-i18n="nav.mediaIntelligenceHint">Publisher performance</small>
+              </span>
+              <span class="nav-group-count" aria-hidden="true">03</span>
+              <span class="nav-chevron" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg>
+              </span>
+            </button>
+            <div class="nav-subnav collapsed" id="mediaSubnav" aria-label="Media pages" aria-hidden="true">
+              <button class="page-nav-button" id="publishersNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                </span>
+                <span data-i18n="nav.publishers">Publishers</span>
+              </button>
+              <button class="page-nav-button" id="brandMediaNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M7 15l3-4 3 2 5-7"/><path d="M15 6h3v3"/></svg>
+                </span>
+                <span data-i18n="nav.brandMedia">Brand media</span>
+              </button>
+              <button class="page-nav-button" id="revenueFlowNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M4 6h5v12H4zM15 6h5v12h-5z"/><path d="M9 9h6M9 15h6"/><path d="m12 7 3 2-3 2M12 13l3 2-3 2"/></svg>
+                </span>
+                <span data-i18n="nav.revenueFlow">Revenue flow</span>
+              </button>
+            </div>
           </div>
-          <div class="source-row">
-            <span>YeahPromos</span>
-            <strong data-i18n="source.backendEpc">Backend EPC</strong>
+
+          <div class="nav-group" data-nav-group="products">
+            <button class="page-nav-button nav-group-toggle" id="productNav" type="button" aria-expanded="false" aria-controls="productsSubnav" data-nav-group-toggle>
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4z"/><path d="m4 7 8 4 8-4v10l-8 4-8-4z"/><path d="M12 11v10"/></svg>
+              </span>
+              <span class="nav-group-copy">
+                <span data-i18n="nav.productsOffers">Products & offers</span>
+                <small data-i18n="nav.productsOffersHint">Catalog & acquisition</small>
+              </span>
+              <span class="nav-group-count" aria-hidden="true">03</span>
+              <span class="nav-chevron" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg>
+              </span>
+            </button>
+            <div class="nav-subnav collapsed" id="productsSubnav" aria-label="Product and offer pages" aria-hidden="true">
+              <button class="page-nav-button" id="offerListTrackerNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M7 4h10v3H7z"/><path d="M5 6h14v14H5z"/><path d="m8 12 2 2 4-4"/><path d="M8 17h8"/></svg>
+                </span>
+                <span data-i18n="nav.offerListTracker">Offer List Tracker</span>
+              </button>
+              <button class="page-nav-button" id="googleAdsNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M8.5 5 3 15.5A3 3 0 0 0 5.6 20h.2a3 3 0 0 0 2.7-1.7L14 7.8"/><path d="m12.2 5 5.5 10.5"/><circle cx="18.3" cy="17" r="3"/></svg>
+                </span>
+                <span data-i18n="nav.googleAds">Google Ads</span>
+              </button>
+              <button class="page-nav-button" id="categoryNav" type="button">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>
+                </span>
+                <span data-i18n="nav.category">Category</span>
+              </button>
+            </div>
           </div>
-          <div class="source-row">
-            <span>Levanta</span>
-            <strong data-i18n="source.payments">Feb-Jun payments</strong>
-          </div>
-          <div class="source-row">
-            <span>Sheets</span>
-            <strong data-i18n="source.sheets">Tier logic loaded</strong>
-          </div>
-        </section>
+        </nav>
 
       </aside>
 

@@ -540,8 +540,7 @@
     excludedRecommendationKeys: new Set(),
     recommendationDownloads: {},
     downloadSequence: 0,
-    dashboardOpen: true,
-    reportsOpen: true,
+    navigationOpenGroup: "workspace",
     language: localStorage.getItem("offerLanguage") === "en" ? "en" : "zh",
     deepMode: true,
     deepReport: null,
@@ -1021,6 +1020,14 @@
     zh: {
       "brand.subtitle": "亚马逊分层分析",
       "nav.dashboard": "仪表盘",
+      "nav.workspace": "智能工作台",
+      "nav.workspaceHint": "AI 工具",
+      "nav.merchantOperations": "商家经营",
+      "nav.merchantOperationsHint": "运营与分层",
+      "nav.mediaIntelligence": "媒体洞察",
+      "nav.mediaIntelligenceHint": "媒体表现",
+      "nav.productsOffers": "产品与 Offer",
+      "nav.productsOffersHint": "商品与获客",
       "nav.chatbot": "Chatbot",
       "nav.agent": "Agent",
       "nav.payments": "付款",
@@ -30816,14 +30823,52 @@ var _NUMERIC_COL_PATTERNS = [
     syncOfferTrackerSelectionUi();
   }
 
-  function updateReportsNavState() {
-    if (els.sheetsNav) els.sheetsNav.setAttribute("aria-expanded", state.reportsOpen ? "true" : "false");
-    if (els.reportsSubnav) els.reportsSubnav.classList.toggle("collapsed", !state.reportsOpen);
+  function navigationGroupForPage(page) {
+    if (page === "dashboard" || page === "agent") return "workspace";
+    if (["payments", "sheets", "monthly-new-merchants", "tier"].includes(page)) return "merchants";
+    if (["publishers", "brand-media", "revenue-flow"].includes(page)) return "media";
+    if (["google-ads", "offer-list-tracker", "category"].includes(page)) return "products";
+    return "workspace";
   }
 
-  function updateDashboardNavState() {
-    if (els.dashboardNav) els.dashboardNav.setAttribute("aria-expanded", state.dashboardOpen ? "true" : "false");
-    if (els.dashboardSubnav) els.dashboardSubnav.classList.toggle("collapsed", !state.dashboardOpen);
+  function navigationGroups() {
+    if (!els.primarySidebar) return [];
+    return Array.from(els.primarySidebar.querySelectorAll(".nav-group[data-nav-group]"));
+  }
+
+  function setNavigationGroupOpen(group, open) {
+    if (!group) return;
+    const toggle = group.querySelector("[data-nav-group-toggle]");
+    const subnavId = toggle && toggle.getAttribute("aria-controls");
+    const subnav = subnavId ? document.getElementById(subnavId) : null;
+    group.classList.toggle("is-open", Boolean(open));
+    if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    if (subnav) {
+      subnav.classList.toggle("collapsed", !open);
+      subnav.setAttribute("aria-hidden", open ? "false" : "true");
+    }
+  }
+
+  function syncNavigationGroupState(page = state.page) {
+    const currentGroupName = navigationGroupForPage(page);
+    state.navigationOpenGroup = currentGroupName;
+    navigationGroups().forEach((group) => {
+      const isCurrent = group.dataset.navGroup === currentGroupName;
+      const toggle = group.querySelector("[data-nav-group-toggle]");
+      group.classList.toggle("is-current", isCurrent);
+      if (toggle) toggle.classList.toggle("active", isCurrent);
+      setNavigationGroupOpen(group, isCurrent);
+    });
+  }
+
+  function toggleNavigationGroup(toggle) {
+    const group = toggle && toggle.closest(".nav-group[data-nav-group]");
+    if (!group) return;
+    const shouldOpen = toggle.getAttribute("aria-expanded") !== "true";
+    navigationGroups().forEach((candidate) => {
+      setNavigationGroupOpen(candidate, candidate === group && shouldOpen);
+    });
+    state.navigationOpenGroup = shouldOpen ? group.dataset.navGroup : "";
   }
 
   function pageBelongsToDashboard(page) {
@@ -30980,15 +31025,11 @@ var _NUMERIC_COL_PATTERNS = [
     const isSheets = page === "sheets";
     const isCategory = page === "category";
     const isAgent = page === "agent";
-    const isDashboardPage = pageBelongsToDashboard(page);
     const isMonthlyNewMerchants = page === "monthly-new-merchants";
     const isOfferListTracker = page === "offer-list-tracker";
     const isBrandMedia = page === "brand-media";
     const isRevenueFlow = page === "revenue-flow";
     const isGoogleAds = page === "google-ads";
-    const isReportPage = pageBelongsToReports(page);
-    if (isReportPage) state.reportsOpen = true;
-    if (isDashboardPage) state.dashboardOpen = true;
     document.querySelectorAll(".dashboard-page").forEach((el) => el.classList.toggle("hidden", page !== "dashboard"));
     if (els.dashboardAgentPage) els.dashboardAgentPage.classList.toggle("hidden", !isAgent);
     els.paymentsPage.classList.toggle("hidden", page !== "payments");
@@ -31005,7 +31046,6 @@ var _NUMERIC_COL_PATTERNS = [
     els.sheetPage.classList.toggle("hidden", !isSheets);
     els.categoryPage.classList.toggle("hidden", !isCategory);
     els.tierPage.classList.toggle("hidden", !isTier);
-    els.dashboardNav.classList.toggle("active", isDashboardPage);
     if (els.chatbotNav) els.chatbotNav.classList.toggle("active", page === "dashboard");
     if (els.agentNav) els.agentNav.classList.toggle("active", isAgent);
     els.paymentsNav.classList.toggle("active", page === "payments");
@@ -31013,7 +31053,6 @@ var _NUMERIC_COL_PATTERNS = [
     if (els.googleAdsNav) els.googleAdsNav.classList.toggle("active", isGoogleAds);
     if (els.brandMediaNav) els.brandMediaNav.classList.toggle("active", isBrandMedia);
     if (els.revenueFlowNav) els.revenueFlowNav.classList.toggle("active", isRevenueFlow);
-    els.sheetsNav.classList.toggle("active", isReportPage);
     els.targetNav.classList.toggle("active", isSheets);
     if (els.offerListTrackerNav) els.offerListTrackerNav.classList.toggle("active", isOfferListTracker);
     els.categoryNav.classList.toggle("active", isCategory);
@@ -31021,8 +31060,7 @@ var _NUMERIC_COL_PATTERNS = [
     els.tierNavButtons.forEach((button) => {
       button.classList.toggle("active", isTier && button.dataset.tierPage === state.selectedTierPage);
     });
-    updateReportsNavState();
-    updateDashboardNavState();
+    syncNavigationGroupState(page);
     // 切换页面时自动最小化所有非推理中的深度分析浮窗
     _deepPanels.forEach(function (p) {
       if (!p.minimized && !p.abortController) {
@@ -31082,8 +31120,7 @@ var _NUMERIC_COL_PATTERNS = [
     setPaymentStamp("saved", isoDate(PAYMENT_TODAY));
     renderDashboardCategoryTierPicker();
     syncDashboardCategoryReportControls();
-    updateReportsNavState();
-    updateDashboardNavState();
+    syncNavigationGroupState(state.page);
     switchPage(state.page);
     syncMobileNavigationMode();
     quickPrompts.forEach(({ key, prompt }) => {
@@ -31205,15 +31242,11 @@ var _NUMERIC_COL_PATTERNS = [
     } else if (typeof mobileNavigationMedia.addListener === "function") {
       mobileNavigationMedia.addListener(syncMobileNavigationMode);
     }
-    els.dashboardNav.addEventListener("click", () => {
-      if (!pageBelongsToDashboard(state.page)) {
-        state.dashboardOpen = true;
-        switchPage("agent");
-        return;
-      }
-      state.dashboardOpen = !state.dashboardOpen;
-      updateDashboardNavState();
-    });
+    if (els.primarySidebar) {
+      els.primarySidebar.querySelectorAll("[data-nav-group-toggle]").forEach((toggle) => {
+        toggle.addEventListener("click", () => toggleNavigationGroup(toggle));
+      });
+    }
     if (els.chatbotNav) els.chatbotNav.addEventListener("click", () => switchPage("dashboard"));
     if (els.agentNav) els.agentNav.addEventListener("click", () => switchPage("agent"));
     els.paymentsNav.addEventListener("click", () => switchPage("payments"));
@@ -31224,10 +31257,6 @@ var _NUMERIC_COL_PATTERNS = [
     _bindBrandMediaPageInteractions();
     if (els.revenueFlowNav) els.revenueFlowNav.addEventListener("click", () => switchPage("revenue-flow"));
     _bindRevenueFlowPageInteractions();
-    els.sheetsNav.addEventListener("click", () => {
-      state.reportsOpen = !state.reportsOpen;
-      updateReportsNavState();
-    });
     els.targetNav.addEventListener("click", () => switchPage("sheets"));
     if (els.offerListTrackerNav) {
       els.offerListTrackerNav.addEventListener("click", () => switchPage("offer-list-tracker"));
@@ -32566,6 +32595,7 @@ var _NUMERIC_COL_PATTERNS = [
       parseMonthlyNewMerchantMoney,
       parseMonthlyNewMerchantCommission,
       monthlyNewMerchantImportRows,
+      navigationGroupForPage,
       pageBelongsToReports,
       offerTrackerCommissionRate,
       offerTrackerRevenue,

@@ -9,6 +9,10 @@ const app = fs.readFileSync("public/app.js", "utf8");
 const styles = fs.readFileSync("public/styles.css", "utf8");
 
 assert(html.includes('id="dashboardSubnav"'), "Dashboard must expose a child navigation");
+assert(!html.includes('class="panel source-panel"'), "Sidebar source status card should be removed");
+for (const group of ["workspace", "merchants", "media", "products"]) {
+  assert(html.includes(`data-nav-group="${group}"`), `Sidebar group ${group} is missing`);
+}
 assert(html.includes('id="chatbotNav"'), "Chatbot child navigation is missing");
 assert(html.includes('id="agentNav"'), "Agent child navigation is missing");
 assert(/<button class="page-nav-button active" id="agentNav"/.test(html), "Agent should be the active Dashboard child by default");
@@ -26,9 +30,12 @@ assert(app.includes('switchPage("agent")'), "Agent navigation must route to the 
 assert(app.includes('state.page === "agent"'), "Agent page state must be handled");
 assert(/page:\s*"agent"/.test(app), "Agent should be the default application page");
 assert(
-  /els\.dashboardNav\.addEventListener\("click", \(\) => \{\s*if \(!pageBelongsToDashboard\(state\.page\)\) \{\s*state\.dashboardOpen = true;\s*switchPage\("agent"\);\s*return;\s*\}\s*state\.dashboardOpen = !state\.dashboardOpen;/s.test(app),
-  "Dashboard navigation should open Agent when entered from another page"
+  html.includes('data-nav-group="workspace"')
+    && html.includes('data-nav-group-toggle')
+    && app.includes('toggleNavigationGroup(toggle)'),
+  "Workspace navigation should use the shared accordion behavior"
 );
+assert(app.includes('navigationGroupForPage(page)'), "Page routing should resolve the active navigation group");
 assert(app.includes("switchPage(state.page);"), "Initialization should synchronize the DOM with the default page state");
 assert(app.includes("agentPage: {"), "Agent page needs isolated state");
 assert(app.includes("handleAgentPageSubmit"), "Agent page submit handler is missing");
@@ -54,5 +61,7 @@ assert(styles.includes(".agent-chat-log.agent-chat-log-has-messages .agent-page-
 assert(styles.includes(".agent-page-chat-panel .message.assistant"), "Agent assistant surface override is missing");
 assert(styles.includes(".agent-page-chat-panel {\n    height: clamp(520px, calc(100dvh - 260px), 680px);"), "Agent mobile chat panel height constraint is missing");
 assert(styles.includes("@media (prefers-reduced-motion: reduce)"), "Reduced-motion coverage is missing");
+assert(styles.includes("@keyframes navGroupEnter"), "Navigation entry motion is missing");
+assert(styles.includes("max-height: 520px"), "Accordion expansion transition is missing");
 
 console.log("PASS: Dashboard Chatbot/Agent page contract");

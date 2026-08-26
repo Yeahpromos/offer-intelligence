@@ -287,36 +287,31 @@ assert(indexHtml.includes('id="monthlyNewMerchantImportPaste"'), "the import sho
 assert(indexHtml.includes('id="monthlyNewMerchantForm"'), "the add and edit drawer form should exist");
 assert(!indexHtml.includes('id="monthlyNewMerchantsRefresh"'), "database auto-discovery refresh should be removed");
 
-const publishersNavIndex = indexHtml.indexOf('id="publishersNav"');
 const monthlyNewMerchantsNavIndex = indexHtml.indexOf('id="monthlyNewMerchantsNav"');
 const targetsNavIndex = indexHtml.indexOf('id="targetNav"');
-const offerListTrackerNavIndex = indexHtml.indexOf('id="offerListTrackerNav"');
 const reportsNavIndex = indexHtml.indexOf('id="sheetsNav"');
 assert(
-  publishersNavIndex < targetsNavIndex
-    && targetsNavIndex < monthlyNewMerchantsNavIndex
-    && monthlyNewMerchantsNavIndex < offerListTrackerNavIndex
-    && offerListTrackerNavIndex < reportsNavIndex,
-  "monthly new merchants should be a top-level page directly after Targets"
+  reportsNavIndex < targetsNavIndex && targetsNavIndex < monthlyNewMerchantsNavIndex,
+  "monthly new merchants should follow Targets inside the Merchants group"
 );
-const reportsSubnavMatch = indexHtml.match(/<div class="nav-subnav" id="reportsSubnav"[\s\S]*?<\/div>/);
+const reportsSubnavMatch = indexHtml.match(/<div class="nav-subnav[^\"]*" id="reportsSubnav"[\s\S]*?<\/div>/);
 assert(
-  reportsSubnavMatch && !reportsSubnavMatch[0].includes('id="monthlyNewMerchantsNav"'),
-  "monthly new merchants should not be nested inside the Reports submenu"
+  reportsSubnavMatch && reportsSubnavMatch[0].includes('id="monthlyNewMerchantsNav"'),
+  "monthly new merchants should be nested inside the Merchants submenu"
 );
 assert(
-  reportsSubnavMatch && !reportsSubnavMatch[0].includes('id="targetNav"'),
-  "Targets should not be nested inside the Reports submenu"
+  reportsSubnavMatch && reportsSubnavMatch[0].includes('id="targetNav"'),
+  "Targets should be nested inside the Merchants submenu"
 );
 assertEqual(
   [
-    hooks.pageBelongsToReports("sheets"),
-    hooks.pageBelongsToReports("category"),
-    hooks.pageBelongsToReports("tier"),
-    hooks.pageBelongsToReports("monthly-new-merchants")
+    hooks.navigationGroupForPage("sheets"),
+    hooks.navigationGroupForPage("monthly-new-merchants"),
+    hooks.navigationGroupForPage("payments"),
+    hooks.navigationGroupForPage("category")
   ],
-  [false, true, true, false],
-  "Targets and monthly new merchants should not activate the Reports parent"
+  ["merchants", "merchants", "merchants", "products"],
+  "Merchant operations and product reporting should activate their new parent groups"
 );
 
 const formMatch = indexHtml.match(/<form id="monthlyNewMerchantForm">([\s\S]*?)<\/form>/);

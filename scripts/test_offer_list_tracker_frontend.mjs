@@ -388,10 +388,11 @@ assert(workbookText.includes('r="A2" s="4"'), "the first data row should use the
 assert(workbookText.includes('r="A3" s="7"'), "the second data row should use the second configured background style");
 
 const html = fs.readFileSync("public/index.html", "utf8");
-const targetIndex = html.indexOf('id="targetNav"');
 const trackerIndex = html.indexOf('id="offerListTrackerNav"');
-const reportsIndex = html.indexOf('id="sheetsNav"');
-assert(targetIndex >= 0 && trackerIndex > targetIndex && reportsIndex > trackerIndex, "Targets and Offer List Tracker should be top-level items before Reports");
+const productsIndex = html.indexOf('data-nav-group="products"');
+const productsSubnavMatch = html.match(/<div class="nav-subnav[^\"]*" id="productsSubnav"[\s\S]*?<\/div>/);
+assert(productsIndex >= 0 && trackerIndex > productsIndex, "Offer List Tracker should appear inside Products & offers");
+assert(productsSubnavMatch && productsSubnavMatch[0].includes('id="offerListTrackerNav"'), "Products & offers should expose Offer List Tracker as a child page");
 assert(html.includes('id="offerListTrackerPage"'), "Offer List Tracker page should exist");
 assert(html.includes('id="offerTrackerExportSelected"'), "selected-row workbook export should exist");
 assert(html.includes('data-i18n="offerTracker.commissionRange">AFF Commission range</span>'), "commission filters should be labeled as AFF Commission");
