@@ -7,7 +7,7 @@
     <link rel="icon" href="data:," />
     <link rel="preload" href="./fonts/plus-jakarta-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./fonts/plus-jakarta-sans-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="./styles.css?v=20260826-agent-memory1" />
+    <link rel="stylesheet" href="./styles.css?v=20260827-google-ads-chart-pan" />
   </head>
   <body class="auth-pending app-loading">
     <section class="auth-shell" id="authShell" aria-labelledby="authTitle">
@@ -1259,14 +1259,14 @@
               <div>
                 <span class="google-ads-section-index">01</span>
                 <h3 id="googleAdsTrendTitle" data-i18n="googleAds.trendTitle">Spend and backend Revenue by day</h3>
-                <p data-i18n="googleAds.trendSubtitle">Google spend is shown as bars; YeahPromos Amazon Revenue is shown as a line.</p>
+                <p data-i18n="googleAds.trendSubtitle">Google spend is shown as bars; YeahPromos Amazon Revenue is shown as a line. Drag horizontally to browse the full date range.</p>
               </div>
               <div class="google-ads-legend" aria-label="Chart legend">
                 <span><i class="google-ads-legend-spend"></i><span data-i18n="googleAds.spend">Spend</span></span>
                 <span><i class="google-ads-legend-revenue"></i><span data-i18n="googleAds.backendRevenue">Backend Revenue</span></span>
               </div>
             </div>
-            <div class="google-ads-chart" id="googleAdsChart" role="img" aria-live="polite"></div>
+            <div class="google-ads-chart" id="googleAdsChart" role="region" tabindex="0" aria-live="polite" aria-label="Daily spend and backend Revenue chart. Drag horizontally to browse the full date range."></div>
           </section>
 
           <section class="panel google-ads-table-panel" aria-labelledby="googleAdsMerchantTitle">
@@ -2133,7 +2133,7 @@
     <script src="./tier2_recommendation_rules.js?v=20260626-tier2pub1"></script>
     <script src="./agent_memory_state.js?v=20260826-agent-memory1"></script>
     <script async src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-    <script src="./auth.js?v=20260826-agent-memory1"></script>
+    <script src="./auth.js?v=20260827-google-ads-chart-pan"></script>
     <script>
       // Dashboard 深浅主题切换：默认浅色；状态存 localStorage（键 oi-dash-theme），
       // "dark" = 深色，其他/无值 = 浅色（body 挂 data-dash-theme="light"，仅 dashboard 页生效）。

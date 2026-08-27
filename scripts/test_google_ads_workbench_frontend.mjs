@@ -42,6 +42,9 @@ if (!productsSubnavMatch || productsSubnavMatch[0].includes('id="googleAdsNav"')
   'currentGroupName === "google-ads"',
   '/api/ui/db/google-ads-workbench?',
   'function _googleAdsRenderChart',
+  'function _bindGoogleAdsChartDrag',
+  'setPointerCapture',
+  'chart.scrollLeft',
   'function _googleAdsRenderMerchantTable',
   'function _googleAdsLoad',
   'renderGoogleAdsPage();',
@@ -52,6 +55,10 @@ if (!productsSubnavMatch || productsSubnavMatch[0].includes('id="googleAdsNav"')
   ".google-ads-page",
   ".google-ads-kpis",
   ".google-ads-chart",
+  ".google-ads-chart-track",
+  ".google-ads-chart.is-dragging",
+  "touch-action: pan-y",
+  "width: auto",
   ".google-ads-table-wrap",
   "@media (max-width: 560px)"
 ].forEach((value) => assertIncludes(styles, value, "Google Ads workbench styles"));

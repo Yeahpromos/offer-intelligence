@@ -290,7 +290,7 @@
 .google-ads-panel-heading h3 {
   margin: 0;
   color: var(--google-ink);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: -.015em;
 }
@@ -298,7 +298,8 @@
 .google-ads-panel-heading p {
   margin: 5px 0 0;
   color: var(--google-muted);
-  font-size: 10px;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .google-ads-legend {
@@ -306,7 +307,7 @@
   align-items: center;
   gap: 13px;
   color: var(--google-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -328,31 +329,60 @@
 .google-ads-legend-revenue { background: var(--google-cyan); }
 
 .google-ads-chart {
-  min-height: 292px;
+  min-height: 320px;
   overflow-x: auto;
+  overflow-y: hidden;
   border-top: 1px solid #edf2f4;
+  cursor: grab;
+  overscroll-behavior-x: contain;
+  scrollbar-color: #b8cbd6 transparent;
+  scrollbar-width: thin;
+  touch-action: pan-y;
+}
+
+.google-ads-chart:focus-visible {
+  outline: 2px solid rgba(23, 105, 210, .52);
+  outline-offset: 3px;
+}
+
+.google-ads-chart.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.google-ads-chart.did-drag .google-ads-chart-svg {
+  pointer-events: none;
+}
+
+.google-ads-chart-track {
+  display: flex;
+  min-width: 100%;
+  min-height: 320px;
+  align-items: flex-start;
+  justify-content: center;
 }
 
 .google-ads-chart-svg {
   display: block;
-  min-width: 760px;
-  width: 100%;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
   height: auto;
 }
 
 .google-ads-chart-grid { stroke: #e9eff2; stroke-width: 1; }
-.google-ads-chart-axis { fill: #738692; font: 9px "Plus Jakarta Sans", sans-serif; }
+.google-ads-chart-axis { fill: #738692; font: 11px "Plus Jakarta Sans", sans-serif; }
 .google-ads-chart-bar { fill: rgba(23, 105, 210, .5); }
 .google-ads-chart-bar:hover { fill: rgba(23, 105, 210, .78); }
-.google-ads-chart-line { fill: none; stroke: var(--google-cyan); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
-.google-ads-chart-point { fill: #fff; stroke: var(--google-cyan); stroke-width: 1.7; }
+.google-ads-chart-line { fill: none; stroke: var(--google-cyan); stroke-width: 2.8; stroke-linejoin: round; stroke-linecap: round; }
+.google-ads-chart-point { fill: #fff; stroke: var(--google-cyan); stroke-width: 2; }
 
 .google-ads-chart-empty {
   display: grid;
-  min-height: 292px;
+  min-height: 320px;
   place-items: center;
   color: var(--google-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .google-ads-table-wrap {
@@ -364,7 +394,7 @@
 
 .google-ads-table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 1240px;
   border-collapse: collapse;
   table-layout: auto;
 }
@@ -373,11 +403,11 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 9px 10px;
+  padding: 11px 12px;
   border-bottom: 1px solid var(--google-line);
   background: #f5f8fa;
   color: #5e7482;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .045em;
   text-align: left;
@@ -386,10 +416,10 @@
 }
 
 .google-ads-table td {
-  padding: 10px;
+  padding: 12px;
   border-bottom: 1px solid #edf2f4;
   color: #294454;
-  font-size: 10px;
+  font-size: 12px;
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -403,18 +433,18 @@
   display: block;
 }
 
-.google-ads-merchant-cell strong { color: var(--google-ink); font-size: 11px; }
-.google-ads-merchant-cell small { margin-top: 2px; color: var(--google-muted); font-size: 8px; }
+.google-ads-merchant-cell strong { color: var(--google-ink); font-size: 13px; }
+.google-ads-merchant-cell small { margin-top: 3px; color: var(--google-muted); font-size: 10px; }
 
 .google-ads-match-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 7px;
+  padding: 5px 8px;
   border-radius: 999px;
   background: rgba(24, 165, 111, .11);
   color: #137650;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .03em;
   text-transform: uppercase;
@@ -435,7 +465,7 @@
 
 .google-ads-count {
   color: var(--google-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -465,14 +495,14 @@
 .google-ads-unmatched-row strong {
   overflow: hidden;
   color: var(--google-ink);
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .google-ads-unmatched-row span {
   color: var(--google-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -485,7 +515,7 @@
 
 .google-ads-method-panel dt {
   color: var(--google-muted);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -494,7 +524,7 @@
 .google-ads-method-panel dd {
   margin: 0;
   color: #294454;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -502,7 +532,7 @@
 .google-ads-empty-block {
   padding: 26px !important;
   color: var(--google-muted) !important;
-  font-size: 10px !important;
+  font-size: 12px !important;
   text-align: center !important;
 }
 

@@ -201,7 +201,7 @@ const app = fs.readFileSync("public/app.js", "utf8");
 const ci = fs.readFileSync(".github/workflows/ci.yml", "utf8");
 assertTruthy(html.includes("agent_memory_state.js?v=20260826-agent-memory1"), "index should load memory module");
 assertTruthy(html.indexOf("agent_memory_state.js") < html.indexOf("auth.js"), "memory module must load before auth bootstrap");
-assertTruthy(auth.includes("app.js?v=20260826-agent-memory1"), "auth should bust the app cache");
+assertTruthy(auth.includes("app.js?v=20260827-google-ads-chart-pan"), "auth should bust the app cache");
 assertTruthy(auth.includes("AGENT_MEMORY_STATE.clear(localStorage)"), "logout should clear Agent memory");
 assertTruthy(app.includes("memoryText: agentPageMemoryText(language)"), "Agent page should send structured memory");
 assertTruthy(ci.includes("node scripts/test_agent_memory_state.mjs"), "CI should run Agent memory tests");

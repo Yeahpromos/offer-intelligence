@@ -1388,7 +1388,8 @@
       "googleAds.refresh": "刷新",
       "googleAds.joinNote": "按商家 × 日期保守连接；未匹配花费会继续单独展示。",
       "googleAds.trendTitle": "每日花费与后台 Revenue",
-      "googleAds.trendSubtitle": "柱形表示 Google 花费，折线表示 YeahPromos Amazon Revenue。",
+      "googleAds.trendSubtitle": "柱形表示 Google 花费，折线表示 YeahPromos Amazon Revenue；拖动图表左右查看完整日期范围。",
+      "googleAds.trendDragHint": "拖动图表左右查看完整日期范围。",
       "googleAds.spend": "广告花费",
       "googleAds.backendRevenue": "后台 Revenue",
       "googleAds.merchantTitle": "商家连接表",
@@ -22904,8 +22905,82 @@ var _NUMERIC_COL_PATTERNS = [
     }).join("");
   }
 
+  function _bindGoogleAdsChartDrag() {
+    var chart = els.googleAdsChart;
+    if (!chart || chart.dataset.horizontalDragBound === "true") return;
+    chart.dataset.horizontalDragBound = "true";
+    var pan = null;
+
+    function stopPan(event) {
+      if (!pan || (event && event.pointerId !== undefined && event.pointerId !== pan.pointerId)) return;
+      var activePan = pan;
+      pan = null;
+      chart.classList.remove("is-dragging");
+      if (event && chart.releasePointerCapture && chart.hasPointerCapture && chart.hasPointerCapture(event.pointerId)) {
+        chart.releasePointerCapture(event.pointerId);
+      }
+      if (activePan.moved) chart.classList.add("did-drag");
+      window.setTimeout(function () { chart.classList.remove("did-drag"); }, 0);
+    }
+
+    chart.addEventListener("pointerdown", function (event) {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (event.target && event.target.closest && event.target.closest("button, input, a")) return;
+      pan = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        scrollLeft: chart.scrollLeft,
+        moved: false,
+        active: false
+      };
+    });
+
+    chart.addEventListener("pointermove", function (event) {
+      if (!pan || event.pointerId !== pan.pointerId) return;
+      var deltaX = event.clientX - pan.startX;
+      var deltaY = event.clientY - pan.startY;
+      if (!pan.active) {
+        if (Math.abs(deltaX) < 4 && Math.abs(deltaY) < 4) return;
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+          pan = null;
+          return;
+        }
+        pan.active = true;
+        chart.classList.add("is-dragging");
+        if (chart.setPointerCapture) chart.setPointerCapture(event.pointerId);
+      }
+      if (Math.abs(deltaX) > 2) pan.moved = true;
+      chart.scrollLeft = pan.scrollLeft - deltaX;
+      event.preventDefault();
+    });
+
+    chart.addEventListener("pointerup", stopPan);
+    chart.addEventListener("pointercancel", stopPan);
+    chart.addEventListener("lostpointercapture", stopPan);
+    window.addEventListener("pointerup", stopPan);
+    chart.addEventListener("wheel", function (event) {
+      var delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY)
+        ? event.deltaX
+        : (event.shiftKey ? event.deltaY : 0);
+      if (!delta) return;
+      event.preventDefault();
+      chart.scrollLeft += delta;
+    }, { passive: false });
+    chart.addEventListener("keydown", function (event) {
+      if (event.key === "ArrowLeft") {
+        chart.scrollLeft -= 96;
+        event.preventDefault();
+      } else if (event.key === "ArrowRight") {
+        chart.scrollLeft += 96;
+        event.preventDefault();
+      }
+    });
+  }
+
   function _googleAdsRenderChart(payload) {
     if (!els.googleAdsChart) return;
+    _bindGoogleAdsChartDrag();
     var rows = payload && Array.isArray(payload.daily) ? payload.daily : [];
     var hasData = rows.some(function (row) {
       return Number(row.spend || 0) > 0 || Number(row.revenue || 0) > 0;
@@ -22916,13 +22991,17 @@ var _NUMERIC_COL_PATTERNS = [
       els.googleAdsChart.setAttribute("aria-label", t("googleAds.empty", "No data is available for this date range."));
       return;
     }
-    var width = Math.max(760, rows.length * 16 + 94);
-    var height = 292;
-    var margin = { top: 20, right: 44, bottom: 35, left: 50 };
+    // Keep a stable slot for every day. The previous width: 100% rule stretched
+    // short ranges and compressed long ranges, making the visual density change
+    // dramatically between 30D and 60D views.
+    var height = 320;
+    var margin = { top: 24, right: 62, bottom: 44, left: 64 };
+    var daySlot = 32;
+    var width = Math.max(1080, rows.length * daySlot + margin.left + margin.right);
     var innerWidth = width - margin.left - margin.right;
     var innerHeight = height - margin.top - margin.bottom;
     var step = innerWidth / rows.length;
-    var barWidth = Math.max(3, Math.min(10, step * .58));
+    var barWidth = Math.max(8, Math.min(18, step * .56));
     var maxSpend = Math.max.apply(null, rows.map(function (row) { return Number(row.spend || 0); })) || 1;
     var maxRevenue = Math.max.apply(null, rows.map(function (row) { return Number(row.revenue || 0); })) || 1;
     var grid = [0, .25, .5, .75, 1].map(function (ratio) {
@@ -22969,11 +23048,14 @@ var _NUMERIC_COL_PATTERNS = [
       return '<text class="google-ads-chart-axis" x="' + x.toFixed(2) + '" y="' + (height - 12) +
         '" text-anchor="middle">' + escapeHtml(String(row.date || "").slice(5)) + '</text>';
     }).join("");
-    els.googleAdsChart.innerHTML = '<svg class="google-ads-chart-svg" viewBox="0 0 ' + width + " " + height +
+    var chartLabel = t("googleAds.trendTitle", "Spend and backend Revenue by day") + ". " +
+      t("googleAds.trendDragHint", "Drag horizontally to browse the full date range.");
+    els.googleAdsChart.innerHTML = '<div class="google-ads-chart-track" style="width:' + width + 'px">' +
+      '<svg class="google-ads-chart-svg" viewBox="0 0 ' + width + " " + height +
       '" width="' + width + '" height="' + height + '" role="img" aria-label="' +
-      escapeHtml(t("googleAds.trendTitle", "Spend and backend Revenue by day")) + '">' +
-      grid + bars + '<path class="google-ads-chart-line" d="' + line + '"></path>' + pointMarkup + xLabels + '</svg>';
-    els.googleAdsChart.setAttribute("aria-label", t("googleAds.trendTitle", "Spend and backend Revenue by day"));
+      escapeHtml(chartLabel) + '">' +
+      grid + bars + '<path class="google-ads-chart-line" d="' + line + '"></path>' + pointMarkup + xLabels + '</svg></div>';
+    els.googleAdsChart.setAttribute("aria-label", chartLabel);
   }
 
   function _googleAdsRenderMerchantTable(payload) {

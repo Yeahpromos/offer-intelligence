@@ -1,5 +1,5 @@
 (function () {
-  const APP_SCRIPT = "./app.js?v=20260826-agent-memory1";
+  const APP_SCRIPT = "./app.js?v=20260827-google-ads-chart-pan";
   const AUTH_READY_CLASS = "auth-ready";
   const reduceMotionQuery = "(prefers-reduced-motion: reduce)";
 

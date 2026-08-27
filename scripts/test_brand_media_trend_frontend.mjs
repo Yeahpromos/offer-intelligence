@@ -570,8 +570,8 @@ assertEqual(
 
 const indexHtml = fs.readFileSync("public/index.html", "utf8");
 const authSource = fs.readFileSync("public/auth.js", "utf8");
-if (!indexHtml.includes("styles.css?v=20260826-agent-memory1") ||
-    !authSource.includes("app.js?v=20260826-agent-memory1")) {
+if (!indexHtml.includes("styles.css?v=20260827-google-ads-chart-pan") ||
+    !authSource.includes("app.js?v=20260827-google-ads-chart-pan")) {
   throw new Error("应用资源应使用当前版本缓存标识");
 }
 [
