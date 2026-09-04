@@ -7,6 +7,7 @@ import { createCopilotNodeHandler } from "@copilotkit/runtime/v2/node";
 const SESSION_COOKIE = "oi_session";
 const RUNTIME_BASE_PATH = "/api/copilotkit";
 const AGUI_PATH = "/api/chat/agui";
+const VALID_ACCESS_LEVELS = new Set([0, 1, 2]);
 
 process.env.COPILOTKIT_TELEMETRY_DISABLED = "1";
 
@@ -35,7 +36,9 @@ function cookieValue(header, name) {
 }
 
 export function validateSessionCookie(request, env = process.env) {
-  if (!enabled(env.OI_AUTH_ENABLED, true)) return true;
+  if (!enabled(env.OI_AUTH_ENABLED, true)) {
+    return String(env.VERCEL_ENV || "").trim().toLowerCase() !== "production";
+  }
   const secret = String(env.OI_SESSION_SECRET || "").trim();
   if (!secret) return false;
   const token = cookieValue(request.headers.get("cookie"), SESSION_COOKIE);
@@ -47,10 +50,79 @@ export function validateSessionCookie(request, env = process.env) {
   if (!secureEqual(signature, expected)) return false;
   try {
     const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return decoded?.role === "admin" && Number(decoded?.exp || 0) >= Math.floor(Date.now() / 1000);
+    if (!decoded || Array.isArray(decoded) || typeof decoded !== "object") return false;
+    if (Object.keys(decoded).sort().join(",") !== ["exp", "iat", "sub", "v"].join(",")) return false;
+    const subject = typeof decoded.sub === "string" ? decoded.sub.trim().toLowerCase() : "";
+    return typeof decoded.v === "number"
+      && typeof decoded.exp === "number"
+      && typeof decoded.iat === "number"
+      && decoded.v === 2
+      && subject !== ""
+      && subject === decoded.sub
+      && Number.isInteger(decoded.exp)
+      && decoded.exp > Math.floor(Date.now() / 1000)
+      && Number.isInteger(decoded.iat)
+      && decoded.iat > 0;
   } catch {
     return false;
   }
+}
+
+function authResponse(status, message) {
+  return { ok: false, status, error: message };
+}
+
+function sessionCookieHeader(request, env) {
+  if (!enabled(env.OI_AUTH_ENABLED, true) || !validateSessionCookie(request, env)) return "";
+  const value = cookieValue(request.headers.get("cookie"), SESSION_COOKIE);
+  return value ? `${SESSION_COOKIE}=${value}` : "";
+}
+
+export async function probeAuthSession(request, env = process.env) {
+  if (!enabled(env.OI_AUTH_ENABLED, true)) {
+    if (String(env.VERCEL_ENV || "").trim().toLowerCase() === "production") {
+      return authResponse(503, "Authentication must be enabled in production.");
+    }
+    return { ok: true, user: { level: 0, authDisabled: true } };
+  }
+  if (!String(env.OI_SESSION_SECRET || "").trim()) {
+    return authResponse(503, "Authentication is not configured.");
+  }
+  if (!validateSessionCookie(request, env)) return authResponse(401, "Login is required.");
+  const cookie = sessionCookieHeader(request, env);
+  if (!cookie) return authResponse(401, "Login is required.");
+  let response;
+  try {
+    const url = new URL("/api/auth/session", request.url);
+    response = await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      headers: { accept: "application/json", cookie }
+    });
+  } catch {
+    return authResponse(503, "Authentication service is temporarily unavailable.");
+  }
+  if (response.status === 401) return authResponse(401, "Login is required.");
+  if (response.status === 403) return authResponse(403, "Page access is denied.");
+  if (!response.ok) return authResponse(503, "Authentication service is temporarily unavailable.");
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    return authResponse(503, "Authentication service is temporarily unavailable.");
+  }
+  const level = payload?.user?.level;
+  const username = payload?.user?.username;
+  if (payload?.ok !== true
+    || payload?.authenticated !== true
+    || typeof username !== "string"
+    || !username.trim()
+    || !Number.isInteger(level)
+    || !VALID_ACCESS_LEVELS.has(level)) {
+    return authResponse(503, "Authentication service returned an invalid user.");
+  }
+  if (level === 2) return authResponse(403, "Page access is denied.");
+  return { ok: true, user: payload.user };
 }
 
 export function internalAgentToken(env = process.env) {
@@ -74,13 +146,15 @@ export function createOfferIntelligenceRuntime(env = process.env) {
     agents: ({ request }) => {
       const token = internalAgentToken(env);
       if (!token) throw new Error("OI_COPILOT_INTERNAL_TOKEN or OI_SESSION_SECRET is required");
+      const cookie = sessionCookieHeader(request, env);
       return {
         default: new HttpAgent({
           agentId: "default",
           url: resolveAguiUrl(request, env),
           headers: {
             "X-OI-Copilot-Token": token,
-            "X-OI-Agent-Authority": "python-registry"
+            "X-OI-Agent-Authority": "python-registry",
+            ...(cookie ? { cookie } : {})
           }
         })
       };
@@ -102,10 +176,11 @@ export function createOfferIntelligenceHandler(env = process.env) {
     mode: "multi-route",
     activateChannels: false,
     hooks: {
-      onRequest: ({ request }) => {
-        if (!validateSessionCookie(request, env)) {
-          throw new Response(JSON.stringify({ ok: false, error: "Login is required." }), {
-            status: 401,
+      onRequest: async ({ request }) => {
+        const auth = await probeAuthSession(request, env);
+        if (!auth.ok) {
+          throw new Response(JSON.stringify({ ok: false, error: auth.error }), {
+            status: auth.status,
             headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
           });
         }

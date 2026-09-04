@@ -1,6 +1,8 @@
 import { ref, type Ref } from "vue";
 
 import type { ModernPageName } from "../runtime/contracts";
+import type { AccessLevel } from "../shared/contracts/auth";
+import { canAccessPage, defaultPageForLevel } from "../shared/pageAccess";
 import { navigationGroupForPage, type NavigationLocation } from "./navigation";
 
 export interface PageState {
@@ -25,13 +27,23 @@ function focusElement(element: HTMLElement | null | undefined): void {
   element?.focus({ preventScroll: true });
 }
 
-export function usePageState(initialPage: ModernPageName): PageState {
-  const currentPage = ref<ModernPageName>(initialPage);
-  const openGroup = ref<NavigationLocation | null>(navigationGroupForPage(initialPage));
+export function usePageState(initialPage: ModernPageName, userLevel: AccessLevel = 0): PageState {
+  const fallbackPage = defaultPageForLevel(userLevel);
+  if (!fallbackPage) throw new Error("Page access runtime is unavailable");
+  const safeFallbackPage: ModernPageName = fallbackPage;
+  const resolvedInitialPage = canAccessPage(userLevel, initialPage) ? initialPage : safeFallbackPage;
+  const currentPage = ref<ModernPageName>(resolvedInitialPage);
+  const openGroup = ref<NavigationLocation | null>(navigationGroupForPage(resolvedInitialPage));
   const isCompact = ref(false);
   const isMenuOpen = ref(false);
 
   function setPage(page: ModernPageName): void {
+    if (!canAccessPage(userLevel, page)) {
+      currentPage.value = safeFallbackPage;
+      openGroup.value = navigationGroupForPage(safeFallbackPage);
+      isMenuOpen.value = false;
+      return;
+    }
     currentPage.value = page;
     openGroup.value = navigationGroupForPage(page);
     isMenuOpen.value = false;

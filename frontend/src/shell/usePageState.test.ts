@@ -63,4 +63,12 @@ describe("共享 Shell 页面状态", () => {
     expect(state.handleKeydown(event, [], null)).toBe(true);
     expect(preventDefault).toHaveBeenCalled();
   });
+
+  it("level 2 的非法初始页和后续越权页面都回到 Google Ads", () => {
+    const state = usePageState("agent", 2);
+
+    expect(state.currentPage.value).toBe("google-ads");
+    state.setPage("payments");
+    expect(state.currentPage.value).toBe("google-ads");
+  });
 });

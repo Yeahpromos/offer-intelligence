@@ -51,6 +51,24 @@ describe("apiRequest", () => {
     });
   });
 
+  it("401/403 先派发只含状态的统一认证失败事件", async () => {
+    const events: number[] = [];
+    const listener = (event: Event) => {
+      events.push((event as CustomEvent<{ status: number }>).detail.status);
+      expect((event as CustomEvent).detail).toEqual({ status: events.at(-1) });
+    };
+    window.addEventListener("oi-auth-failure", listener);
+    try {
+      for (const status of [401, 403]) {
+        fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false, error: "private body" }, status));
+        await expect(apiRequest("/api/private")).rejects.toMatchObject({ status });
+      }
+      expect(events).toEqual([401, 403]);
+    } finally {
+      window.removeEventListener("oi-auth-failure", listener);
+    }
+  });
+
   it("HTTP 成功但业务返回 ok:false 时仍抛出受控错误", async () => {
     const payload = { ok: false, errorCode: "upstream_unavailable", error: "数据源暂不可用" };
     fetchMock.mockResolvedValue(jsonResponse(payload));

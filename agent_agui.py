@@ -30,7 +30,7 @@ from chat_agent_http import (
     plan_agent_request,
 )
 from llm_provider import stream_chat
-from auth import _read_json_body, send_json
+from auth import _read_json_body, require_page_access, send_json
 
 
 AGUI_MAX_REQUEST_BYTES = 128 * 1024
@@ -501,6 +501,8 @@ def handle_agui_request(target: Any, method: str) -> None:
         return
     if not is_internal_request(target.headers):
         send_json(target, 401, {"ok": False, "error": "Internal Agent authentication is required"})
+        return
+    if not require_page_access(target, "agent"):
         return
     length = int(target.headers.get("Content-Length") or 0)
     if length <= 0 or length > AGUI_MAX_REQUEST_BYTES:

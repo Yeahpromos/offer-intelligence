@@ -70,23 +70,23 @@ def with_patches(**patches):
     return PatchContext()
 
 
-def allow_auth(_target):
+def allow_auth(_target, _page):
     return True
 
 
 def main():
     unauthorized = FakeTarget(body={"action": "create"})
 
-    def deny_auth(target):
+    def deny_auth(target, _page):
         question_http.send_json(target, 401, {"ok": False, "error": "Login is required."})
         return False
 
-    with with_patches(require_auth=deny_auth):
+    with with_patches(require_page_access=deny_auth):
         question_http.handle_chatbot_question_logs(unauthorized, "POST")
     assert_equal(unauthorized.status, 401, "unauthorized status")
 
     options = FakeTarget()
-    with with_patches(require_auth=deny_auth):
+    with with_patches(require_page_access=deny_auth):
         question_http.handle_chatbot_question_logs(options, "OPTIONS")
     assert_equal(options.status, 204, "OPTIONS status")
 
@@ -104,7 +104,7 @@ def main():
         "language": "en",
         "intent": "tier",
     })
-    with with_patches(require_auth=allow_auth, create_question_log=fake_create):
+    with with_patches(require_page_access=allow_auth, create_question_log=fake_create):
         question_http.handle_chatbot_question_logs(create_target, "POST")
     assert_equal(create_target.status, 200, "create HTTP status")
     assert_equal(create_target.json_body()["recordId"], "record-1", "create response")
@@ -120,7 +120,7 @@ def main():
         "sessionId": "550e8400-e29b-41d4-a716-446655440000",
         "status": "success",
     })
-    with with_patches(require_auth=allow_auth, complete_question_log=fake_complete):
+    with with_patches(require_page_access=allow_auth, complete_question_log=fake_complete):
         question_http.handle_chatbot_question_logs(complete_target, "POST")
     assert_equal(complete_target.status, 200, "complete HTTP status")
     assert_equal(calls[-1][0], "complete", "complete dispatch")
@@ -133,13 +133,13 @@ def main():
         for disabled_value in ("0", "false", "off", "no"):
             os.environ["OI_CHATBOT_QUESTION_LOGGING"] = disabled_value
             disabled_create = FakeTarget(body={"action": "create"})
-            with with_patches(require_auth=allow_auth, create_question_log=unexpected_write):
+            with with_patches(require_page_access=allow_auth, create_question_log=unexpected_write):
                 question_http.handle_chatbot_question_logs(disabled_create, "POST")
             assert_equal(disabled_create.status, 200, f"disabled create status ({disabled_value})")
             assert_equal(disabled_create.json_body(), {"ok": True, "disabled": True}, f"disabled create response ({disabled_value})")
 
             disabled_complete = FakeTarget(body={"action": "complete", "recordId": "record-1"})
-            with with_patches(require_auth=allow_auth, complete_question_log=unexpected_write):
+            with with_patches(require_page_access=allow_auth, complete_question_log=unexpected_write):
                 question_http.handle_chatbot_question_logs(disabled_complete, "POST")
             assert_equal(disabled_complete.status, 200, f"disabled complete status ({disabled_value})")
             assert_equal(disabled_complete.json_body(), {"ok": True, "disabled": True}, f"disabled complete response ({disabled_value})")
@@ -151,22 +151,22 @@ def main():
 
     malformed = FakeTarget(body=None, content_length=5)
     malformed.rfile = BytesIO(b"{bad}")
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         question_http.handle_chatbot_question_logs(malformed, "POST")
     assert_equal(malformed.status, 400, "malformed JSON status")
 
     empty = FakeTarget()
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         question_http.handle_chatbot_question_logs(empty, "POST")
     assert_equal(empty.status, 400, "empty body status")
 
     oversized = FakeTarget(body=None, content_length=20_481)
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         question_http.handle_chatbot_question_logs(oversized, "POST")
     assert_equal(oversized.status, 400, "oversized body status")
 
     invalid_action = FakeTarget(body={"action": "delete"})
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         question_http.handle_chatbot_question_logs(invalid_action, "POST")
     assert_equal(invalid_action.status, 400, "invalid action status")
 
@@ -174,7 +174,7 @@ def main():
         raise QuestionLogNotFoundError("missing")
 
     missing = FakeTarget(body={"action": "complete"})
-    with with_patches(require_auth=allow_auth, complete_question_log=missing_complete):
+    with with_patches(require_page_access=allow_auth, complete_question_log=missing_complete):
         question_http.handle_chatbot_question_logs(missing, "POST")
     assert_equal(missing.status, 404, "missing record status")
 
@@ -192,7 +192,7 @@ def main():
     for export_format in ("csv", "jsonl"):
         export_target = FakeTarget(path=f"/api/chat/stream?operation=questions&format={export_format}")
         with with_patches(
-            require_auth=allow_auth,
+            require_page_access=allow_auth,
             fetch_question_logs=fake_fetch,
             render_question_log_export=fake_render,
         ):
@@ -205,7 +205,7 @@ def main():
         assert_equal(export_target.header("Content-Length"), str(len(b"file-body")), f"{export_format} length")
 
     invalid_format = FakeTarget(path="/api/chat/stream?operation=questions&format=xlsx")
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         question_http.handle_chatbot_question_logs(invalid_format, "GET")
     assert_equal(invalid_format.status, 400, "invalid export format")
 

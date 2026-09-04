@@ -1,4 +1,5 @@
 import type { UiLanguage } from "../shared/i18n";
+import type { AuthUser } from "../shared/contracts/auth";
 
 export const MODERN_PAGE_NAMES = [
   "offer-list-tracker",
@@ -19,6 +20,7 @@ export type ModernPageName = (typeof MODERN_PAGE_NAMES)[number];
 export type { UiLanguage } from "../shared/i18n";
 
 export interface AppBootstrapData {
+  readonly user: AuthUser;
   readonly chatbotData: unknown;
   readonly sheetReportData: unknown;
   readonly productKeywords: unknown;

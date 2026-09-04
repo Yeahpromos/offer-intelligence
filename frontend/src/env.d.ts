@@ -2,6 +2,7 @@
 
 import type { Component } from "vue";
 import type { ModernAppApi, ModernPageName, UiLanguage } from "./runtime/contracts";
+import type { PageAccessRuntime } from "./shared/pageAccess";
 
 export interface CopilotKitRuntimeConfig {
   /** Server-issued production default; false disables the CopilotKit transport. */
@@ -40,6 +41,7 @@ declare global {
     OI_COPILOTKIT_AGENT_COMPONENT?: Component;
     OI_VUE_RUNTIME: typeof import("vue");
     OI_MODERN_APP: ModernAppApi;
+    OI_PAGE_ACCESS?: PageAccessRuntime;
   }
 }
 

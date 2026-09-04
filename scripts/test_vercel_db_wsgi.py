@@ -59,11 +59,15 @@ def main():
     env_keys = (
         "OFFER_DB_API_TOKEN",
         "OI_AUTH_ENABLED",
-        "OI_ADMIN_PASSWORD",
-        "OI_ADMIN_PASSWORD_HASH",
         "OI_SESSION_SECRET",
+        "VERCEL_ENV",
+        "OFFER_DB_HOST",
+        "OFFER_DB_NAME",
+        "OFFER_DB_USER",
+        "OFFER_DB_PASSWORD",
     )
     old_env = {key: os.environ.get(key) for key in env_keys}
+    old_user_lookup = auth.user_record_by_username
     os.environ["OFFER_DB_API_TOKEN"] = "unit-test-token"
     os.environ["OI_AUTH_ENABLED"] = "0"
     try:
@@ -426,9 +430,21 @@ def main():
         )
 
         os.environ["OI_AUTH_ENABLED"] = "1"
-        os.environ["OI_ADMIN_PASSWORD"] = "unit-test-password"
-        os.environ.pop("OI_ADMIN_PASSWORD_HASH", None)
         os.environ["OI_SESSION_SECRET"] = "unit-test-session-secret"
+        os.environ["VERCEL_ENV"] = "preview"
+        os.environ["OFFER_DB_HOST"] = "db.example.test"
+        os.environ["OFFER_DB_NAME"] = "offer_intelligence"
+        os.environ["OFFER_DB_USER"] = "readonly"
+        os.environ["OFFER_DB_PASSWORD"] = os.urandom(18).hex()
+        auth.user_record_by_username = lambda _username: {
+            "id": 1,
+            "username": "admin",
+            "display_name": "Test User",
+            "email": "admin@example.test",
+            "password_hash": auth.make_password_hash(os.urandom(18).hex(), iterations=1_000, salt="vercel-db-salt"),
+            "level": 0,
+            "is_active": 1,
+        }
 
         ui_unauthorized = request(module.app, "ui-keywords", token="")
         assert_equal(ui_unauthorized["status"], 401, "missing UI session response code")
@@ -453,6 +469,7 @@ def main():
 
         print("Vercel DB WSGI route checks passed")
     finally:
+        auth.user_record_by_username = old_user_lookup
         for key, value in old_env.items():
             if value is None:
                 os.environ.pop(key, None)

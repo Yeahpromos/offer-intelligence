@@ -8,12 +8,12 @@ from auth import make_password_hash
 
 
 def main() -> int:
-    password = getpass.getpass("Admin password: ")
-    confirm = getpass.getpass("Confirm password: ")
+    password = getpass.getpass("User password: ")
+    confirm = getpass.getpass("Confirm user password: ")
     if password != confirm:
         raise SystemExit("Passwords do not match")
     if len(password) < 12:
-        raise SystemExit("Use at least 12 characters for the admin password")
+        raise SystemExit("Use at least 12 characters for the user password")
     print(make_password_hash(password))
     return 0
 

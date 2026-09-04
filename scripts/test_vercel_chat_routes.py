@@ -106,7 +106,7 @@ def main():
             send_json(target, 200, {"ok": True, "route": "agent_trace", "method": method})
 
         stream_module.handle_agent_trace = trace_writer
-        stream_module.require_auth = lambda target: True
+        stream_module.require_page_access = lambda target, _page: True
         stream_module.handler.do_POST(trace_target)
         if trace_target.status != 200 or response_json(trace_target).get("route") != "agent_trace":
             raise AssertionError("Vercel stream operation=agent_trace did not dispatch")

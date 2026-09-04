@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { notifyAuthFailure } from "../../shared/api/client";
 import { DIAGNOSTIC_LIMIT, normalizeDiagnosticLog, type AgentDiagnosticLog, type AgentDiagnosticTurn } from "./agentDiagnostics";
 const props = defineProps<{ language: "zh" | "en"; turns: AgentDiagnosticTurn[]; running: boolean }>();
 const emit = defineEmits<{ replay: [turn: AgentDiagnosticTurn] }>();
@@ -39,6 +40,7 @@ async function upload() {
   uploading.value = true; notice.value = "";
   try {
     const result = await fetch("/api/chat/stream?operation=agent_debug", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalizeDiagnosticLog(log.value)), signal: AbortSignal.timeout(20000) });
+    if (result.status === 401 || result.status === 403) notifyAuthFailure(result.status);
     const body = await result.json();
     if (!result.ok || body.ok !== true || typeof body.id !== "string") throw new Error("upload");
     uploadedId.value = body.id; notice.value = copy.value.uploaded + body.id;

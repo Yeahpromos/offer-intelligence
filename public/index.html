@@ -20,7 +20,7 @@
         <div class="auth-copy" data-auth-motion>
           <p class="auth-kicker">Internal access</p>
           <h1 id="authTitle">Offer Intelligence control room</h1>
-          <p class="auth-lede">Sign in with the server-held administrator key before loading protected merchant data.</p>
+          <p class="auth-lede">Sign in with your server-issued account before loading protected merchant data.</p>
           <div class="auth-signal-board" aria-label="Protected surfaces">
             <div>
               <span>Static payloads</span>
@@ -32,13 +32,13 @@
             </div>
             <div>
               <span>Tier moves</span>
-              <strong>Admin role</strong>
+              <strong>Access level</strong>
             </div>
           </div>
         </div>
         <form class="auth-panel" id="authForm" data-auth-motion>
           <div class="auth-panel-header">
-            <p>Administrator</p>
+            <p>Workspace account</p>
             <h2>Secure sign in</h2>
           </div>
           <label class="auth-field" for="authUsername">
@@ -59,7 +59,7 @@
       <div class="modern-app-error-card">
         <p class="modern-app-error-kicker">Offer Intelligence</p>
         <h2 id="modernAppErrorTitle">The application could not start.</h2>
-        <p id="modernAppErrorMessage">Refresh the page or contact an administrator.</p>
+        <p id="modernAppErrorMessage">Refresh the page or contact support.</p>
         <button id="modernAppErrorRetry" type="button">Retry</button>
       </div>
     </section>
@@ -105,6 +105,7 @@
     </div>
 
     <script async src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="./page_access.js?v=20260904-user-auth"></script>
     <script src="./auth.js?v=20260904-m7-final"></script>
   </body>
 </html>

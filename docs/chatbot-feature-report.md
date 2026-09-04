@@ -30,7 +30,7 @@ YeahPromos Offer Intelligence 内建了一个对话式 AI 助手，支持中英�
 >
 > Chat Mode 面对商户、品类、Tier、趋势和媒体等不同分析类型的内容与边界，见 [Chat Mode 不同分析类型说明](chat-mode-analysis-types.md)。
 
-> M6/M7 当前 Runtime（2026-09-04）：Chatbot Report/Chat、Deep Window 与独立 Agent 由 Vue session/页面渲染；Agent 进入页面后按需加载 `@copilotkit/vue`，通过真实 `/api/copilotkit` Runtime 和同源 `/api/chat/agui` 使用 Python registry。Node Runtime 使用现有 `oi_session`/`OI_SESSION_SECRET` 鉴权，内部 token 只用于 Python AG-UI 调用；Python 继续拥有 7 工具 registry、参数/结果白名单、plan proof、批次、replan 与 synthesis。M7 已删除旧运行时及 parity/legacy runtime 开关；CopilotKit 不可用时停留在 Vue 页面并使用受控 modern session。
+> M6/M7 当前 Runtime（2026-09-04）：Chatbot Report/Chat、Deep Window 与独立 Agent 由 Vue session/页面渲染；Agent 进入页面后按需加载 `@copilotkit/vue`，通过真实 `/api/copilotkit` Runtime 和同源 `/api/chat/agui` 使用 Python registry。Node Runtime 先验证 v2 `oi_session`，再通过 `no-store` 的同源 `/api/auth/session` 探测确认当前数据库用户；Python AG-UI 也重新查询 `cnpscy_oi_user` 执行 Agent 页面权限。level=2 不允许 Agent，内部 token 只用于 Python AG-UI 调用；Python 继续拥有 7 工具 registry、参数/结果白名单、plan proof、批次、replan 与 synthesis。M7 已删除旧运行时及 parity/legacy runtime 开关；CopilotKit 不可用时停留在 Vue 页面并使用受控 modern session。
 
 ### M6 CopilotKit Agent 迁移边界（历史记录，2026-09-03）
 
@@ -260,7 +260,8 @@ protected_data/chatbot_data.js  (~4MB)
 index.html
   ├── <script> chatbot_i18n.js      ← window.CHATBOT_I18N
   ├── <script> tier2_recommendation_rules.js
-  ├── <script> auth.js              ← 检查 session，获取 window.__OI_LLM_ENABLED
+  ├── <script> page_access.js       ← 注册统一 0/1/2 页面权限矩阵
+  ├── <script> auth.js              ← 检查 session，保存非敏感 user，获取 window.__OI_LLM_ENABLED
   │     └── 登录成功后动态加载:
   │         ├── db_offers_cache.json ← /api/ui/db/offers → window.CHATBOT_DATA + SHEET_REPORT_DATA
   │         ├── db_keywords_cache.json ← /api/ui/db/keywords → window.PRODUCT_KEYWORDS
@@ -456,13 +457,14 @@ api/copilotkit/[...path].js -> Node CopilotKit multi-route handler
 | 环境变量 | 用途 |
 |------|------|
 | `OI_LLM_ENABLED` | `0` → 禁用 LLM，全正则 |
-| `OI_AUTH_ENABLED` | `0` → 跳过登录 |
-| `OI_AGENT_RUNTIME_MODE` | `copilotkit`（默认）或 `legacy` 紧急回退 |
+| `OI_AUTH_ENABLED` | `0` → 仅隔离本地开发跳过登录；生产环境必须启用 |
+| `OI_AGENT_RUNTIME_MODE` | `copilotkit`（默认）；当前构建不提供 Legacy 回退 |
 | `OI_COPILOT_INTERNAL_TOKEN` | Node Runtime 调用 Python AG-UI 的专用 token；未设置时沿用 `OI_SESSION_SECRET` |
 | `OI_AGENT_AGUI_URL` | 可选的 Python AG-UI 内部 URL；默认同部署 `/api/chat/agui` |
 | `OI_SESSION_SECRET` | Session Cookie 签名密钥 |
-| `OI_ADMIN_USERNAME` | 管理员用户名 |
-| `OI_ADMIN_PASSWORD_HASH` | 管理员密码哈希 |
+| `OFFER_DB_HOST` / `OFFER_DB_NAME` / `OFFER_DB_USER` / `OFFER_DB_PASSWORD` | `cnpscy_oi_user` 认证查询和 Offer DB 查询所需的数据库连接 |
+
+认证说明：`cnpscy_oi_user` 是身份、独立 `password_hash`、`is_active` 和 `level` 的唯一来源；Session v2 只保存 `v`、`sub`、`exp`、`iat`，不保存密码哈希，也不使用 `role=admin` 授权。认证依赖缺失或不可用返回 503，未登录返回 401，已登录但无权访问 Agent 返回 403。`OI_AUTH_ENABLED=0` 仅限隔离本地开发。
 
 ---
 

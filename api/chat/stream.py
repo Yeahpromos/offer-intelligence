@@ -3,7 +3,7 @@ import json
 import sys
 from urllib.parse import parse_qs, urlparse
 
-from auth import _read_json_body, require_auth
+from auth import _read_json_body, require_page_access
 from chatbot_answer_feedback_http import handle_chatbot_answer_feedback
 from chatbot_question_log_http import handle_chatbot_question_logs
 from agent_trace_http import handle_agent_trace
@@ -95,7 +95,7 @@ class handler(BaseHTTPRequestHandler):
         if self._operation() == "agent_trace":
             handle_agent_trace(self, "POST")
             return
-        if not require_auth(self):
+        if not require_page_access(self, "dashboard"):
             return
 
         length = int(self.headers.get("Content-Length") or 0)

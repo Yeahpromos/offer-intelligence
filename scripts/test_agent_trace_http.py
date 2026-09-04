@@ -65,7 +65,7 @@ def assert_equal(actual, expected, label):
         raise AssertionError(f"{label}: expected {expected!r}, got {actual!r}")
 
 
-def allow_auth(_target):
+def allow_auth(_target, _page):
     return True
 
 
@@ -86,7 +86,7 @@ def test_trace_http_contract():
 
     common = {"sessionId": SESSION_ID, "questionEventId": QUESTION_ID}
     with PatchContext(
-        require_auth=allow_auth,
+        require_page_access=allow_auth,
         start_agent_run=fake_start,
         append_agent_steps=fake_append,
         complete_agent_run=fake_complete,
@@ -112,7 +112,7 @@ def test_trace_http_contract():
 
 
 def test_trace_http_rejects_bad_requests():
-    with PatchContext(require_auth=allow_auth):
+    with PatchContext(require_page_access=allow_auth):
         for payload in (
             {"action": "append", "sessionId": SESSION_ID, "steps": []},
             {"action": "complete", "sessionId": SESSION_ID, "status": "success"},
@@ -134,11 +134,11 @@ def test_trace_http_rejects_bad_requests():
 def test_trace_http_auth_and_disabled_mode():
     denied = FakeTarget({"action": "start"})
 
-    def deny_auth(target):
+    def deny_auth(target, _page):
         trace_http.send_json(target, 401, {"ok": False, "error": "Login is required."})
         return False
 
-    with PatchContext(require_auth=deny_auth):
+    with PatchContext(require_page_access=deny_auth):
         trace_http.handle_agent_trace(denied, "POST")
     assert_equal(denied.status, 401, "auth status")
 
@@ -150,7 +150,7 @@ def test_trace_http_auth_and_disabled_mode():
         def unexpected(_payload):
             raise AssertionError("disabled trace must not touch the database")
 
-        with PatchContext(require_auth=allow_auth, start_agent_run=unexpected):
+        with PatchContext(require_page_access=allow_auth, start_agent_run=unexpected):
             trace_http.handle_agent_trace(disabled, "POST")
         assert_equal(disabled.status, 200, "disabled status")
         assert_equal(disabled.json_body(), {"ok": True, "disabled": True}, "disabled response")

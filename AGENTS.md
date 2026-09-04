@@ -28,7 +28,7 @@ python server.py
   taskkill //F //PID <进程ID>
   ```
 
-Required env vars for full functionality: `LEVANTA_API_KEY`, `OI_AUTH_ENABLED`, `OI_ADMIN_USERNAME`, `OI_ADMIN_PASSWORD_HASH`, `OI_SESSION_SECRET`, `OFFER_DB_API_TOKEN`, and the `OFFER_DB_*` connection variables. The frontend can load from committed `protected_data/db_offers_cache.json` and `protected_data/db_keywords_cache.json` without the Levanta key or DB.
+Required env vars for full functionality: `LEVANTA_API_KEY`, `OI_AUTH_ENABLED`, `OI_SESSION_SECRET`, `OFFER_DB_API_TOKEN`, and the `OFFER_DB_*` connection variables. Production authentication reads users from `cnpscy_oi_user`; `OI_AUTH_ENABLED=0` is only for isolated local development and production must fail closed. The frontend can load from committed `protected_data/db_offers_cache.json` and `protected_data/db_keywords_cache.json` without the Levanta key or DB.
 
 ### Generate password hash
 ```bash
@@ -87,9 +87,9 @@ Browser → server.py Handler.do_GET/POST
 
 ### Auth model
 
-Single admin user. No user registration, no roles table. Session-based with an `HttpOnly` signed cookie (`oi_session`). The cookie payload is base64url-encoded JSON with `sub`, `role`, `exp`, `iat`, HMAC-signed with `OI_SESSION_SECRET`. Payment sync can bypass session auth by presenting `PAYMENT_SYNC_TOKEN` as a Bearer token or `X-Payment-Sync-Token` header.
+Users come from `cnpscy_oi_user`; there is no registration or user-management UI. Session-based auth uses an `HttpOnly` HMAC-signed v2 cookie (`oi_session`) whose payload contains only `v`, `sub`, `exp`, and `iat`. Every protected request re-reads the user's `is_active` and `level`. Level 0 can access all 12 pages, level 1 excludes Google Ads, and level 2 can access only Google Ads. Payment sync can bypass session auth only for `/api/levanta/payments` by presenting `PAYMENT_SYNC_TOKEN` as a Bearer token or `X-Payment-Sync-Token` header.
 
-When `OI_AUTH_ENABLED` is `0`/`false`/`off`, all auth checks pass through (disabled mode).
+Unauthenticated, denied, and unavailable requests return 401, 403, and 503 respectively. When `OI_AUTH_ENABLED` is `0`/`false`/`off`, only isolated local development may use the synthetic level 0 user; production fails closed. Old v1 cookies containing `role=admin` are rejected.
 
 ### DB layer (`offer_db.py`)
 
@@ -112,7 +112,7 @@ DB endpoints come in two flavors:
 
 Vanilla JS SPA with no framework or build step. GSAP loaded from CDN for motion. Three phases:
 
-1. **`auth.js`** loads first — checks session, shows login form if unauthenticated, then loads protected data from DB API (`/api/ui/db/offers`, `/api/ui/db/keywords`)
+1. **`page_access.js` then `auth.js`** load first — the shared page matrix is registered before session checks; authenticated level 0/1 sessions load protected offer data, while level 2 starts on Google Ads without requesting offers or keywords.
 2. **`app.js`** (~420KB) bootstraps the dashboard — tier pages, category reports, chatbot, payment page, targets page, XLSX export
 
 ### Chatbot

@@ -41,12 +41,14 @@ for (const removed of [
 const indexHtml = read("public/index.html");
 assert(indexHtml.includes("./assets/modern/oi-modern.css?v=20260904-m7-final"), "index.html 缺少 modern CSS");
 assert(indexHtml.includes('id="modernAppRoot"'), "index.html 缺少唯一 modern 根节点");
+assert(indexHtml.indexOf("./page_access.js") < indexHtml.indexOf("./auth.js"), "page_access.js 必须在 auth.js 之前加载");
 assert(!/styles\.css|app\.js|ModernRoot/.test(indexHtml.replace(/modernAppRoot/g, "")), "index.html 仍引用旧页面资源或旧页面根节点");
 
 const auth = read("public/auth.js");
 assert(auth.includes("async function loadModernApp()"), "auth.js 缺少 modern 加载边界");
 assert(auth.includes("window.OI_MODERN_APP.bootstrap("), "auth.js 未调用 modern bootstrap");
-assert(auth.includes('mountApplication(modernAppRoot, "agent")'), "auth.js 未挂载完整 modern 应用");
+assert(auth.includes("mountApplication(modernAppRoot, initialPage)"), "auth.js 未按用户等级挂载 modern 应用");
+assert(auth.includes("if (user.level === 2)"), "auth.js 缺少 level 2 的最小数据启动分支");
 assert(!/LegacyRollback|LEGACY_|legacyRollback|\.\/app\.js|\.\/styles\.css/.test(auth), "auth.js 仍包含旧运行时回滚路径");
 
 const vercel = JSON.parse(read("vercel.json"));

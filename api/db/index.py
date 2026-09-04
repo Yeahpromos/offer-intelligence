@@ -2,7 +2,7 @@ from http import HTTPStatus
 from io import BytesIO
 import json
 
-from auth import _read_json_body, require_auth, session_payload
+from auth import _read_json_body, current_user_for_target, require_page_access
 from google_ads_workbench import (
     DEFAULT_WORKBENCH_USER_ID,
     GoogleAdsApiError,
@@ -37,6 +37,23 @@ from offer_db import (
     tier_summary_payload,
     upsert_monthly_new_merchant,
 )
+
+
+PAGE_ACCESS_BY_ROUTE = {
+    "ui-status": "dashboard",
+    "ui-merchant": "dashboard",
+    "ui-search": "dashboard",
+    "ui-keywords": "dashboard",
+    "ui-offers": "dashboard",
+    "ui-tier-sheet": "tier",
+    "ui-tier-summary": "tier",
+    "ui-tier1-merchants": "tier",
+    "ui-monthly-new-merchants": "monthly-new-merchants",
+    "ui-publishers": "publishers",
+    "ui-brand-media-sankey": "brand-media",
+    "ui-brand-media-trend": "brand-media",
+    "ui-google-ads-workbench": "google-ads",
+}
 
 
 class WsgiTarget:
@@ -369,10 +386,10 @@ def handle_ui_tier1_merchants(target, query, method):
 
     try:
         body = _read_json_body(target)
-        user = session_payload(target.headers) or {}
+        user = current_user_for_target(target) or {}
         result = add_merchant_to_tier1(
             str(body.get("merchantId") or ""),
-            updated_by=str(user.get("sub") or "offer-intelligence-ui"),
+            updated_by=str(user.get("username") or "offer-intelligence-ui"),
             expected_tier=str(body.get("expectedTier") or ""),
         )
         if result.get("ok"):
@@ -421,8 +438,8 @@ def handle_ui_monthly_new_merchants(target, query, method):
     try:
         body = _read_json_body(target)
         action = str(body.get("action") or "upsert").strip().lower()
-        user = session_payload(target.headers) or {}
-        actor = str(user.get("sub") or "offer-intelligence-ui")
+        user = current_user_for_target(target) or {}
+        actor = str(user.get("username") or "offer-intelligence-ui")
         if action == "upsert":
             result = upsert_monthly_new_merchant(body, updated_by=actor)
         elif action == "delete":
@@ -470,29 +487,15 @@ def app(environ, start_response):
                 else "GET, OPTIONS"
             ),
         )
-    elif route == "ui-tier1-merchants":
-        if require_auth(target):
-            handle_ui_tier1_merchants(target, query, method)
-    elif route == "ui-monthly-new-merchants":
-        if require_auth(target):
-            handle_ui_monthly_new_merchants(target, query, method)
-    elif method != "GET":
-        send_json(target, 405, {"ok": False, "error": "Method not allowed"})
-    elif route in {
-        "ui-status",
-        "ui-merchant",
-        "ui-search",
-        "ui-keywords",
-        "ui-offers",
-        "ui-tier-sheet",
-        "ui-tier-summary",
-        "ui-publishers",
-        "ui-brand-media-sankey",
-        "ui-brand-media-trend",
-        "ui-google-ads-workbench",
-    }:
-        if require_auth(target):
-            if route == "ui-status":
+    elif route in PAGE_ACCESS_BY_ROUTE:
+        if require_page_access(target, PAGE_ACCESS_BY_ROUTE[route]):
+            if route == "ui-tier1-merchants":
+                handle_ui_tier1_merchants(target, query, method)
+            elif route == "ui-monthly-new-merchants":
+                handle_ui_monthly_new_merchants(target, query, method)
+            elif method != "GET":
+                send_json(target, 405, {"ok": False, "error": "Method not allowed"})
+            elif route == "ui-status":
                 handle_ui_status(target, query)
             elif route == "ui-merchant":
                 handle_ui_merchant(target, query)

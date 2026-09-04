@@ -33,7 +33,15 @@ _load_dotenv()
 # ------------------------------------
 
 from api.tier_moves import handle_tier_moves
-from auth import handle_auth_login, handle_auth_logout, handle_auth_options, handle_auth_session, require_auth, session_payload, _read_json_body
+from auth import (
+    current_user_for_target,
+    handle_auth_login,
+    handle_auth_logout,
+    handle_auth_options,
+    handle_auth_session,
+    require_page_access,
+    _read_json_body,
+)
 from chatbot_answer_feedback_http import handle_chatbot_answer_feedback
 from chatbot_question_log_http import handle_chatbot_question_logs
 from agent_trace_http import handle_agent_trace
@@ -106,6 +114,28 @@ from levanta_payments import (
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "public"
+
+UI_DB_PAGE_BY_PATH = {
+    "/api/ui/db/status": "dashboard",
+    "/api/ui/db/merchant": "dashboard",
+    "/api/ui/db/search": "dashboard",
+    "/api/ui/db/offers": "dashboard",
+    "/api/ui/db/chatbot-offers": "dashboard",
+    "/api/ui/db/keywords": "dashboard",
+    "/api/ui/db/tier-sheet": "tier",
+    "/api/ui/db/tier_sheet": "tier",
+    "/api/ui/db/tier-summary": "tier",
+    "/api/ui/db/tier1-merchants": "tier",
+    "/api/ui/db/monthly-new-merchants": "monthly-new-merchants",
+    "/api/ui/db/publishers": "publishers",
+    "/api/ui/db/brand-media-sankey": "brand-media",
+    "/api/ui/db/brand-media-trend": "brand-media",
+    "/api/ui/db/google-ads-workbench": "google-ads",
+}
+
+
+def page_access_for_ui_path(path):
+    return UI_DB_PAGE_BY_PATH.get(path)
 
 
 def _agent_trace_context(value):
@@ -188,12 +218,12 @@ class Handler(BaseHTTPRequestHandler):
             handle_auth_session(self)
             return
         if parsed.path == "/api/levanta/payments":
-            if not require_auth(self, allow_payment_sync_token=True):
+            if not require_page_access(self, "payments", allow_payment_sync_token=True):
                 return
             self.handle_payments_api(parsed)
             return
         if parsed.path.startswith("/api/ui/db/"):
-            if not require_auth(self):
+            if not require_page_access(self, page_access_for_ui_path(parsed.path) or "dashboard"):
                 return
             self.handle_db_ui_api(parsed)
             return
@@ -243,27 +273,27 @@ class Handler(BaseHTTPRequestHandler):
             handle_tier_moves(self, "POST")
             return
         if parsed.path == "/api/ui/db/tier1-merchants":
-            if not require_auth(self):
+            if not require_page_access(self, "tier"):
                 return
             self.handle_tier1_merchant_add()
             return
         if parsed.path == "/api/ui/db/monthly-new-merchants":
-            if not require_auth(self):
+            if not require_page_access(self, "monthly-new-merchants"):
                 return
             self.handle_monthly_new_merchants_write()
             return
         if parsed.path == "/api/chat/classify":
-            if not require_auth(self):
+            if not require_page_access(self, "dashboard"):
                 return
             self.handle_llm_classify()
             return
         if parsed.path == "/api/chat/analyze":
-            if not require_auth(self):
+            if not require_page_access(self, "dashboard"):
                 return
             self.handle_llm_analyze()
             return
         if parsed.path == "/api/chat/agent":
-            if not require_auth(self):
+            if not require_page_access(self, "agent"):
                 return
             handle_agent_request(self)
             return
@@ -280,7 +310,7 @@ class Handler(BaseHTTPRequestHandler):
             if operation == "agent_trace":
                 handle_agent_trace(self, "POST")
                 return
-            if not require_auth(self):
+            if not require_page_access(self, "dashboard"):
                 return
             self.handle_chat_stream()
             return
@@ -725,10 +755,10 @@ class Handler(BaseHTTPRequestHandler):
     def handle_tier1_merchant_add(self):
         try:
             body = _read_json_body(self)
-            user = session_payload(self.headers) or {}
+            user = current_user_for_target(self) or {}
             result = add_merchant_to_tier1(
                 str(body.get("merchantId") or ""),
-                updated_by=str(user.get("sub") or "offer-intelligence-ui"),
+                updated_by=str(user.get("username") or "offer-intelligence-ui"),
                 expected_tier=str(body.get("expectedTier") or ""),
             )
             if result.get("ok"):
@@ -745,8 +775,8 @@ class Handler(BaseHTTPRequestHandler):
     def handle_monthly_new_merchants_write(self):
         try:
             body = _read_json_body(self)
-            user = session_payload(self.headers) or {}
-            actor = str(user.get("sub") or "offer-intelligence-ui")
+            user = current_user_for_target(self) or {}
+            actor = str(user.get("username") or "offer-intelligence-ui")
             action = str(body.get("action") or "upsert").strip().lower()
             if action == "upsert":
                 result = upsert_monthly_new_merchant(body, updated_by=actor)

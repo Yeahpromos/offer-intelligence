@@ -1,4 +1,5 @@
 import { consumeSseResponse, type SseEvent } from "../../shared/stream/sse";
+import { notifyAuthFailure } from "../../shared/api/client";
 import {
   normalizeAgentResultView,
   normalizeAgentResultViews,
@@ -111,6 +112,7 @@ export function createCopilotKitAgentRunner(options: CopilotKitRuntimeOptions = 
       }
       return { ok: false, status: "error", response: "", steps: [], resultViews: [], memoryEvents: [], errorCode: "copilotkit_runtime_error" };
     }
+    if (response.status === 401 || response.status === 403) notifyAuthFailure(response.status);
     const steps: AgentTimelineStep[] = [];
     const resultViews: AgentResultView[] = [];
     const memoryEvents: AgentMemoryEvent[] = [];

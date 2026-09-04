@@ -41,6 +41,7 @@ import {
   tierSheetExportColumns
 } from "./shared/export/xlsx";
 import { createI18nStore } from "./shared/i18n";
+import { defaultPageForLevel } from "./shared/pageAccess";
 import OfferTrackerPage from "./features/offer-tracker/OfferTrackerPage.vue";
 import PaymentsPage from "./features/payments/PaymentsPage.vue";
 import PublishersPage from "./features/publishers/PublishersPage.vue";
@@ -588,12 +589,15 @@ function downloadTier(payload: TierExportPayload): boolean {
 
 const shellFactory: ModernShellFactory = (element) => {
   const i18n = createI18nStore(getAppSnapshot().value.language);
+  const snapshot = getAppSnapshot().value;
+  const initialPage = defaultPageForLevel(snapshot.user.level) ?? "agent";
   let shellController: AppShellController | null = null;
   const app = createApp({
     name: "ModernAppShellMount",
     setup() {
       return () => h(AppShell, {
-        initialPage: "agent",
+        initialPage,
+        userLevel: snapshot.user.level,
         language: i18n.language.value,
         navigate(page) {
           window.OI_MODERN_APP?.setPage(page);

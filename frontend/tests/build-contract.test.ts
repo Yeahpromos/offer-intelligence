@@ -9,6 +9,13 @@ import type {
 
 function bootstrapData(): AppBootstrapData {
   return {
+    user: {
+      id: 7,
+      username: "ypadmin",
+      displayName: "Admin",
+      email: "admin@example.test",
+      level: 0
+    },
     chatbotData: { offers: [{ merchantId: "merchant-1" }] },
     sheetReportData: { sheets: [] },
     productKeywords: { merchants: [] },
@@ -35,6 +42,17 @@ describe("Modern Runtime 构建契约", () => {
 
     expect(modernApp.mountPage("offer-list-tracker", root)).toBe(false);
     expect(root.childElementCount).toBe(0);
+  });
+
+  it("未完成用户 bootstrap 时拒绝挂载任何现代页面或 Shell", () => {
+    const modernApp = createModernAppApi({ agent: () => ({ unmount() {} }) }, () => ({
+      unmount() {}
+    }));
+    const root = document.createElement("section");
+
+    expect(modernApp.mountApplication(root, "agent")).toBe(false);
+    expect(modernApp.mountPage("agent", root)).toBe(false);
+    expect(modernApp.mountShell(root)).toBe(false);
   });
 
   it("语言切换只更新应用状态，不直接操作旧 DOM", () => {
@@ -72,6 +90,7 @@ describe("Modern Runtime 构建契约", () => {
       unmount: () => calls.push("unmount")
     });
     const modernApp = createModernAppApi({ "offer-list-tracker": factory });
+    modernApp.bootstrap(bootstrapData());
     const root = document.createElement("section");
 
     expect(modernApp.hasPage("offer-list-tracker")).toBe(true);
@@ -92,6 +111,7 @@ describe("Modern Runtime 构建契约", () => {
       unmount: () => calls.push("unmount")
     });
     const modernApp = createModernAppApi({}, shellFactory);
+    modernApp.bootstrap(bootstrapData());
     const root = document.createElement("section");
 
     expect(modernApp.mountShell(root)).toBe(true);
@@ -100,5 +120,39 @@ describe("Modern Runtime 构建契约", () => {
     modernApp.unmountShell();
 
     expect(calls).toEqual(["page:payments", "language:en", "unmount"]);
+  });
+
+  it("level 2 的现代 runtime 不卸载当前页，也不能挂载非 Google Ads 页面", () => {
+    const calls: string[] = [];
+    const factory = (page: string) => () => ({
+      unmount: () => calls.push(`unmount:${page}`)
+    });
+    const modernApp = createModernAppApi({
+      agent: factory("agent"),
+      "google-ads": factory("google-ads"),
+      payments: factory("payments")
+    }, () => ({
+      setPage: (page) => calls.push(`shell:${page}`),
+      unmount: () => calls.push("shell:unmount")
+    }));
+    modernApp.bootstrap({ ...bootstrapData(), user: { ...bootstrapData().user, level: 2 } });
+    const root = document.createElement("section");
+
+    expect(modernApp.mountApplication(root, "agent")).toBe(true);
+    modernApp.setPage("agent");
+    expect(modernApp.mountPage("payments", root)).toBe(false);
+    expect(calls).toEqual(["shell:google-ads"]);
+  });
+
+  it("缺少页面权限全局契约时拒绝启动", () => {
+    const globalWindow = window as unknown as { OI_PAGE_ACCESS?: unknown };
+    const runtime = globalWindow.OI_PAGE_ACCESS;
+    delete globalWindow.OI_PAGE_ACCESS;
+    try {
+      const modernApp = createModernAppApi();
+      expect(() => modernApp.bootstrap(bootstrapData())).toThrow(/page access/i);
+    } finally {
+      globalWindow.OI_PAGE_ACCESS = runtime;
+    }
   });
 });

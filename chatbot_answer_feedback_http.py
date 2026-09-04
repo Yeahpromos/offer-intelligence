@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
 
-from auth import _read_json_body, require_auth, send_json
+from auth import _read_json_body, require_page_access, send_json
 from chatbot_answer_feedback import (
     AnswerFeedbackConflictError,
     AnswerFeedbackNotFoundError,
@@ -99,7 +99,7 @@ def handle_chatbot_answer_feedback(target, method: str) -> None:
     if method not in {"GET", "POST"}:
         send_json(target, 405, {"ok": False, "error": "Method not allowed"})
         return
-    if not require_auth(target):
+    if not require_page_access(target, "dashboard"):
         return
     if method == "POST":
         _handle_post(target)

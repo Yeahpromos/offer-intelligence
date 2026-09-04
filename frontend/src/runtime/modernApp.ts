@@ -1,5 +1,7 @@
 import { readonly, shallowRef } from "vue";
 
+import { canAccessPage, defaultPageForLevel, normalizeUser, pageAccessRuntime } from "../shared/pageAccess";
+
 import type {
   AppBootstrapData,
   ModernAppApi,
@@ -12,6 +14,14 @@ import type {
 } from "./contracts";
 
 const EMPTY_BOOTSTRAP_DATA: AppBootstrapData = Object.freeze({
+  user: {
+    id: null,
+    username: "local",
+    displayName: "Local",
+    email: "",
+    level: 0 as const,
+    authDisabled: true
+  },
   chatbotData: {},
   sheetReportData: {},
   productKeywords: {},
@@ -46,6 +56,12 @@ function assertBootstrapData(data: AppBootstrapData): void {
   if (typeof data.llmEnabled !== "boolean" || typeof data.agentEnabled !== "boolean") {
     throw new TypeError("Application bootstrap feature flags must be boolean");
   }
+  if (!pageAccessRuntime()) {
+    throw new TypeError("Page access runtime is unavailable");
+  }
+  if (!normalizeUser(data.user)) {
+    throw new TypeError("Application bootstrap user is invalid");
+  }
 }
 
 export function createModernAppApi(
@@ -55,6 +71,7 @@ export function createModernAppApi(
   let activePage: { name: ModernPageName; controller: ModernPageController } | null = null;
   let activeShell: ModernShellController | null = null;
   let standalonePageHost: HTMLElement | null = null;
+  let bootstrapReady = false;
 
   function unmountActivePage(): void {
     if (!activePage) return;
@@ -104,6 +121,15 @@ export function createModernAppApi(
     return true;
   }
 
+  function pageIsAllowed(page: ModernPageName): boolean {
+    return bootstrapReady && Boolean(pageAccessRuntime()) && canAccessPage(appSnapshot.value.user.level, page);
+  }
+
+  function defaultAllowedPage(): ModernPageName | null {
+    const page = defaultPageForLevel(appSnapshot.value.user.level);
+    return page && pageIsAllowed(page) ? page : null;
+  }
+
   function mountShellInternal(element: HTMLElement): boolean {
     if (!shellFactory) return false;
     unmountActiveShell();
@@ -114,11 +140,17 @@ export function createModernAppApi(
   return {
     bootstrap(data) {
       assertBootstrapData(data);
-      appSnapshot.value = Object.freeze({ ...data });
+      const user = normalizeUser(data.user);
+      if (!user) throw new TypeError("Application bootstrap user is invalid");
+      appSnapshot.value = Object.freeze({ ...data, user: Object.freeze(user) });
+      bootstrapReady = true;
     },
 
     mountApplication(element, initialPage = "agent") {
-      if (!(element instanceof HTMLElement) || !shellFactory || !definitions[initialPage]) return false;
+      const resolvedPage = pageIsAllowed(initialPage) && definitions[initialPage]
+        ? initialPage
+        : defaultAllowedPage();
+      if (!(element instanceof HTMLElement) || !shellFactory || !resolvedPage || !definitions[resolvedPage]) return false;
       unmountActivePage();
       unmountActiveShell();
       standalonePageHost = createStandaloneHost(element);
@@ -128,10 +160,11 @@ export function createModernAppApi(
         element.replaceChildren();
         return false;
       }
-      return mountPageInternal(initialPage, standalonePageHost);
+      return mountPageInternal(resolvedPage, standalonePageHost);
     },
 
     mountPage(page, element) {
+      if (!pageIsAllowed(page)) return false;
       return mountPageInternal(page, element);
     },
 
@@ -141,6 +174,7 @@ export function createModernAppApi(
     },
 
     mountShell(element) {
+      if (!bootstrapReady) return false;
       return mountShellInternal(element);
     },
 
@@ -149,9 +183,11 @@ export function createModernAppApi(
     },
 
     setPage(page) {
-      activeShell?.setPage?.(page);
-      if (standalonePageHost && activePage?.name !== page) {
-        mountPageInternal(page, standalonePageHost);
+      const targetPage = pageIsAllowed(page) ? page : defaultAllowedPage();
+      if (!targetPage) return;
+      activeShell?.setPage?.(targetPage);
+      if (standalonePageHost && activePage?.name !== targetPage) {
+        mountPageInternal(targetPage, standalonePageHost);
       }
     },
 

@@ -38,6 +38,7 @@ TIER1_NAME = "Tier 1"
 DEFAULT_AFF_PROPORTION = 0.75
 MANAGED_TIER_NAMES = {"Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"}
 MONTH_KEY_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+USER_TABLE = "cnpscy_oi_user"
 MERCHANT_AOV_ESTIMATES_TABLE = "cnpscy_oi_merchant_aov_estimates"
 MERCHANT_AOV_ESTIMATES_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS cnpscy_oi_merchant_aov_estimates (
@@ -386,6 +387,20 @@ def fetch_one(conn, sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | 
     with conn.cursor() as cursor:
         cursor.execute(sql, params)
         return cursor.fetchone()
+
+
+def lookup_user_by_username(username: str, conn=None) -> dict[str, Any] | None:
+    """按大小写不敏感的规范化用户名读取认证所需字段。"""
+    sql = (
+        "SELECT id, username, display_name, email, password_hash, level, is_active "
+        f"FROM {q(USER_TABLE)} "
+        "WHERE LOWER(TRIM(username)) = LOWER(TRIM(%s)) "
+        "LIMIT 1"
+    )
+    if conn is not None:
+        return fetch_one(conn, sql, (username,))
+    with db_connection() as connection:
+        return fetch_one(connection, sql, (username,))
 
 
 def _network_rows_map(rows: list[dict[str, Any]]) -> dict[str, str]:

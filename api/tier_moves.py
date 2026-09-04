@@ -7,7 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from auth import auth_enabled, is_authenticated, require_auth
+from auth import auth_enabled, is_authenticated, require_page_access
 
 
 TIER_MOVE_TARGETS = {"Tier 1", "Tier 2", "Tier 3", "Tier 4", "BLACK TIER"}
@@ -191,7 +191,7 @@ def handle_tier_moves(target, method):
     if method == "OPTIONS":
         _send_json(target, 204, {})
         return
-    if not require_auth(target):
+    if not require_page_access(target, "tier"):
         return
 
     if method == "GET":

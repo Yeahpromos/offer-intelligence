@@ -32,6 +32,6 @@ for (const [key, registration] of pages) {
   assert(pagesByKey.get(key)?.status === "removed", `${key} 清单未确认旧实现已移除`);
   assert(pagesByKey.get(key)?.legacyEntry?.length === 0, `${key} 仍记录旧入口`);
 }
-assert(runtime.includes("mountPageInternal(page, standalonePageHost)"), "Modern Runtime 未实现页面切换");
+assert(/mountPageInternal\(\w+,\s*standalonePageHost\)/.test(runtime), "Modern Runtime 未实现页面切换");
 assert(!/legacy|OI_LEGACY_BRIDGE/i.test(entry + runtime), "Modern 页面切换仍依赖旧运行时");
 console.log("PASS: all application pages use the modern runtime");

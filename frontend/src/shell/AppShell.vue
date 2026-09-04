@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import type { ModernPageName, UiLanguage } from "../runtime/contracts";
+import { canAccessPage } from "../shared/pageAccess";
 import {
   GOOGLE_ADS_NAVIGATION_ITEM,
   NAVIGATION_GROUPS,
@@ -82,7 +83,7 @@ const iconPaths: Record<NavigationIconName, readonly string[]> = {
   category: ["M4 7h16", "M4 12h16", "M4 17h10"]
 };
 
-const state = usePageState(props.initialPage);
+const state = usePageState(props.initialPage, props.userLevel);
 const currentPage = state.currentPage;
 const isCompact = state.isCompact;
 const isMenuOpen = state.isMenuOpen;
@@ -114,6 +115,13 @@ const activeLocation = computed(() => navigationGroupForPage(state.currentPage.v
 const themeActionLabel = computed(() => theme.value === "light" ? translate("switchToDark") : translate("switchToLight"));
 const languageActionLabel = computed(() => translate("language"));
 const languageButtonLabel = computed(() => currentLanguage.value === "zh" ? translate("languageShort") : translate("languageChinese"));
+const visibleNavigationGroups = computed(() => NAVIGATION_GROUPS
+  .map((group) => ({ ...group, items: group.items.filter((item) => canAccessPage(props.userLevel, item.page)) }))
+  .filter((group) => group.items.length > 0));
+
+function isPageAllowed(page: ModernPageName): boolean {
+  return canAccessPage(props.userLevel, page);
+}
 
 function isGroupOpen(group: NavigationGroupKey): boolean {
   return state.openGroup.value === group;
@@ -124,6 +132,7 @@ function isPageActive(page: ModernPageName): boolean {
 }
 
 function selectPage(page: ModernPageName): void {
+  if (!isPageAllowed(page)) return;
   state.setPage(page);
   props.navigate(page);
 }
@@ -338,7 +347,7 @@ onBeforeUnmount(() => {
 
       <nav class="modern-shell-nav" :aria-label="translate('navigation')">
         <section
-          v-for="group in NAVIGATION_GROUPS"
+          v-for="group in visibleNavigationGroups"
           :key="group.key"
           class="modern-shell-nav-group"
           :class="{ 'is-current': activeLocation === group.key, 'is-open': isGroupOpen(group.key) }"
@@ -392,6 +401,7 @@ onBeforeUnmount(() => {
         </section>
 
         <button
+          v-if="isPageAllowed(GOOGLE_ADS_NAVIGATION_ITEM.page)"
           class="modern-shell-primary-item"
           :class="{ active: isPageActive(GOOGLE_ADS_NAVIGATION_ITEM.page) }"
           type="button"

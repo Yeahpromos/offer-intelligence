@@ -20,6 +20,11 @@ function requestHeaders(headers: HeadersInit | undefined): Headers {
   return result;
 }
 
+export function notifyAuthFailure(status: number): void {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+  window.dispatchEvent(new CustomEvent("oi-auth-failure", { detail: { status } }));
+}
+
 export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
@@ -73,6 +78,8 @@ export async function apiRequest<T>(
       if (isAbortError(error) && callerSignal?.aborted) throw error;
       throw new ApiError("API 请求失败", 0, "network_error", null, error);
     }
+
+    if (response.status === 401 || response.status === 403) notifyAuthFailure(response.status);
 
     let payload: unknown;
     try {

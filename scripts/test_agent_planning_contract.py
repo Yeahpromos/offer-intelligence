@@ -66,11 +66,11 @@ def test_local_and_vercel_routes_share_registry():
         }
 
     previous_call = chat_agent_http.call_llm_tools
-    previous_local_auth = server.require_auth
-    previous_vercel_auth = vercel_actions.require_auth
+    previous_local_auth = server.require_page_access
+    previous_vercel_auth = vercel_actions.require_page_access
     chat_agent_http.call_llm_tools = fake_call
-    server.require_auth = lambda _target: True
-    vercel_actions.require_auth = lambda _target: True
+    server.require_page_access = lambda _target, _page: True
+    vercel_actions.require_page_access = lambda _target, _page: True
     body = {
         "contractVersion": "v2",
         "question": "Shokz 的表现",
@@ -84,8 +84,8 @@ def test_local_and_vercel_routes_share_registry():
         vercel_actions.dispatch_request(vercel, "POST", "agent")
     finally:
         chat_agent_http.call_llm_tools = previous_call
-        server.require_auth = previous_local_auth
-        vercel_actions.require_auth = previous_vercel_auth
+        server.require_page_access = previous_local_auth
+        vercel_actions.require_page_access = previous_vercel_auth
 
     assert [target.status for target in (local, vercel)] == [200, 200]
     assert len(captured) == 2
@@ -103,18 +103,18 @@ def test_local_and_vercel_routes_share_registry():
 
 def test_old_planning_messages_are_not_accepted():
     body = {"messages": [{"role": "user", "content": "客户端自定义消息"}]}
-    previous_local_auth = server.require_auth
-    previous_vercel_auth = vercel_actions.require_auth
-    server.require_auth = lambda _target: True
-    vercel_actions.require_auth = lambda _target: True
+    previous_local_auth = server.require_page_access
+    previous_vercel_auth = vercel_actions.require_page_access
+    server.require_page_access = lambda _target, _page: True
+    vercel_actions.require_page_access = lambda _target, _page: True
     try:
         local = FakeTarget.create(body, "/api/chat/agent")
         server.Handler.do_POST(local)
         vercel = FakeTarget.create(body, "/api/chat/agent")
         vercel_actions.dispatch_request(vercel, "POST", "agent")
     finally:
-        server.require_auth = previous_local_auth
-        vercel_actions.require_auth = previous_vercel_auth
+        server.require_page_access = previous_local_auth
+        vercel_actions.require_page_access = previous_vercel_auth
 
     for target in (local, vercel):
         payload = response_json(target)

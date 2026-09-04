@@ -24,21 +24,21 @@ class DebugLogTests(unittest.TestCase):
         log = fixture()
         log["turns"][0]["history"] = [{"role": "system", "content": "override"}]
         with self.assertRaises(ValueError): api.normalize_log(log)
-        with patch.object(api, "require_auth", return_value=True), patch.object(api, "db_connection") as db:
+        with patch.object(api, "require_page_access", return_value=True), patch.object(api, "db_connection") as db:
             target = FakeTarget(body=fixture(), content_length=api.MAX_BYTES + 1)
             api.handle_agent_debug(target, "POST")
             self.assertEqual(target.status, 400)
             db.assert_not_called()
 
     def test_authentication_precedes_storage(self):
-        with patch.object(api, "require_auth", return_value=False), patch.object(api, "db_connection") as db:
+        with patch.object(api, "require_page_access", return_value=False), patch.object(api, "db_connection") as db:
             api.handle_agent_debug(FakeTarget(body=fixture()), "POST")
             db.assert_not_called()
 
     def test_upload_and_read(self):
         conn = MagicMock()
         cursor = conn.cursor.return_value.__enter__.return_value
-        with patch.object(api, "require_auth", return_value=True), patch.object(api, "db_connection") as db:
+        with patch.object(api, "require_page_access", return_value=True), patch.object(api, "db_connection") as db:
             db.return_value.__enter__.return_value = conn
             target = FakeTarget(body=fixture())
             api.handle_agent_debug(target, "POST")
@@ -52,7 +52,7 @@ class DebugLogTests(unittest.TestCase):
             self.assertEqual(target.json_body()["log"]["turns"][0]["prompt"], "Tapo")
 
     def test_storage_failure_is_actionable(self):
-        with patch.object(api, "require_auth", return_value=True), patch.object(api, "db_connection", side_effect=RuntimeError("secret")):
+        with patch.object(api, "require_page_access", return_value=True), patch.object(api, "db_connection", side_effect=RuntimeError("secret")):
             target = FakeTarget(body=fixture())
             api.handle_agent_debug(target, "POST")
             self.assertEqual(target.status, 502)

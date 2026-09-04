@@ -72,7 +72,7 @@ def with_patches(**patches):
     return PatchContext()
 
 
-def allow_auth(_target):
+def allow_auth(_target, _page):
     return True
 
 
@@ -93,16 +93,16 @@ def payload():
 def main():
     unauthorized = FakeTarget(body=payload())
 
-    def deny_auth(target):
+    def deny_auth(target, _page):
         feedback_http.send_json(target, 401, {"ok": False, "error": "Login is required."})
         return False
 
-    with with_patches(require_auth=deny_auth):
+    with with_patches(require_page_access=deny_auth):
         feedback_http.handle_chatbot_answer_feedback(unauthorized, "POST")
     assert_equal(unauthorized.status, 401, "unauthorized")
 
     options = FakeTarget()
-    with with_patches(require_auth=deny_auth):
+    with with_patches(require_page_access=deny_auth):
         feedback_http.handle_chatbot_answer_feedback(options, "OPTIONS")
     assert_equal(options.status, 204, "OPTIONS")
 
@@ -117,7 +117,7 @@ def main():
         }
 
     create_target = FakeTarget(body=payload())
-    with with_patches(require_auth=allow_auth, create_answer_feedback=fake_create):
+    with with_patches(require_page_access=allow_auth, create_answer_feedback=fake_create):
         feedback_http.handle_chatbot_answer_feedback(create_target, "POST")
     assert_equal(create_target.status, 200, "create status")
     assert_equal(create_target.json_body()["ok"], True, "create response")
@@ -125,25 +125,25 @@ def main():
 
     malformed = FakeTarget(body=None, content_length=5)
     malformed.rfile = BytesIO(b"{bad}")
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         feedback_http.handle_chatbot_answer_feedback(malformed, "POST")
     assert_equal(malformed.status, 400, "malformed JSON")
 
     invalid_length = FakeTarget(body=payload())
     invalid_length.headers["Content-Length"] = "not-a-number"
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         feedback_http.handle_chatbot_answer_feedback(invalid_length, "POST")
     assert_equal(invalid_length.status, 400, "invalid Content-Length")
 
     large_payload = payload()
     large_payload["answer"] = "答" * 30_000
     large_target = FakeTarget(body=large_payload)
-    with with_patches(require_auth=allow_auth, create_answer_feedback=fake_create):
+    with with_patches(require_page_access=allow_auth, create_answer_feedback=fake_create):
         feedback_http.handle_chatbot_answer_feedback(large_target, "POST")
     assert_equal(large_target.status, 200, "body over auth default 64 KB")
 
     oversized = FakeTarget(body=None, content_length=1_048_577)
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         feedback_http.handle_chatbot_answer_feedback(oversized, "POST")
     assert_equal(oversized.status, 400, "oversized request")
 
@@ -157,7 +157,7 @@ def main():
         def fail_create(_body, raised=error):
             raise raised
 
-        with with_patches(require_auth=allow_auth, create_answer_feedback=fail_create):
+        with with_patches(require_page_access=allow_auth, create_answer_feedback=fail_create):
             feedback_http.handle_chatbot_answer_feedback(target, "POST")
         assert_equal(target.status, expected, f"{type(error).__name__} mapping")
         if expected == 409:
@@ -177,7 +177,7 @@ def main():
             path=f"/api/chat/stream?operation=feedback&format={export_format}"
         )
         with with_patches(
-            require_auth=allow_auth,
+            require_page_access=allow_auth,
             fetch_answer_feedback=fake_fetch,
             render_answer_feedback_export=fake_render,
         ):
@@ -188,12 +188,12 @@ def main():
         assert_equal(export_target.header("Cache-Control"), "no-store", f"{export_format} cache")
 
     invalid_format = FakeTarget(path="/api/chat/stream?operation=feedback&format=xlsx")
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         feedback_http.handle_chatbot_answer_feedback(invalid_format, "GET")
     assert_equal(invalid_format.status, 400, "invalid export format")
 
     method_target = FakeTarget()
-    with with_patches(require_auth=allow_auth):
+    with with_patches(require_page_access=allow_auth):
         feedback_http.handle_chatbot_answer_feedback(method_target, "DELETE")
     assert_equal(method_target.status, 405, "invalid method")
 

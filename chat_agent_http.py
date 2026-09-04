@@ -1,7 +1,7 @@
 """Shared HTTP handling for the Chat Mode agent planning endpoint.
 
 Imported by both server.py (local) and api/chat/actions.py (Vercel), following
-the chatbot_question_log_http.py pattern.  Callers perform require_auth().
+the chatbot_question_log_http.py pattern. Callers perform the page-aware authentication check.
 """
 
 from __future__ import annotations

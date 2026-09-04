@@ -5,7 +5,7 @@ import os
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 
-from auth import require_auth
+from auth import require_page_access
 from levanta_payments import (
     fetch_invoice_items_for_marketplaces,
     is_trackable_payment_record,
@@ -29,7 +29,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if not require_auth(self, allow_payment_sync_token=True):
+        if not require_page_access(self, "payments", allow_payment_sync_token=True):
             return
         api_key = os.environ.get("LEVANTA_API_KEY", "").strip()
         if not api_key:

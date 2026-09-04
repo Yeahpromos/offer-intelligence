@@ -15,7 +15,7 @@ from agent_trace import (
     complete_agent_run,
     start_agent_run,
 )
-from auth import _read_json_body, require_auth, send_json
+from auth import _read_json_body, require_page_access, send_json
 
 
 MAX_REQUEST_BODY_BYTES = 16 * 1024
@@ -101,6 +101,6 @@ def handle_agent_trace(target, method: str) -> None:
     if method not in {"POST"}:
         send_json(target, 405, {"ok": False, "error": "Method not allowed"})
         return
-    if not require_auth(target):
+    if not require_page_access(target, "agent"):
         return
     _handle_post(target)

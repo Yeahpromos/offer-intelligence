@@ -3,6 +3,7 @@ import json
 import time
 import unittest
 from unittest.mock import patch
+from io import BytesIO
 from pathlib import Path
 import sys
 
@@ -10,7 +11,26 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import agent_agui
+import auth
 from agent_contract import issue_plan_proof
+
+
+class FakeTarget:
+    def __init__(self, headers=None, body=b""):
+        self.headers = {"Host": "127.0.0.1", **(headers or {})}
+        self.rfile = BytesIO(body)
+        self.wfile = BytesIO()
+        self.status = None
+        self.response_headers = []
+
+    def send_response(self, status):
+        self.status = int(status)
+
+    def send_header(self, name, value):
+        self.response_headers.append((name, value))
+
+    def end_headers(self):
+        return None
 
 
 class AgentAguiTests(unittest.TestCase):
@@ -100,6 +120,52 @@ class AgentAguiTests(unittest.TestCase):
         with patch.dict(os.environ, {"OI_SESSION_SECRET": "shared-secret"}, clear=True):
             self.assertTrue(agent_agui.is_internal_request({"X-OI-Copilot-Token": "shared-secret"}))
             self.assertFalse(agent_agui.is_internal_request({"X-OI-Copilot-Token": "wrong"}))
+
+    def test_internal_token_alone_cannot_bypass_user_session(self):
+        with patch.dict(os.environ, {
+            "OI_AUTH_ENABLED": "1",
+            "OI_SESSION_SECRET": "shared-secret",
+            "VERCEL_ENV": "preview",
+            "OFFER_DB_HOST": "db.example.test",
+            "OFFER_DB_NAME": "offer_intelligence",
+            "OFFER_DB_USER": "readonly",
+            "OFFER_DB_PASSWORD": os.urandom(12).hex(),
+        }, clear=True):
+            target = FakeTarget({
+                "X-OI-Copilot-Token": "shared-secret",
+                "Content-Length": "0",
+            })
+            agent_agui.handle_agui_request(target, "POST")
+            self.assertEqual(target.status, 401)
+
+    def test_python_agui_denies_level_two_before_reading_request_body(self):
+        with patch.dict(os.environ, {
+            "OI_AUTH_ENABLED": "1",
+            "OI_SESSION_SECRET": "shared-secret",
+            "VERCEL_ENV": "preview",
+            "OFFER_DB_HOST": "db.example.test",
+            "OFFER_DB_NAME": "offer_intelligence",
+            "OFFER_DB_USER": "readonly",
+            "OFFER_DB_PASSWORD": os.urandom(12).hex(),
+        }, clear=True):
+            cookie, _ = auth.create_session("limited")
+            row = {
+                "id": 2,
+                "username": "limited",
+                "display_name": "Limited",
+                "email": "limited@example.test",
+                "password_hash": auth.make_password_hash(os.urandom(12).hex(), iterations=1_000, salt="agui-salt"),
+                "level": 2,
+                "is_active": 1,
+            }
+            with patch("auth.user_record_by_username", return_value=row):
+                target = FakeTarget({
+                    "X-OI-Copilot-Token": "shared-secret",
+                    "Cookie": f"oi_session={cookie}",
+                    "Content-Length": "999",
+                }, body=b"not-read")
+                agent_agui.handle_agui_request(target, "POST")
+            self.assertEqual(target.status, 403)
 
     def test_continuation_synthesizes_only_a_proof_bound_result(self):
         call = {"id": "r1c1", "name": "merchant_analysis", "arguments": {"merchant": "Tapo"}}

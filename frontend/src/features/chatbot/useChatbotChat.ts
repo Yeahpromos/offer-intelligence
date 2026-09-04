@@ -1,4 +1,5 @@
 import { consumeSseResponse } from "../../shared/stream/sse";
+import { notifyAuthFailure } from "../../shared/api/client";
 import type {
   ChatbotChatRequest,
   ChatbotChatResult,
@@ -50,6 +51,7 @@ export const streamChatbotReply: ChatbotChatRunner = async (request, onToken) =>
       ? { ok: false, stopped: true, response: "" }
       : { ok: false, response: "", errorCode: "network_error" };
   }
+  if (response.status === 401 || response.status === 403) notifyAuthFailure(response.status);
 
   let responseText = "";
   let outputChunks = 0;

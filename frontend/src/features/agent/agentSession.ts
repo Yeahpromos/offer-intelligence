@@ -1,4 +1,5 @@
 import type { UiLanguage } from "../../shared/i18n";
+import { notifyAuthFailure } from "../../shared/api/client";
 import { consumeSseResponse } from "../../shared/stream/sse";
 import {
   normalizeAgentResultView,
@@ -659,6 +660,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         headers: { Accept: "application/json", ...(init.headers || {}) },
         signal: linked.signal
       });
+      if (result.status === 401 || result.status === 403) notifyAuthFailure(result.status);
       let payload: unknown = null;
       try {
         payload = await result.json();
@@ -1380,6 +1382,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         body: JSON.stringify(body),
         signal
       });
+      if (result.status === 401 || result.status === 403) notifyAuthFailure(result.status);
     } catch (error) {
       if (isAbortError(error, signal)) throw error;
       return { response: "", errorCode: "network_error" };

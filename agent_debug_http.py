@@ -5,7 +5,7 @@ import json
 import uuid
 from urllib.parse import parse_qs, urlparse
 
-from auth import _read_json_body, require_auth, send_json
+from auth import _read_json_body, require_page_access, send_json
 from offer_db import db_connection
 
 MAX_BYTES = 512 * 1024
@@ -79,7 +79,7 @@ def handle_agent_debug(target, method):
     if method not in {"GET", "POST"}:
         send_json(target, 405, {"ok": False, "error": "Method not allowed"})
         return
-    if not require_auth(target):
+    if not require_page_access(target, "agent"):
         return
     try:
         if method == "POST":

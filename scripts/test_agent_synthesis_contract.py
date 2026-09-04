@@ -95,12 +95,12 @@ def _invoke_local(body):
 
 def _invoke_vercel(body):
     target = FakeTarget.create(vercel_stream.handler, body)
-    previous_auth = vercel_stream.require_auth
-    vercel_stream.require_auth = lambda _target: True
+    previous_auth = vercel_stream.require_page_access
+    vercel_stream.require_page_access = lambda _target, _page: True
     try:
         vercel_stream.handler.do_POST(target)
     finally:
-        vercel_stream.require_auth = previous_auth
+        vercel_stream.require_page_access = previous_auth
     return target
 
 
