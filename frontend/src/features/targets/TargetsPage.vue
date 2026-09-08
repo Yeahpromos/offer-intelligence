@@ -422,7 +422,7 @@ onUnmounted(() => {
       <strong>{{ copy.targetUnavailable }}</strong>
     </section>
     <template v-else>
-      <div class="tier-header sheet-page-header">
+      <header class="tier-header sheet-page-header">
         <div>
           <h2>{{ copy.title }}</h2>
           <p>{{ copy.subtitle }}</p>
@@ -435,8 +435,11 @@ onUnmounted(() => {
           :disabled="!targets.filteredRecords.value.length"
           :title="copy.exportHint"
           @click="exportRows"
-        >{{ copy.export }}</button>
-      </div>
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4" /></svg>
+          {{ copy.export }}
+        </button>
+      </header>
 
       <section class="panel sheet-target-filters" aria-label="Target filters">
         <label>
@@ -549,9 +552,18 @@ onUnmounted(() => {
           <div class="target-mobile-sort-controls" aria-label="Sort tier comparison matrix">
             <button v-for="key in ['Tier', 'Active Brands', 'Revenue', 'Orders', 'Clicks', 'Avg Conversion', 'New Entries', 'Exits', 'vs Target']" :key="key" class="table-sort-button" :class="{ active: matrixSortKey === key }" type="button" @click="setMatrixSort(key)">{{ sortLabel(key) }}</button>
           </div>
-          <div class="table-wrap target-matrix-wrap">
-            <table class="target-matrix-table">
-              <thead><tr><th v-for="key in ['Tier', 'Active Brands', 'Revenue', 'Orders', 'Clicks', 'Avg Conversion', 'New Entries', 'Exits', 'vs Target']" :key="key"><button class="table-sort-button" :class="{ active: matrixSortKey === key }" type="button" @click="setMatrixSort(key)"><span>{{ sortLabel(key) }}</span><span class="sort-indicator" aria-hidden="true">{{ matrixSortKey === key ? (matrixSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span></button></th></tr></thead>
+          <div class="table-wrap target-matrix-wrap" tabindex="0" role="region" :aria-label="copy.tierComparison">
+            <table class="target-matrix-table" :aria-label="copy.tierComparison">
+              <thead>
+                <tr>
+                  <th v-for="key in ['Tier', 'Active Brands', 'Revenue', 'Orders', 'Clicks', 'Avg Conversion', 'New Entries', 'Exits', 'vs Target']" :key="key" scope="col" :aria-sort="matrixSortKey === key ? (matrixSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'">
+                    <button class="table-sort-button" :class="{ active: matrixSortKey === key }" type="button" @click="setMatrixSort(key)">
+                      <span>{{ sortLabel(key) }}</span>
+                      <span class="sort-indicator" aria-hidden="true">{{ matrixSortKey === key ? (matrixSortDirection === 'asc' ? '↑' : '↓') : '↕' }}</span>
+                    </button>
+                  </th>
+                </tr>
+              </thead>
               <tbody>
                 <tr v-for="row in matrixRows" :key="row.monthKey + '-' + row.tier">
                   <td data-label="Tier"><span class="target-tier-label"><span class="tier-dot" :class="row.tier.toLowerCase().replace(/[^a-z0-9]+/g, '-')"></span><strong>{{ row.tier }}</strong></span></td>
