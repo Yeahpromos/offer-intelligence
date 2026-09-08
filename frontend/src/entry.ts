@@ -44,6 +44,7 @@ import {
 import { createI18nStore } from "./shared/i18n";
 import { defaultPageForLevel } from "./shared/pageAccess";
 import OfferTrackerPage from "./features/offer-tracker/OfferTrackerPage.vue";
+import { loadOfferTrackerRange } from "./features/offer-tracker/offerTrackerApi";
 import PaymentsPage from "./features/payments/PaymentsPage.vue";
 import PublishersPage from "./features/publishers/PublishersPage.vue";
 import BrandMediaPage from "./features/brand-media/BrandMediaPage.vue";
@@ -132,10 +133,6 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-interface OfferTrackerOffersPayload {
-  readonly offers?: unknown;
-}
-
 interface PaymentsApiPayload {
   readonly records?: unknown;
   readonly checkedAt?: unknown;
@@ -219,20 +216,6 @@ function defaultDateRange(data: AppBootstrapData): OfferTrackerDateRange {
   const endDate = stringValue(chatbotData.endDate);
   if (startDate && endDate) return { startDate, endDate };
   return { startDate: "1970-01-01", endDate: "1970-01-01" };
-}
-
-async function loadOfferTrackerRange(range: OfferTrackerDateRange): Promise<readonly OfferRecord[]> {
-  const query = new URLSearchParams({
-    start_date: range.startDate,
-    end_date: range.endDate
-  });
-  const payload = await apiRequest<OfferTrackerOffersPayload>(
-    `/api/ui/db/offers?${query.toString()}`
-  );
-  if (!isRecord(payload) || !Array.isArray(payload.offers)) {
-    throw new Error("Offer Tracker API 响应缺少 offers");
-  }
-  return payload.offers.filter((row): row is OfferRecord => isRecord(row));
 }
 
 function downloadOfferTracker(payload: OfferTrackerExportPayload): boolean {

@@ -43,7 +43,8 @@ function safeSourceRows(rows: readonly OfferRecord[] | undefined): readonly Offe
 
 export function useOfferTracker(options: UseOfferTrackerOptions) {
   const initialFilters = normalizeOfferTrackerFilters({}, options.defaultDateRange);
-  const sourceRows = ref<readonly OfferRecord[]>(safeSourceRows(options.offers));
+  const initialRows = safeSourceRows(options.offers);
+  const sourceRows = ref<readonly OfferRecord[]>(initialRows);
   const filters = ref<OfferTrackerFilters>(initialFilters);
   const draftFilters = ref<OfferTrackerFilters>(initialFilters);
   const search = ref("");
@@ -75,6 +76,16 @@ export function useOfferTracker(options: UseOfferTrackerOptions) {
   const availableTiers = computed(() => offerTrackerTierValues(allRows.value));
   const availableCategories = computed(() => offerTrackerCategoryValues(allRows.value));
   const availableNetworks = computed(() => offerTrackerNetworkValues(allRows.value));
+
+  async function rowsForRange(range: OfferTrackerDateRange): Promise<readonly OfferRecord[]> {
+    const matches = (other: OfferTrackerDateRange) => (
+      range.startDate === other.startDate && range.endDate === other.endDate
+    );
+    // Only dates affect server metrics; the remaining filters use loaded rows.
+    if (matches(filters.value) || !options.loadRange) return sourceRows.value;
+    if (matches(initialFilters)) return initialRows;
+    return options.loadRange(range);
+  }
 
   function setDraftFilters(input: OfferTrackerFilterInput): void {
     draftFilters.value = normalizeOfferTrackerFilters(input, options.defaultDateRange);
@@ -117,9 +128,7 @@ export function useOfferTracker(options: UseOfferTrackerOptions) {
     loading.value = true;
     error.value = "";
     try {
-      const rows = options.loadRange
-        ? await options.loadRange({ startDate: normalized.startDate, endDate: normalized.endDate })
-        : sourceRows.value;
+      const rows = await rowsForRange(normalized);
       if (sequence !== requestSequence) return false;
       sourceRows.value = safeSourceRows(rows);
       filters.value = normalized;
@@ -142,9 +151,7 @@ export function useOfferTracker(options: UseOfferTrackerOptions) {
     loading.value = true;
     error.value = "";
     try {
-      const rows = options.loadRange
-        ? await options.loadRange({ startDate: reset.startDate, endDate: reset.endDate })
-        : sourceRows.value;
+      const rows = await rowsForRange(reset);
       if (sequence !== requestSequence) return false;
       sourceRows.value = safeSourceRows(rows);
       filters.value = reset;

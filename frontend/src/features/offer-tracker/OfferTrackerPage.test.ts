@@ -164,6 +164,7 @@ describe("OfferTrackerPage", () => {
         throw new Error("range unavailable");
       }
     });
+    await wrapper.get('input[aria-label="开始日期"]').setValue("2026-06-01");
     await wrapper.get('button[aria-label="应用筛选"]').trigger("click");
     await nextTick();
     expect(wrapper.text()).toContain("筛选数据加载失败");
@@ -178,6 +179,7 @@ describe("OfferTrackerPage", () => {
       }
     });
 
+    await wrapper.get('input[aria-label="Start date"]').setValue("2026-06-01");
     await wrapper.get('button[aria-label="Apply filters"]').trigger("click");
     await nextTick();
 

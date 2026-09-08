@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "api" / "db" / "index.py"
@@ -244,6 +245,20 @@ def main():
         assert_equal(offers_range["status"], 200, "UI offers date-range response code")
         assert b'"startDate":"2026-07-01"' in offers_range["body"], offers_range["body"]
         assert b'"endDate":"2026-07-28"' in offers_range["body"], offers_range["body"]
+
+        database_error = RuntimeError("private database failure")
+        with patch.object(module, "offers_payload", side_effect=database_error), patch.object(
+            module.logging.getLogger(module.__name__), "exception"
+        ) as log_error:
+            failed_offers = request(module.app, "ui-offers", token="")
+        assert_equal(failed_offers["status"], 502, "UI offers database error code")
+        assert_equal(
+            json.loads(failed_offers["body"])["error"],
+            "Database query failed",
+            "UI offers public database error",
+        )
+        assert b"private database failure" not in failed_offers["body"]
+        log_error.assert_called_once_with("Offer Tracker query failed")
 
         publishers = request(module.app, "ui-publishers", "refresh=1", token="")
         assert_equal(publishers["status"], 200, "UI publishers response code")

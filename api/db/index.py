@@ -1,6 +1,7 @@
 from http import HTTPStatus
 from io import BytesIO
 import json
+import logging
 
 from auth import _read_json_body, current_user_for_target, require_page_access
 from google_ads_workbench import (
@@ -307,6 +308,7 @@ def handle_ui_offers(target, query):
     except ValueError as error:
         send_json(target, 400, {"ok": False, "error": str(error)})
     except Exception as error:
+        logging.getLogger(__name__).exception("Offer Tracker query failed")
         send_db_error(target, error)
 
 
