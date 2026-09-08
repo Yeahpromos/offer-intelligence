@@ -1,5 +1,7 @@
 import importlib.util
 from io import BytesIO
+from decimal import Decimal
+from datetime import date
 import json
 import os
 import sys
@@ -11,6 +13,7 @@ APP_PATH = ROOT / "api" / "db" / "index.py"
 sys.path.insert(0, str(ROOT))
 
 import auth
+from offer_db import compact_api_row
 
 
 def assert_equal(actual, expected, label):
@@ -245,6 +248,32 @@ def main():
         assert_equal(offers_range["status"], 200, "UI offers date-range response code")
         assert b'"startDate":"2026-07-01"' in offers_range["body"], offers_range["body"]
         assert b'"endDate":"2026-07-28"' in offers_range["body"], offers_range["body"]
+
+        # The live builder compacts raw MySQL rows; file snapshots already have
+        # JSON-compatible values and previously hid this cold range failure.
+        live_offer = compact_api_row({
+            "merchantId": "42",
+            "commissionRate": Decimal("12.3456"),
+            "directSales": Decimal("1234.50"),
+            "haloSales": Decimal("0.00"),
+            "cpc": Decimal("0.000125"),
+            "sourceDate": date(2026, 9, 8),
+            "hasDiscount": False,
+            "topAsins": ["B012345678"],
+            "missing": None,
+        })
+        with patch.object(module, "offers_payload", return_value={"ok": True, "offers": [live_offer]}):
+            live_response = request(module.app, "ui-offers", "start_date=2026-06-01&end_date=2026-09-30", token="")
+        assert_equal(live_response["status"], 200, "live decimal offers response code")
+        live_row = json.loads(live_response["body"])["offers"][0]
+        assert_equal(live_row["commissionRate"], 12.3456, "numeric commission precision")
+        assert_equal(live_row["directSales"], 1234.5, "numeric sales")
+        assert_equal(live_row["haloSales"], 0, "zero sales retained")
+        assert_equal(live_row["cpc"], 0.000125, "small decimal precision")
+        assert_equal(live_row["sourceDate"], "2026-09-08", "existing date format")
+        assert_equal(live_row["hasDiscount"], False, "boolean retained")
+        assert_equal(live_row["topAsins"], ["B012345678"], "ASIN array retained")
+        assert "missing" not in live_row
 
         database_error = RuntimeError("private database failure")
         with patch.object(module, "offers_payload", side_effect=database_error), patch.object(

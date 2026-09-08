@@ -5418,7 +5418,9 @@ def compact_api_row(row: dict[str, Any] | None) -> dict[str, Any] | None:
     for key, value in row.items():
         if value is None or value == "":
             continue
-        if isinstance(value, (dt.datetime, dt.date)):
+        if isinstance(value, Decimal):
+            value = float(value)
+        elif isinstance(value, (dt.datetime, dt.date)):
             value = normalize_compact_date(value)
         output[key] = value
     return output
