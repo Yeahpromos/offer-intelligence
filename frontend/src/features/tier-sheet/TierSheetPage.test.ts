@@ -27,6 +27,39 @@ const report = {
 };
 
 describe("TierSheetPage", () => {
+  it("switches the complete report chrome between Chinese and English while retaining raw sort keys", async () => {
+    const wrapper = mount(TierSheetPage, { props: { language: "zh", reportData: report, autoLoad: false } });
+    expect(wrapper.get(".tier-header").text()).toContain("添加商家");
+    expect(wrapper.get(".tier-summary").text()).toContain("总点击量");
+    expect(wrapper.get(".tier-category-header").text()).toContain("个品类");
+    expect(wrapper.get('[data-tier-sort="Merchant Name"]').text()).toContain("商家名称");
+    expect(wrapper.get('[data-tier-date="start"]').attributes("aria-label")).toBe("开始日期");
+    await wrapper.setProps({ language: "en" });
+    expect(wrapper.get(".tier-header").text()).toContain("Add merchant");
+    expect(wrapper.get('[data-tier-sort="Merchant Name"]').text()).toContain("Merchant Name");
+    wrapper.unmount();
+  });
+
+  it("validates manual date entry and only loads a valid applied range", async () => {
+    const calls: unknown[] = [];
+    const wrapper = mount(TierSheetPage, { props: { language: "zh", reportData: report, autoLoad: false, loadTier: async (request) => { calls.push(request); return { rows: [] }; } } });
+    await wrapper.get('[data-tier-date="start"]').setValue("2026-09-30");
+    await wrapper.get('[data-tier-date="end"]').setValue("2026-09-01");
+    await wrapper.get('[data-tier-action="date-apply"]').trigger("click");
+    expect(wrapper.get(".tier-date-status").text()).toContain("开始日期不能晚于结束日期");
+    expect(calls).toHaveLength(0);
+    await wrapper.get('[data-tier-date="start"]').setValue("2026-02-30");
+    await wrapper.get('[data-tier-action="date-apply"]').trigger("click");
+    expect(wrapper.get(".tier-date-status").text()).toContain("请输入有效日期");
+    expect(calls).toHaveLength(0);
+    await wrapper.get('[data-tier-date="start"]').setValue("2026-09-01");
+    await wrapper.get('[data-tier-date="end"]').setValue("2026-09-30");
+    await wrapper.get('[data-tier-action="date-apply"]').trigger("click");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ startDate: "2026-09-01", endDate: "2026-09-30" });
+    wrapper.unmount();
+  });
+
   it("renders the legacy Tier hierarchy and operational controls", () => {
     const wrapper = mount(TierSheetPage, { props: { language: "en", reportData: report, autoLoad: false } });
     expect(wrapper.find('[data-page="tier"]').exists()).toBe(true);

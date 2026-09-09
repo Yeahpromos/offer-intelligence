@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
-import { translateMessage, type UiLanguage } from "../../shared/i18n";
+import { tierCategoryLabel, tierHeaderLabel, tierStatusLabel } from "./tierSheetLabels";
+import DatePicker from "../../shared/components/DatePicker.vue";
+import { translateMessage, type I18nMessageValues, type UiLanguage } from "../../shared/i18n";
 import {
   formatTierCell,
   TIER_NAMES,
@@ -107,9 +109,15 @@ const tableMinWidth = computed(() => `${Math.min(2600, Math.max(1200, tier.displ
 const firstCategory = computed(() => tier.categorySummaries.value[0] || null);
 const allVisibleSelected = computed(() => tier.allVisibleSelected.value);
 
-function message(key: string, fallback: string): string {
-  return translateMessage(props.language, key, fallback);
+function message(key: string, fallback: string, values: I18nMessageValues = {}): string {
+  return translateMessage(props.language, key, fallback, values);
 }
+
+const rangeErrorLabel = computed(() => {
+  const keys: Record<string, string> = { "Use a valid date.": "invalidDate", "Start date must be before end date.": "reversedDate", "Date range cannot exceed 366 days.": "longRange" };
+  const error = tier.rangeError.value;
+  return keys[error] ? message(`tierSheet.${keys[error]}`, error) : error;
+});
 
 function shortNumber(value: number): string {
   const numeric = Number(value) || 0;
@@ -130,7 +138,8 @@ function formatPercent(value: number): string {
 }
 
 function formatCell(row: Readonly<Record<string, unknown>>, header: string): string {
-  return formatTierCell(tier.selectedTier.value, row, header);
+  const value = formatTierCell(tier.selectedTier.value, row, header);
+  return header.toLowerCase() === "category" ? tierCategoryLabel(props.language, value) : value;
 }
 
 const TIER_CATEGORY_EXPORT_HEADERS = [
@@ -271,7 +280,7 @@ onUnmounted(() => tier.dispose());
       </div>
     </header>
 
-    <nav class="tier-modern-tabs" aria-label="Tier pages">
+    <nav class="tier-modern-tabs" :aria-label="message('tierSheet.navLabel', 'Tier pages')">
       <button
         v-for="name in TIER_NAMES"
         :key="name"
@@ -279,18 +288,19 @@ onUnmounted(() => tier.dispose());
         :class="{ active: tier.selectedTier.value === name }"
         :data-tier-tab="name"
         :data-tier-select="name"
+        :aria-current="tier.selectedTier.value === name ? 'page' : undefined"
         @click="selectTier(name)"
       >{{ tierLabel(name) }}</button>
     </nav>
 
-    <section class="tier-summary" aria-label="Tier summary">
+    <section class="tier-summary" :aria-label="message('tierSheet.summaryLabel', 'Tier summary')">
       <div v-for="card in summaryCards" :key="card.label" class="metric">
         <span>{{ card.label }}</span>
         <strong>{{ card.value }}</strong>
       </div>
     </section>
 
-    <section class="panel sheet-notes" aria-label="Tier assignment notes">
+    <section class="panel sheet-notes" :aria-label="message('tierSheet.notesLabel', 'Tier assignment notes')">
       <div class="logic-summary">
         <div>
           <strong>{{ selectedTierTitle }}</strong>
@@ -302,11 +312,11 @@ onUnmounted(() => tier.dispose());
       </div>
     </section>
 
-    <section class="panel tier-category-summary" aria-label="Category-wise tier report">
+    <section class="panel tier-category-summary" :aria-label="message('tierSheet.categoryReport', 'Category-wise tier report')">
       <div class="tier-category-header">
         <div>
           <h3>{{ message("tierSheet.categoryReport", "Category-wise report") }}</h3>
-          <p>{{ tier.filteredRows.value.length.toLocaleString() }} rows / {{ tier.categorySummaries.value.length.toLocaleString() }} categories</p>
+          <p>{{ message("tierSheet.categoryCount", "{rows} rows / {categories} categories", { rows: tier.filteredRows.value.length, categories: tier.categorySummaries.value.length }) }}</p>
         </div>
         <dl>
           <div><dt>{{ message("tierSheet.merchants", "Merchants") }}</dt><dd>{{ tier.summary.value.merchantCount.toLocaleString() }}</dd></div>
@@ -320,7 +330,7 @@ onUnmounted(() => tier.dispose());
           <thead><tr><th>{{ message("tierSheet.category", "Category") }}</th><th>{{ message("tierSheet.merchants", "Merchants") }}</th><th>{{ message("tierSheet.revenue", "Revenue") }}</th><th>{{ message("tierSheet.orders", "Orders") }}</th><th>{{ message("tierSheet.conversion", "CVR") }}</th><th>EPC</th><th>{{ message("tierSheet.topMerchant", "Top merchant") }}</th></tr></thead>
           <tbody>
             <tr v-for="category in tier.categorySummaries.value" :key="category.category">
-              <td><strong>{{ category.category }}</strong><p>{{ category.previewMerchants || '-' }}</p></td>
+              <td><strong>{{ tierCategoryLabel(language, category.category) }}</strong><p>{{ category.previewMerchants || '-' }}</p></td>
               <td>{{ category.merchantCount.toLocaleString() }}</td>
               <td>{{ shortMoney(category.revenue) }}</td>
               <td>{{ category.orders.toLocaleString() }}</td>
@@ -334,18 +344,18 @@ onUnmounted(() => tier.dispose());
       </div>
     </section>
 
-    <section class="panel tier-sheet-filters" aria-label="Tier filters">
+    <section class="panel tier-sheet-filters" :aria-label="message('tierSheet.filtersLabel', 'Tier filters')">
       <label>
         <span>{{ message("tierSheet.search", "Search") }}</span>
         <input type="search" data-tier-action="search" :value="tier.filters.value.search" :placeholder="message('tierSheet.searchPlaceholder', 'Merchant, ID, reason, recommendation')" @input="tier.setFilter('search', ($event.target as HTMLInputElement).value)" />
       </label>
       <div class="tier-date-range-field">
         <span>{{ message("tierSheet.dateRange", "Date / range") }}</span>
-        <small class="tier-date-status" :class="{ error: Boolean(tier.rangeError.value), loading: tier.loading.value }">{{ tier.rangeError.value || (tier.loading.value ? message("tierSheet.loading", "Loading YeahPromos data…") : sourceLabel) }}</small>
+        <small id="tier-date-status" role="status" aria-live="polite" class="tier-date-status" :class="{ error: Boolean(tier.rangeError.value), loading: tier.loading.value }">{{ rangeErrorLabel || (tier.loading.value ? message("tierSheet.loading", "Loading YeahPromos data…") : sourceLabel) }}</small>
         <div class="tier-date-range-controls">
-          <input v-model="startDraft" data-tier-date="start" type="date" :disabled="!isDateTier || tier.loading.value" aria-label="Tier report start date" />
+          <DatePicker v-model="startDraft" data-tier-date="start" aria-describedby="tier-date-status" :aria-invalid="Boolean(tier.rangeError.value)" :language="language" :today="today" :disabled="!isDateTier || tier.loading.value" :label="message('tierSheet.startDate', 'Start date')" />
           <span class="tier-date-range-separator" aria-hidden="true">–</span>
-          <input v-model="endDraft" data-tier-date="end" type="date" :disabled="!isDateTier || tier.loading.value" aria-label="Tier report end date" />
+          <DatePicker v-model="endDraft" data-tier-date="end" aria-describedby="tier-date-status" :aria-invalid="Boolean(tier.rangeError.value)" :language="language" :today="today" :disabled="!isDateTier || tier.loading.value" :label="message('tierSheet.endDate', 'End date')" />
           <button class="secondary-button tier-date-apply" data-tier-action="date-apply" type="button" :disabled="!isDateTier || tier.loading.value" @click="applyDateRange">{{ message("tierSheet.apply", "Apply") }}</button>
         </div>
       </div>
@@ -366,10 +376,10 @@ onUnmounted(() => tier.dispose());
       <div class="table-toolbar">
         <div>
           <h3>{{ selectedTierTitle }} {{ message("tierSheet.records", "Sheet Records") }}</h3>
-          <p>{{ tier.sortedRows.value.length.toLocaleString() }} rows / showing {{ tier.pagination.value.totalRows ? tier.pagination.value.startIndex + 1 : 0 }}–{{ tier.pagination.value.endIndex }} / {{ tier.displayHeaders.value.length.toLocaleString() }} of {{ tier.allHeaders.value.length.toLocaleString() }} columns</p>
-          <nav v-if="tier.selectedTier.value === 'Tier 4'" class="tier-pagination" aria-label="Tier 4 pages">
+          <p>{{ message("tierSheet.recordCount", "{rows} rows / showing {start}–{end} / {visible} of {total} columns", { rows: tier.sortedRows.value.length, start: tier.pagination.value.totalRows ? tier.pagination.value.startIndex + 1 : 0, end: tier.pagination.value.endIndex, visible: tier.displayHeaders.value.length, total: tier.allHeaders.value.length }) }}</p>
+          <nav v-if="tier.selectedTier.value === 'Tier 4'" class="tier-pagination" :aria-label="message('tierSheet.navLabel', 'Tier 4 pages')">
             <button class="secondary-button" type="button" :disabled="tier.pagination.value.page <= 1" @click="tier.setPage(tier.pagination.value.page - 1)">{{ message("tierSheet.previous", "Previous") }}</button>
-            <span>Page {{ tier.pagination.value.page }} of {{ tier.pagination.value.totalPages }}</span>
+            <span>{{ message("tierSheet.pageCount", "Page {page} of {total}", { page: tier.pagination.value.page, total: tier.pagination.value.totalPages }) }}</span>
             <button class="secondary-button" type="button" :disabled="tier.pagination.value.page >= tier.pagination.value.totalPages" @click="tier.setPage(tier.pagination.value.page + 1)">{{ message("tierSheet.next", "Next") }}</button>
           </nav>
         </div>
@@ -380,7 +390,7 @@ onUnmounted(() => tier.dispose());
               <div class="column-picker-header"><strong>{{ message("tierSheet.columnsTitle", "Display columns") }}</strong><span>{{ message("tierSheet.columnsHint", "Choose fields to display") }}</span></div>
               <div class="column-picker-actions"><button type="button" @click="tier.resetVisibleHeaders">{{ message("tierSheet.coreColumns", "Default") }}</button><button type="button" @click="tier.setVisibleHeaders(tier.allHeaders.value)">{{ message("tierSheet.allColumns", "All") }}</button></div>
               <div class="column-picker-list">
-                <label v-for="header in tier.allHeaders.value" :key="header" class="column-check"><input type="checkbox" :checked="tier.displayHeaders.value.includes(header)" @change="tier.setVisibleHeaders(Array.from(new Set([...tier.displayHeaders.value.filter((item) => item !== header), ...(($event.target as HTMLInputElement).checked ? [header] : [])])))" /><span>{{ header }}</span></label>
+                <label v-for="header in tier.allHeaders.value" :key="header" class="column-check"><input type="checkbox" :checked="tier.displayHeaders.value.includes(header)" @change="tier.setVisibleHeaders(Array.from(new Set([...tier.displayHeaders.value.filter((item) => item !== header), ...(($event.target as HTMLInputElement).checked ? [header] : [])])))" /><span>{{ tierHeaderLabel(language, header) }}</span></label>
               </div>
             </div>
           </div>
@@ -389,15 +399,15 @@ onUnmounted(() => tier.dispose());
           <button v-if="!tier.expanded.value" class="icon-button table-expand-button" type="button" data-tier-action="expand" :disabled="tier.selectedTier.value === 'BLACK TIER'" @click="tier.openOverlay">{{ message("tierSheet.expand", "Expand") }}</button>
           <button v-else class="icon-button table-close-button" type="button" data-tier-action="close-overlay" @click="tier.closeOverlay">{{ message("tierSheet.close", "Close") }}</button>
           <button class="icon-button table-download-button" data-tier-action="download" type="button" :disabled="!tier.sortedRows.value.length" @click="exportRows">{{ message("tierSheet.download", "Download") }}</button>
-          <span class="tier-move-inline-status" aria-live="polite">{{ tier.moveStatus.value }}</span>
+          <span class="tier-move-inline-status" aria-live="polite">{{ tierStatusLabel(language, tier.moveStatus.value) }}</span>
         </div>
       </div>
       <div class="table-wrap sheet-table-wrap">
         <table class="sheet-table" :style="{ minWidth: tableMinWidth }">
-          <thead><tr><th class="tier-select-cell"><input class="tier-row-checkbox" type="checkbox" data-tier-select-all :checked="allVisibleSelected" :indeterminate.prop="tier.visibleSelectedCount.value > 0 && !allVisibleSelected" :disabled="!tier.visibleRows.value.length" aria-label="Select all visible merchants" @change="tier.selectAllVisible(($event.target as HTMLInputElement).checked)" /></th><th v-for="header in tier.displayHeaders.value" :key="header"><button class="table-sort-button" :class="{ active: tier.sortKey.value === header }" type="button" :data-tier-sort="header" @click="tier.setSort(header)"><span>{{ header }}</span><span class="sort-indicator" aria-hidden="true">{{ tier.sortKey.value === header ? (tier.sortDirection.value === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th></tr></thead>
+          <thead><tr><th class="tier-select-cell"><input class="tier-row-checkbox" type="checkbox" data-tier-select-all :checked="allVisibleSelected" :indeterminate.prop="tier.visibleSelectedCount.value > 0 && !allVisibleSelected" :disabled="!tier.visibleRows.value.length" :aria-label="message('tierSheet.selectAll', 'Select all visible merchants')" @change="tier.selectAllVisible(($event.target as HTMLInputElement).checked)" /></th><th v-for="header in tier.displayHeaders.value" :key="header" scope="col" :aria-sort="tier.sortKey.value === header ? (tier.sortDirection.value === 'asc' ? 'ascending' : 'descending') : 'none'"><button class="table-sort-button" :class="{ active: tier.sortKey.value === header }" type="button" :data-tier-sort="header" @click="tier.setSort(header)"><span>{{ tierHeaderLabel(language, header) }}</span><span class="sort-indicator" aria-hidden="true">{{ tier.sortKey.value === header ? (tier.sortDirection.value === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th></tr></thead>
           <tbody>
             <tr v-for="row in tier.visibleRows.value" :key="row.key" :class="[rowClass(row), { 'is-selected': tier.selectedKeys.value.has(row.key) }]" :data-tier-row-key="row.key">
-              <td class="tier-select-cell"><input class="tier-row-checkbox" type="checkbox" :data-tier-select-row="row.key" :checked="tier.selectedKeys.value.has(row.key)" :aria-label="'Select ' + (row.merchantName || row.merchantId || 'merchant')" @change="moveRowSelection($event, row.key)" /></td>
+              <td class="tier-select-cell"><input class="tier-row-checkbox" type="checkbox" :data-tier-select-row="row.key" :checked="tier.selectedKeys.value.has(row.key)" :aria-label="message('tierSheet.selectMerchant', 'Select merchant {name}', { name: row.merchantName || row.merchantId })" @change="moveRowSelection($event, row.key)" /></td>
               <td v-for="header in tier.displayHeaders.value" :key="header" :data-tier-column="header">{{ formatCell(row.raw, header) }}</td>
             </tr>
             <tr v-if="!tier.visibleRows.value.length"><td :colspan="tier.displayHeaders.value.length + 1">{{ hasData ? message("tierSheet.empty", "No rows match the current filters.") : message("tierSheet.noData", "No tier data is available.") }}</td></tr>
@@ -408,25 +418,25 @@ onUnmounted(() => tier.dispose());
 
     <div v-if="tier.expanded.value" class="sheet-expanded-backdrop" aria-hidden="false" @click="tier.closeOverlay" />
 
-    <div v-if="tier.moveDialogOpen.value" class="tier-move-dialog" role="dialog" aria-modal="true" aria-label="Move selected merchants">
+    <div v-if="tier.moveDialogOpen.value" class="tier-move-dialog" role="dialog" aria-modal="true" :aria-label="message('tierSheet.moveTitle', 'Move selected merchants')">
       <div class="tier-move-card">
-        <div class="tier-move-header"><div><h3>{{ message("tierSheet.moveTitle", "Move selected merchants") }}</h3><p>{{ tier.selectedCount.value }} selected from {{ tierLabel(tier.selectedTier.value) }}</p></div><button class="icon-button tier-move-close" type="button" @click="tier.closeMoveDialog">{{ message("tierSheet.close", "Close") }}</button></div>
-        <div class="tier-move-targets" aria-label="Move target tier"><button v-for="name in TIER_NAMES" :key="name" class="tier-move-target" :class="{ active: tier.moveTarget.value === name }" :data-tier-move-target="name" :disabled="name === tier.selectedTier.value" type="button" @click="tier.setMoveTarget(name)"><span>{{ tierLabel(name) }}</span><small>{{ name === tier.selectedTier.value ? message("tierSheet.currentTier", "Current tier") : '' }}</small></button></div>
-        <p class="tier-move-status" :aria-busy="tier.moveSyncing.value ? 'true' : 'false'">{{ tier.moveStatus.value }}</p>
+        <div class="tier-move-header"><div><h3>{{ message("tierSheet.moveTitle", "Move selected merchants") }}</h3><p>{{ message("tierSheet.selectedCount", "{count} selected from {tier}", { count: tier.selectedCount.value, tier: tierLabel(tier.selectedTier.value) }) }}</p></div><button class="icon-button tier-move-close" type="button" @click="tier.closeMoveDialog">{{ message("tierSheet.close", "Close") }}</button></div>
+        <div class="tier-move-targets" :aria-label="message('tierSheet.targetLabel', 'Move target tier')"><button v-for="name in TIER_NAMES" :key="name" class="tier-move-target" :class="{ active: tier.moveTarget.value === name }" :data-tier-move-target="name" :disabled="name === tier.selectedTier.value" type="button" @click="tier.setMoveTarget(name)"><span>{{ tierLabel(name) }}</span><small>{{ name === tier.selectedTier.value ? message("tierSheet.currentTier", "Current tier") : '' }}</small></button></div>
+        <p class="tier-move-status" :aria-busy="tier.moveSyncing.value ? 'true' : 'false'">{{ tierStatusLabel(language, tier.moveStatus.value) }}</p>
         <div class="tier-move-footer"><button class="secondary-button" type="button" :disabled="tier.moveSyncing.value" @click="tier.closeMoveDialog">{{ message("tierSheet.cancel", "Cancel") }}</button><button class="secondary-button tier-move-confirm" data-tier-action="confirm-move" type="button" :disabled="!tier.moveTarget.value || tier.moveSyncing.value" @click="tier.moveSelectedRows">{{ tier.moveSyncing.value ? message("tierSheet.saving", "Saving…") : message("tierSheet.confirmMove", "Move merchants") }}</button></div>
       </div>
     </div>
 
-    <div v-if="tier.additionsOpen.value" class="tier1-additions-overlay" role="dialog" aria-modal="true" aria-label="Tier 1 migration history" @click.self="tier.closeAdditions">
-      <section class="tier1-additions-panel"><div class="tier1-additions-header"><div><span class="tier1-additions-eyebrow">Tier 1 / database history</span><h3>{{ message("tierSheet.additionsTitle", "Merchant migration history") }}</h3></div><button class="tier1-additions-close" type="button" @click="tier.closeAdditions">{{ message("tierSheet.close", "Close") }}</button></div><p class="tier1-additions-status">{{ tier.additionsLoading.value ? message("tierSheet.loading", "Loading…") : tier.additionsError.value }}</p><div class="tier1-additions-list"><div v-if="!tier.additions.value.length && !tier.additionsLoading.value" class="tier1-additions-empty">{{ message("tierSheet.noAdditions", "No merchants have been added through this tool yet.") }}</div><article v-for="merchant in tier.additions.value" :key="merchant.merchantId" class="tier1-addition-row"><strong>{{ merchant.merchantName || merchant.merchantId }}<small>ID {{ merchant.merchantId }}</small></strong><span>{{ merchant.network || 'Unknown' }}</span><span>{{ merchant.currentTier || 'Tier 1' }}</span></article></div></section>
+    <div v-if="tier.additionsOpen.value" class="tier1-additions-overlay" role="dialog" aria-modal="true" :aria-label="message('tierSheet.additionsTitle', 'Tier 1 migration history')" @click.self="tier.closeAdditions">
+      <section class="tier1-additions-panel"><div class="tier1-additions-header"><div><span class="tier1-additions-eyebrow">{{ message("tierSheet.historyEyebrow", "Tier 1 / database history") }}</span><h3>{{ message("tierSheet.additionsTitle", "Merchant migration history") }}</h3></div><button class="tier1-additions-close" type="button" @click="tier.closeAdditions">{{ message("tierSheet.close", "Close") }}</button></div><p class="tier1-additions-status">{{ tier.additionsLoading.value ? message("tierSheet.loading", "Loading…") : tier.additionsError.value }}</p><div class="tier1-additions-list"><div v-if="!tier.additions.value.length && !tier.additionsLoading.value" class="tier1-additions-empty">{{ message("tierSheet.noAdditions", "No merchants have been added through this tool yet.") }}</div><article v-for="merchant in tier.additions.value" :key="merchant.merchantId" class="tier1-addition-row"><strong>{{ merchant.merchantName || merchant.merchantId }}<small>ID {{ merchant.merchantId }}</small></strong><span>{{ merchant.network || message('common.unknown', 'Unknown') }}</span><span>{{ merchant.currentTier || 'Tier 1' }}</span></article></div></section>
     </div>
 
-    <div v-if="tier.merchantDialogOpen.value" class="tier1-merchant-dialog" role="dialog" aria-modal="true" aria-label="Add merchant to Tier 1" @click.self="tier.closeMerchantDialog">
+    <div v-if="tier.merchantDialogOpen.value" class="tier1-merchant-dialog" role="dialog" aria-modal="true" :aria-label="message('tierSheet.addMerchantTitle', 'Add merchant to Tier 1')" @click.self="tier.closeMerchantDialog">
       <div class="tier1-merchant-card"><div class="tier1-merchant-header"><div><h3>{{ message("tierSheet.addMerchantTitle", "Add merchant to Tier 1") }}</h3><p>{{ message("tierSheet.addMerchantHint", "Find an active merchant in the YeahPromos database, review the match, then confirm the assignment.") }}</p></div><button class="tier1-merchant-close" type="button" @click="tier.closeMerchantDialog">{{ message("tierSheet.close", "Close") }}</button></div>
         <form class="tier1-merchant-search-form" @submit.prevent="searchMerchant"><label><span>{{ message("tierSheet.merchantIdName", "Merchant ID or merchant name") }}</span><div class="tier1-merchant-search-row"><input v-model="tier.merchantQuery.value" type="search" autocomplete="off" :placeholder="message('tierSheet.merchantPlaceholder', 'Enter a merchant ID or name')" /><button type="submit" :disabled="tier.merchantLoading.value">{{ message("tierSheet.findMerchant", "Find merchant") }}</button></div></label></form>
-        <p class="tier1-merchant-status" :class="{ error: tier.merchantStatus.value.includes('No ') || tier.merchantStatus.value.includes('Enter ') }">{{ tier.merchantStatus.value }}</p>
-        <div class="tier1-merchant-results" role="listbox"><button v-for="merchant in tier.merchantResults.value" :key="merchant.merchantId" class="tier1-merchant-result" type="button" :disabled="merchant.currentTier === 'Tier 1'" @click="tier.selectMerchant(merchant.merchantId)"><strong>{{ merchant.merchantName || merchant.merchantId }}<small>ID {{ merchant.merchantId }}</small></strong><span>{{ merchant.network || 'Unknown' }}</span><span>{{ merchant.currentTier || 'Not assigned' }}</span></button></div>
-        <section v-if="tier.selectedMerchant.value" class="tier1-merchant-confirmation"><div class="tier1-confirmation-heading"><div><span>{{ message("tierSheet.confirmMerchant", "Confirm merchant") }}</span><h4>{{ tier.selectedMerchant.value.merchantName || tier.selectedMerchant.value.merchantId }}</h4></div><button type="button" @click="tier.selectedMerchant.value = null">{{ message("tierSheet.changeSelection", "Change selection") }}</button></div><dl class="tier1-confirmation-details"><div><dt>Merchant ID</dt><dd>{{ tier.selectedMerchant.value.merchantId }}</dd></div><div><dt>Network</dt><dd>{{ tier.selectedMerchant.value.network || 'Unknown' }}</dd></div><div><dt>Current tier</dt><dd>{{ tier.selectedMerchant.value.currentTier || 'Not assigned' }}</dd></div></dl></section>
+        <p class="tier1-merchant-status" :class="{ error: tier.merchantStatus.value.includes('No ') || tier.merchantStatus.value.includes('Enter ') }">{{ tierStatusLabel(language, tier.merchantStatus.value) }}</p>
+        <div class="tier1-merchant-results" role="group" :aria-label="message('tierSheet.findMerchant', 'Find merchant')"><button v-for="merchant in tier.merchantResults.value" :key="merchant.merchantId" class="tier1-merchant-result" type="button" :disabled="merchant.currentTier === 'Tier 1'" @click="tier.selectMerchant(merchant.merchantId)"><strong>{{ merchant.merchantName || merchant.merchantId }}<small>ID {{ merchant.merchantId }}</small></strong><span>{{ merchant.network || message('common.unknown', 'Unknown') }}</span><span>{{ merchant.currentTier || message('tierSheet.unassigned', 'Not assigned') }}</span></button></div>
+        <section v-if="tier.selectedMerchant.value" class="tier1-merchant-confirmation"><div class="tier1-confirmation-heading"><div><span>{{ message("tierSheet.confirmMerchant", "Confirm merchant") }}</span><h4>{{ tier.selectedMerchant.value.merchantName || tier.selectedMerchant.value.merchantId }}</h4></div><button type="button" @click="tier.selectedMerchant.value = null">{{ message("tierSheet.changeSelection", "Change selection") }}</button></div><dl class="tier1-confirmation-details"><div><dt>{{ message("tierSheet.merchantId", "Merchant ID") }}</dt><dd>{{ tier.selectedMerchant.value.merchantId }}</dd></div><div><dt>{{ message("tierSheet.network", "Network") }}</dt><dd>{{ tier.selectedMerchant.value.network || message('common.unknown', 'Unknown') }}</dd></div><div><dt>{{ message("tierSheet.currentTier", "Current tier") }}</dt><dd>{{ tier.selectedMerchant.value.currentTier || message('tierSheet.unassigned', 'Not assigned') }}</dd></div></dl></section>
         <div class="tier1-merchant-footer"><button class="secondary-button" type="button" @click="tier.closeMerchantDialog">{{ message("tierSheet.cancel", "Cancel") }}</button><button class="tier1-merchant-confirm" type="button" :disabled="!tier.selectedMerchant.value || tier.selectedMerchant.value.currentTier === 'Tier 1' || tier.merchantSubmitting.value" @click="tier.addMerchant">{{ message("tierSheet.addToTier1", "Add to Tier 1") }}</button></div>
       </div>
     </div>
