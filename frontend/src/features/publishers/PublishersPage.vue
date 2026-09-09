@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-
-import type { UiLanguage } from "../../shared/i18n";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import DatePicker from "../../shared/components/DatePicker.vue";
+import { publisherDonutPath, publisherOverviewColor } from "./publisherPresentation";
+import type { I18nMessageValues, UiLanguage } from "../../shared/i18n";
 import { translateMessage } from "../../shared/i18n";
 import {
   DEFAULT_PUBLISHER_FILTERS,
-  PUBLISHER_CHART_COLORS,
   PUBLISHER_KPI_DEFINITIONS,
   PUBLISHER_TABLE_COLUMNS,
   aggregatePublisherMetrics,
@@ -72,6 +72,11 @@ const highlightedOverviewKey = ref("");
 const draggingSection = ref("");
 const draggedSectionIndex = ref(-1);
 const visibleColumnKeys = ref<readonly PublisherTableSortKey[]>(PUBLISHER_TABLE_COLUMNS.map((column) => column.key));
+const startDraft = ref(filters.value.startDate);
+const endDraft = ref(filters.value.endDate);
+const dateError = ref("");
+watch(() => [filters.value.startDate, filters.value.endDate], ([start, end]) => { startDraft.value = start || ""; endDraft.value = end || ""; dateError.value = ""; });
+
 const sort = ref<PublisherSort>({ key: "", direction: "asc" });
 const tablePageSize = 100;
 
@@ -156,8 +161,8 @@ const copy = computed(() => ({
   merchants: message("publishers.merchants", "merchants")
 }));
 
-function message(key: string, fallback: string): string {
-  return translateMessage(props.language, key, fallback);
+function message(key: string, fallback: string, values: I18nMessageValues = {}): string {
+  return translateMessage(props.language, key, fallback, values);
 }
 
 const effectivePayload = computed(() => applyDateFilter(
@@ -209,6 +214,34 @@ const merchantOptions = computed(() => {
   }).slice(0, 60);
 });
 
+type ComboKind = "publisher" | "merchant" | "manager";
+const comboIndex = ref<Record<ComboKind, number>>({ publisher: -1, merchant: -1, manager: -1 });
+const comboOpen = { publisher: publisherSelectorOpen, merchant: merchantDropdownOpen, manager: managerDropdownOpen };
+function comboId(kind: ComboKind, index: number): string { return `publisher-${kind}-option-${index}`; }
+function closeCombo(kind: ComboKind): void { comboOpen[kind].value = false; comboIndex.value[kind] = -1; }
+function comboKey(event: KeyboardEvent, kind: ComboKind): void {
+  const options = kind === "publisher" ? publisherOptions.value : kind === "merchant" ? merchantOptions.value : visibleManagerOptions.value;
+  if (event.key === "Escape" || event.key === "Tab") { closeCombo(kind); return; }
+  if (event.key === "Enter" && comboOpen[kind].value && comboIndex.value[kind] >= 0) {
+    event.preventDefault();
+    const index = comboIndex.value[kind];
+    if (kind === "publisher" && publisherOptions.value[index]) selectPublisher(publisherOptions.value[index]!);
+    if (kind === "merchant" && merchantOptions.value[index]) { const option = merchantOptions.value[index]!; selectMerchant(option.merchantId, option.name); }
+    if (kind === "manager" && visibleManagerOptions.value[index]) selectManager(visibleManagerOptions.value[index]!.name);
+    closeCombo(kind);
+    return;
+  }
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  event.preventDefault();
+  comboOpen[kind].value = true;
+  if (!options.length) return;
+  comboIndex.value[kind] = comboIndex.value[kind] < 0
+    ? (event.key === "ArrowDown" ? 0 : options.length - 1)
+    : (comboIndex.value[kind] + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+  void nextTick(() => document.getElementById(comboId(kind, comboIndex.value[kind]))?.scrollIntoView?.({ block: "nearest" }));
+}
+watch([publisherOptions, merchantOptions, visibleManagerOptions], () => { comboIndex.value = { publisher: -1, merchant: -1, manager: -1 }; });
+
 const association = computed(() => publisherAssociationSummary(
   effectivePayload.value,
   filteredRows.value,
@@ -246,35 +279,22 @@ const overviewRows = computed(() => filters.value.overviewFocus
   ? overviewAllRows.value.filter((row) => row.key === filters.value.overviewFocus)
   : overviewAllRows.value);
 const overviewTotal = computed(() => overviewRows.value.reduce((sum, row) => sum + row.value, 0));
-const overviewLeader = computed(() => overviewRows.value[0] || null);
 const overviewTotals = computed(() => overviewRows.value.reduce((totals, row) => ({
   clicks: totals.clicks + row.clicks,
   orders: totals.orders + row.orders,
   allCommission: totals.allCommission + row.allCommission
 }), { clicks: 0, orders: 0, allCommission: 0 }));
+const overviewColor = (row: PublisherOverviewRow): string => publisherOverviewColor(filters.value.overviewType, row.key);
 const overviewSegments = computed(() => {
   const total = overviewTotal.value || 1;
   let current = 0;
-  return overviewRows.value.map((row) => {
+  return overviewRows.value.filter((row) => row.value > 0).map((row) => {
     const fraction = row.value / total;
-    const dash = Math.max(0.1, fraction * 100);
-    const segment = {
-      ...row,
-      color: PUBLISHER_CHART_COLORS[filters.value.chartMetric] || "#3b82f6",
-      dash,
-      offset: -current,
-      percentage: fraction * 100,
-      originalIndex: overviewAllRows.value.findIndex((candidate) => candidate.key === row.key)
-    };
-    current += dash;
+    const segment = { ...row, color: overviewColor(row), path: publisherDonutPath(current, fraction), percentage: fraction * 100 };
+    current += fraction;
     return segment;
   });
 });
-const overviewColor = (row: PublisherOverviewRow): string => {
-  const index = overviewAllRows.value.findIndex((candidate) => candidate.key === row.key);
-  const colors = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#06b6d4"];
-  return colors[(index < 0 ? 0 : index) % colors.length] || colors[0] || "#3b82f6";
-};
 
 const chartRows = computed(() => [...filteredRows.value].sort((left, right) => {
   const leftMetric = filters.value.market !== "all" ? left.markets[filters.value.market] : left.total;
@@ -302,8 +322,12 @@ function chartValueLabel(publisher: PublisherRecord): string {
   return value / chartMax.value * 100 > 5 ? formatMetric(value, filters.value.chartMetric) : "";
 }
 
+function metricLabel(key: string, fallback = key): string {
+  return message(`publishers.${key}`, fallback);
+}
+
 function chartMetricLabel(): string {
-  return PUBLISHER_KPI_DEFINITIONS.find((definition) => definition.key === filters.value.chartMetric)?.label || "Clicks";
+  return metricLabel(filters.value.chartMetric);
 }
 
 const allTableRows = computed(() => publisherTableRows(filteredRows.value, filters.value.market, aggregate.value, sort.value));
@@ -441,16 +465,29 @@ function clearPublisherSelection(): void {
 
 function resetFilters(): void {
   publisherQuery.value = "";
+  startDraft.value = ""; endDraft.value = ""; dateError.value = "";
   publishers.portfolio.value = null;
   setFilters({ ...DEFAULT_PUBLISHER_FILTERS });
 }
 
 function applyFilters(): void {
-  setFilters({ tablePage: 1 }, false);
+  const valid = (value: string) => {
+    if (!value) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const date = new Date(`${value}T12:00:00`);
+    const [year, month, day] = value.split("-").map(Number);
+    return date.getFullYear() === year && date.getMonth() + 1 === month && date.getDate() === day;
+  };
+  dateError.value = !valid(startDraft.value) || !valid(endDraft.value) ? "invalidDate" : startDraft.value && endDraft.value && startDraft.value > endDraft.value ? "reversedDate" : "";
+  if (dateError.value) return;
+  setFilters({ startDate: startDraft.value, endDate: endDraft.value, tablePage: 1 }, false);
 }
 
 function applyQuickDate(range: "lastMonth" | "past30" | "past3m" | "past6m"): void {
-  setFilters(publisherQuickDateRange(range));
+  const dates = publisherQuickDateRange(range);
+  startDraft.value = dates.startDate;
+  endDraft.value = dates.endDate;
+  dateError.value = "";
 }
 
 function setPortfolioFilter(key: "portfolioSearch" | "portfolioCategory" | "portfolioTier" | "portfolioSort", value: string): void {
@@ -501,7 +538,7 @@ function tableCell(row: PublisherTableRow, key: PublisherTableSortKey): string {
   switch (key) {
     case "rank": return row.rank ? String(row.rank) : "";
     case "userId": return row.userId;
-    case "userName": return row.userName;
+    case "userName": return !row.userId && row.userName === "Total" ? copy.value.total : row.userName;
     case "adminName": return row.adminName || (row.userName === "Total" ? "" : "Unknown");
     case "clicks": return formatNumber(row.clicks);
     case "conversionRate": return formatPercent(row.conversionRate);
@@ -585,6 +622,14 @@ function emitExport(scope: "page" | "all"): void {
   const rows = scope === "page" ? tablePagination.value.rows : allTableRows.value;
   if (!rows.length) return;
   props.download({ scope, rows: rows.map(tableExportRow), filters: filters.value });
+}
+
+function moveSection(index: number, direction: number): void {
+  const next = [...layout.value];
+  const target = index + direction;
+  if (target < 0 || target >= next.length) return;
+  [next[index], next[target]] = [next[target]!, next[index]!];
+  publishers.setLayout(next);
 }
 
 function layoutDragStart(section: string, index: number): void {
@@ -673,7 +718,7 @@ defineExpose({ load });
   >
     <div class="publishers-header">
       <div>
-        <span class="publishers-eyebrow">PARTNER INTELLIGENCE</span>
+        <span class="publishers-eyebrow">{{ message("publishers.eyebrow", "PARTNER INTELLIGENCE") }}</span>
         <h2>{{ copy.title }}</h2>
         <p>{{ copy.subtitle }}</p>
       </div>
@@ -708,17 +753,17 @@ defineExpose({ load });
         class="panel publishers-filters publisher-lens-controls"
         :class="layoutSectionClass(section)"
         data-layout-id="filters"
-        aria-label="Publisher filters"
-        draggable="true"
+        :aria-label="message('publishers.filtersLabel', 'Publisher filters')"
+        :draggable="layoutEditing"
         @dragstart="layoutDragStart(section, sectionIndex)"
         @dragover.prevent
         @drop="layoutDrop(sectionIndex)"
         @dragend="layoutDragEnd"
       >
-        <div v-if="layoutEditing" class="drag-handle" aria-hidden="true">⋮⋮</div>
+        <div v-if="layoutEditing" class="publisher-section-move"><span aria-hidden="true">⋮⋮</span><span>{{ message(`publishers.section.${section}`, section) }}</span><button type="button" :disabled="sectionIndex === 0" :aria-label="message('publishers.moveUp', 'Move {name} up', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, -1)">↑</button><button type="button" :disabled="sectionIndex === layout.length - 1" :aria-label="message('publishers.moveDown', 'Move {name} down', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, 1)">↓</button></div>
         <div class="publisher-focus-selector">
           <div class="publisher-focus-copy">
-            <span class="publisher-focus-step">01 · SELECT MEDIA</span>
+            <span class="publisher-focus-step">{{ message("publishers.selectStep", "01 · SELECT PUBLISHER") }}</span>
             <strong>{{ copy.selectPublisher }}</strong>
             <p>{{ copy.selectPublisherHint }}</p>
           </div>
@@ -734,18 +779,22 @@ defineExpose({ load });
                 aria-autocomplete="list"
                 aria-controls="publishers-modern-selector"
                 :aria-expanded="publisherSelectorOpen ? 'true' : 'false'"
-                aria-label="Publisher selector"
+                :aria-label="copy.publisher"
                 @focus="publisherSelectorOpen = true"
                 @input="setPublisherSearch(($event.target as HTMLInputElement).value)"
-                @keydown.esc="publisherSelectorOpen = false"
+                :aria-activedescendant="publisherSelectorOpen && comboIndex.publisher >= 0 ? comboId('publisher', comboIndex.publisher) : undefined"
+                @keydown="comboKey($event, 'publisher')"
               />
               <div v-if="publisherSelectorOpen" id="publishers-modern-selector" class="publishers-combobox-dropdown publisher-selector-dropdown show" role="listbox">
                 <button
-                  v-for="publisher in publisherOptions"
+                  v-for="(publisher, optionIndex) in publisherOptions"
                   :key="publisher.userId"
                   type="button"
                   class="publisher-selector-option"
-                  :class="{ selected: publisher.userId === filters.selectedId }"
+                  :id="comboId('publisher', optionIndex)"
+                  tabindex="-1"
+                  @mousedown.prevent
+                  :class="{ selected: publisher.userId === filters.selectedId, 'is-active-option': comboIndex.publisher === optionIndex }"
                   role="option"
                   :aria-selected="publisher.userId === filters.selectedId ? 'true' : 'false'"
                   @click="selectPublisher(publisher)"
@@ -755,7 +804,7 @@ defineExpose({ load });
                     <strong>{{ publisher.userName }}</strong>
                     <small>ID {{ publisher.userId }} · {{ publisher.adminName || 'Unknown' }}</small>
                   </span>
-                  <span class="publisher-selector-option-count">{{ publisherMerchantCount(publisher).toLocaleString() }} merchants</span>
+                  <span class="publisher-selector-option-count">{{ publisherMerchantCount(publisher).toLocaleString() }} {{ copy.merchants }}</span>
                 </button>
                 <div v-if="!publisherOptions.length" class="publisher-selector-no-results">{{ copy.noPublisherMatch }}</div>
               </div>
@@ -764,33 +813,41 @@ defineExpose({ load });
         </div>
 
         <div class="publisher-filter-workspace">
+          <h3 class="publisher-filter-heading">{{ message("publishers.filterStep", "02 · DEFINE SCOPE") }}</h3>
           <div class="publishers-filter-row row-1">
             <div class="publishers-filter-group">
               <div class="publisher-date-field">
                 <span class="publisher-field-label">{{ copy.period }}</span>
                 <div class="publishers-filter-date-range">
-                  <input :value="filters.startDate" type="date" aria-label="Start date" @input="setFilters({ startDate: ($event.target as HTMLInputElement).value })" />
+                  <DatePicker v-model="startDraft" :language="language" :label="message('publishers.startDate', 'Start date')" aria-describedby="publisher-date-status" :aria-invalid="Boolean(dateError)" data-publisher-date="start" />
                   <span class="date-separator">—</span>
-                  <input :value="filters.endDate" type="date" aria-label="End date" @input="setFilters({ endDate: ($event.target as HTMLInputElement).value })" />
+                  <DatePicker v-model="endDraft" :language="language" :label="message('publishers.endDate', 'End date')" aria-describedby="publisher-date-status" :aria-invalid="Boolean(dateError)" data-publisher-date="end" />
                 </div>
+              <div class="date-quick-btns" :aria-label="message('publishers.quickDates', 'Quick date ranges')">
+                <button type="button" @click="applyQuickDate('lastMonth')">{{ message("publishers.lastMonth", "Last month") }}</button>
+                <button type="button" @click="applyQuickDate('past30')">{{ message("publishers.past30", "Past 30 days") }}</button>
+                <button type="button" @click="applyQuickDate('past3m')">{{ message("publishers.past3m", "Past 3 months") }}</button>
+                <button type="button" @click="applyQuickDate('past6m')">{{ message("publishers.past6m", "Past 6 months") }}</button>
+              </div>
+                <p id="publisher-date-status" class="publisher-date-status" :class="{ error: dateError }" role="status">{{ dateError ? message(`publishers.${dateError}`, dateError) : message("publishers.dateHint", "Apply filters to update the date range.") }}</p>
               </div>
               <label>
                 <span>{{ copy.market }}</span>
-                <select :value="filters.market" aria-label="Market" @change="setMarket(($event.target as HTMLSelectElement).value)">
+                <select :value="filters.market" :aria-label="copy.market" @change="setMarket(($event.target as HTMLSelectElement).value)">
                   <option value="all">{{ copy.allMarkets }}</option>
                   <option v-for="market in effectivePayload.markets" :key="market" :value="market">{{ market }}</option>
                 </select>
               </label>
               <label>
                 <span>{{ copy.network }}</span>
-                <select :value="filters.network" aria-label="Affiliate Network" @change="setNetwork(($event.target as HTMLSelectElement).value)">
+                <select :value="filters.network" :aria-label="copy.network" @change="setNetwork(($event.target as HTMLSelectElement).value)">
                   <option value="all">{{ copy.allNetworks }}</option>
                   <option v-for="network in effectivePayload.networks" :key="network" :value="network">{{ network }}</option>
                 </select>
               </label>
               <label>
                 <span>{{ copy.linkType }}</span>
-                <select :value="filters.linkType" aria-label="Link Type" @change="setLinkType(($event.target as HTMLSelectElement).value)">
+                <select :value="filters.linkType" :aria-label="copy.linkType" @change="setLinkType(($event.target as HTMLSelectElement).value)">
                   <option value="all">{{ copy.allLinkTypes }}</option>
                   <option v-for="linkType in effectivePayload.linkTypes" :key="linkType" :value="linkType">{{ linkType }}</option>
                 </select>
@@ -799,12 +856,7 @@ defineExpose({ load });
           </div>
           <div class="publishers-filter-row row-2">
             <div class="publishers-filter-group">
-              <div class="date-quick-btns" aria-label="Quick date ranges">
-                <button type="button" @click="applyQuickDate('lastMonth')">上月</button>
-                <button type="button" @click="applyQuickDate('past30')">过去30天</button>
-                <button type="button" @click="applyQuickDate('past3m')">过去3个月</button>
-                <button type="button" @click="applyQuickDate('past6m')">过去6个月</button>
-              </div>
+
               <label>
                 <span>{{ copy.merchant }}</span>
                 <div class="publishers-combobox">
@@ -817,13 +869,14 @@ defineExpose({ load });
                     aria-autocomplete="list"
                     aria-controls="publishers-modern-merchants"
                     :aria-expanded="merchantDropdownOpen ? 'true' : 'false'"
-                    aria-label="Merchant"
+                    :aria-label="copy.merchant"
                     @focus="merchantDropdownOpen = true"
                     @input="setMerchantSearch(($event.target as HTMLInputElement).value)"
-                    @keydown.esc="merchantDropdownOpen = false"
+                    :aria-activedescendant="merchantDropdownOpen && comboIndex.merchant >= 0 ? comboId('merchant', comboIndex.merchant) : undefined"
+                    @keydown="comboKey($event, 'merchant')"
                   />
                   <div v-if="merchantDropdownOpen" id="publishers-modern-merchants" class="publishers-combobox-dropdown show" role="listbox">
-                    <div v-for="merchant in merchantOptions" :key="merchant.merchantId" class="combobox-option merchant-combobox-option" role="option" :aria-selected="filters.merchantSelectedId === merchant.merchantId ? 'true' : 'false'" @click="selectMerchant(merchant.merchantId, merchant.name)">
+                    <div v-for="(merchant, optionIndex) in merchantOptions" :key="merchant.merchantId" class="combobox-option merchant-combobox-option" role="option" :id="comboId('merchant', optionIndex)" :class="{ 'is-active-option': comboIndex.merchant === optionIndex }" @mousedown.prevent :aria-selected="filters.merchantSelectedId === merchant.merchantId ? 'true' : 'false'" @click="selectMerchant(merchant.merchantId, merchant.name)">
                       <span class="opt-label">{{ merchant.name }}</span>
                       <span class="opt-count">({{ formatNumber(merchant.count) }})</span>
                       <span class="opt-id">ID {{ merchant.merchantId }}</span>
@@ -840,13 +893,13 @@ defineExpose({ load });
                     type="text"
                     :placeholder="copy.managerPlaceholder"
                     autocomplete="off"
-                    aria-label="经理名称"
+                    :aria-label="copy.manager"
                     @focus="managerDropdownOpen = true"
                     @input="setManagerSearch(($event.target as HTMLInputElement).value)"
-                    @keydown.esc="managerDropdownOpen = false"
+                    role="combobox" aria-autocomplete="list" aria-controls="publishers-modern-managers" :aria-expanded="managerDropdownOpen" :aria-activedescendant="managerDropdownOpen && comboIndex.manager >= 0 ? comboId('manager', comboIndex.manager) : undefined" @keydown="comboKey($event, 'manager')"
                   />
-                  <div v-if="managerDropdownOpen" class="publishers-combobox-dropdown show" role="listbox">
-                    <div v-for="option in visibleManagerOptions" :key="option.name" class="combobox-option" role="option" @click="selectManager(option.name)">{{ option.name }} <span class="opt-count">({{ option.count }})</span></div>
+                  <div v-if="managerDropdownOpen" id="publishers-modern-managers" class="publishers-combobox-dropdown show" role="listbox">
+                    <div v-for="(option, optionIndex) in visibleManagerOptions" :key="option.name" class="combobox-option" role="option" :id="comboId('manager', optionIndex)" :aria-selected="filters.managerSearch === option.name" :class="{ 'is-active-option': comboIndex.manager === optionIndex }" @mousedown.prevent @click="selectManager(option.name)">{{ option.name }} <span class="opt-count">({{ option.count }})</span></div>
                     <div v-if="!visibleManagerOptions.length" class="combobox-option combobox-no-results">{{ copy.noPublisherMatch }}</div>
                   </div>
                 </div>
@@ -878,32 +931,32 @@ defineExpose({ load });
         class="publishers-kpi"
         :class="layoutSectionClass(section)"
         data-layout-id="kpi"
-        aria-label="Publisher KPI summary"
-        draggable="true"
+        :aria-label="message('publishers.summaryLabel', 'Publisher KPI summary')"
+        :draggable="layoutEditing"
         @dragstart="layoutDragStart(section, sectionIndex)"
         @dragover.prevent
         @drop="layoutDrop(sectionIndex)"
         @dragend="layoutDragEnd"
       >
-        <div v-if="layoutEditing" class="drag-handle" aria-hidden="true">⋮⋮</div>
+        <div v-if="layoutEditing" class="publisher-section-move"><span aria-hidden="true">⋮⋮</span><span>{{ message(`publishers.section.${section}`, section) }}</span><button type="button" :disabled="sectionIndex === 0" :aria-label="message('publishers.moveUp', 'Move {name} up', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, -1)">↑</button><button type="button" :disabled="sectionIndex === layout.length - 1" :aria-label="message('publishers.moveDown', 'Move {name} down', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, 1)">↓</button></div>
         <div class="publishers-kpi-row">
-          <article
+          <button
+            type="button"
             v-for="definition in PUBLISHER_KPI_DEFINITIONS"
             :key="definition.key"
             class="metric"
             :class="{ 'metric-active': filters.chartMetric === definition.key }"
-            role="button"
-            tabindex="0"
+            :aria-pressed="filters.chartMetric === definition.key"
+            :aria-label="message('publishers.chooseMetric', 'View {metric} distribution', { metric: metricLabel(definition.key, definition.label) })"
             @click="chooseChartMetric(definition.key)"
-            @keydown.enter="chooseChartMetric(definition.key)"
           >
-            <div class="metric-icon" :class="definition.tone">{{ definition.icon }}</div>
+            <div class="metric-icon" :class="definition.tone" aria-hidden="true">{{ definition.icon }}</div>
             <div class="metric-body">
-              <span class="metric-label">{{ definition.label }}</span>
+              <span class="metric-label">{{ metricLabel(definition.key, definition.label) }}</span>
               <strong class="metric-value">{{ formatMetric(kpiAggregate[definition.key], definition.key) }}</strong>
               <span class="metric-full">{{ formatFullMetric(kpiAggregate[definition.key], definition.key) }}</span>
             </div>
-          </article>
+          </button>
         </div>
       </section>
 
@@ -912,16 +965,16 @@ defineExpose({ load });
         class="panel publisher-affinity-panel"
         :class="layoutSectionClass(section)"
         data-layout-id="affinity"
-        aria-label="Publisher merchant affinity"
-        draggable="true"
+        :aria-label="message('publishers.affinityLabel', 'Publisher merchant affinity')"
+        :draggable="layoutEditing"
         @dragstart="layoutDragStart(section, sectionIndex)"
         @dragover.prevent
         @drop="layoutDrop(sectionIndex)"
         @dragend="layoutDragEnd"
       >
-        <div v-if="layoutEditing" class="drag-handle" aria-hidden="true">⋮⋮</div>
+        <div v-if="layoutEditing" class="publisher-section-move"><span aria-hidden="true">⋮⋮</span><span>{{ message(`publishers.section.${section}`, section) }}</span><button type="button" :disabled="sectionIndex === 0" :aria-label="message('publishers.moveUp', 'Move {name} up', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, -1)">↑</button><button type="button" :disabled="sectionIndex === layout.length - 1" :aria-label="message('publishers.moveDown', 'Move {name} down', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, 1)">↓</button></div>
         <div v-if="!selectedProfile" class="publisher-affinity-empty">
-          <span class="publisher-affinity-empty-index">02</span>
+
           <div v-if="!filters.merchantSearch">
             <strong>{{ copy.affinityEmptyTitle }}</strong>
             <p>{{ copy.affinityEmptyBody }}</p>
@@ -948,7 +1001,7 @@ defineExpose({ load });
             <div class="publisher-identity">
               <span class="publisher-avatar">{{ selectedPublisher?.userName.slice(0, 1).toUpperCase() }}</span>
               <div>
-                <span class="publisher-affinity-kicker">MEDIA PROFILE</span>
+                <span class="publisher-affinity-kicker">{{ message("publishers.mediaProfile", "Media profile") }}</span>
                 <h3>{{ selectedPublisher?.userName }}</h3>
                 <p>ID {{ selectedPublisher?.userId }} · {{ selectedPublisher?.adminName || 'Unknown' }} · {{ selectedPublisher?.networks.join(', ') }}</p>
               </div>
@@ -988,10 +1041,10 @@ defineExpose({ load });
             <div class="publisher-portfolio-toolbar">
               <div><span class="publisher-section-index">C</span><h4>{{ copy.merchantPortfolio }}</h4><p>{{ formatNumber(profileRows.length) }} {{ copy.merchantsInView }}</p></div>
               <div class="publisher-portfolio-controls">
-                <input :value="filters.portfolioSearch" type="search" :placeholder="message('publishers.portfolioSearchPlaceholder', '搜索商家或 ID')" aria-label="Portfolio merchant search" @input="setPortfolioFilter('portfolioSearch', ($event.target as HTMLInputElement).value)" />
-                <select :value="filters.portfolioCategory" aria-label="Filter portfolio by category" @change="setPortfolioFilter('portfolioCategory', ($event.target as HTMLSelectElement).value)"><option value="all">{{ message('publishers.allCategories', '全部品类') }}</option><option v-for="category in profileCategories" :key="category" :value="category">{{ category }}</option></select>
-                <select :value="filters.portfolioTier" aria-label="Filter portfolio by tier" @change="setPortfolioFilter('portfolioTier', ($event.target as HTMLSelectElement).value)"><option value="all">{{ message('publishers.allTiers', '全部 Tier') }}</option><option v-for="tier in profileTiers" :key="tier" :value="tier">{{ tier }}</option></select>
-                <select :value="filters.portfolioSort" aria-label="Sort publisher portfolio" @change="setPortfolioFilter('portfolioSort', ($event.target as HTMLSelectElement).value)">
+                <input :value="filters.portfolioSearch" type="search" :placeholder="message('publishers.portfolioSearchPlaceholder', '搜索商家或 ID')" :aria-label="message('publishers.portfolioSearchPlaceholder', 'Search merchants or ID')" @input="setPortfolioFilter('portfolioSearch', ($event.target as HTMLInputElement).value)" />
+                <select :value="filters.portfolioCategory" :aria-label="message('label.Category', 'Category')" @change="setPortfolioFilter('portfolioCategory', ($event.target as HTMLSelectElement).value)"><option value="all">{{ message('publishers.allCategories', '全部品类') }}</option><option v-for="category in profileCategories" :key="category" :value="category">{{ category }}</option></select>
+                <select :value="filters.portfolioTier" :aria-label="message('publishers.allTiers', 'All tiers')" @change="setPortfolioFilter('portfolioTier', ($event.target as HTMLSelectElement).value)"><option value="all">{{ message('publishers.allTiers', '全部 Tier') }}</option><option v-for="tier in profileTiers" :key="tier" :value="tier">{{ tier }}</option></select>
+                <select :value="filters.portfolioSort" :aria-label="message('publishers.portfolioSort', 'Sort merchant portfolio')" @change="setPortfolioFilter('portfolioSort', ($event.target as HTMLSelectElement).value)">
                   <option value="sales">{{ message('publishers.sortSales', '销售额从高到低') }}</option>
                   <option value="orders">{{ message('publishers.sortOrders', '订单数从高到低') }}</option>
                   <option value="aov">{{ message('publishers.sortAov', 'AOV 从高到低') }}</option>
@@ -1033,40 +1086,56 @@ defineExpose({ load });
         class="panel publishers-market-summary"
         :class="[{ hidden: selectedProfile }, layoutSectionClass(section)]"
         data-layout-id="overview"
-        aria-label="Market aggregate summary"
-        draggable="true"
+        :aria-label="message('publishers.overviewLabel', 'Market aggregate summary')"
+        :draggable="layoutEditing"
         @dragstart="layoutDragStart(section, sectionIndex)"
         @dragover.prevent
         @drop="layoutDrop(sectionIndex)"
         @dragend="layoutDragEnd"
       >
-        <div v-if="layoutEditing" class="drag-handle" aria-hidden="true">⋮⋮</div>
-        <div class="panel-title">
-          <h3>{{ copy.marketSummary }}</h3>
-          <span class="overview-toggle"><button type="button" class="overview-toggle-btn" :class="{ active: filters.overviewType === 'market' }" @click="setOverviewType('market')">{{ copy.market }}</button><button type="button" class="overview-toggle-btn" :class="{ active: filters.overviewType === 'network' }" @click="setOverviewType('network')">{{ copy.network }}</button></span>
-          <button type="button" class="overview-chevron" :title="filters.overviewExpanded ? 'Collapse' : 'Expand'" @click="toggleOverview">{{ filters.overviewExpanded ? '▼' : '▶' }}</button>
+        <div v-if="layoutEditing" class="publisher-section-move"><span aria-hidden="true">⋮⋮</span><span>{{ message(`publishers.section.${section}`, section) }}</span><button type="button" :disabled="sectionIndex === 0" :aria-label="message('publishers.moveUp', 'Move {name} up', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, -1)">↑</button><button type="button" :disabled="sectionIndex === layout.length - 1" :aria-label="message('publishers.moveDown', 'Move {name} down', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, 1)">↓</button></div>
+        <div class="panel-title publisher-overview-header">
+          <div><h3>{{ copy.marketSummary }}</h3><p id="publisher-overview-hint">{{ message("publishers.overviewHint", "Select a segment or name to filter its market or network; select again to show all.") }}</p></div>
+          <div class="publisher-overview-actions">
+            <span class="overview-toggle" :aria-label="copy.marketSummary" role="group">
+              <button type="button" class="overview-toggle-btn" :class="{ active: filters.overviewType === 'market' }" :aria-pressed="filters.overviewType === 'market'" @click="setOverviewType('market')">{{ copy.market }}</button>
+              <button type="button" class="overview-toggle-btn" :class="{ active: filters.overviewType === 'network' }" :aria-pressed="filters.overviewType === 'network'" @click="setOverviewType('network')">{{ copy.network }}</button>
+            </span>
+            <button type="button" class="overview-chevron" :aria-expanded="filters.overviewExpanded" aria-controls="publisher-overview-content" :aria-label="message(filters.overviewExpanded ? 'publishers.collapse' : 'publishers.expand', 'Toggle section')" @click="toggleOverview">{{ filters.overviewExpanded ? '−' : '+' }}</button>
+          </div>
         </div>
-        <template v-if="filters.overviewExpanded">
-          <div class="publishers-market-summary-layout">
-            <button v-if="filters.overviewFocus" type="button" class="overview-back" @click="clearOverviewFocus">← <span>{{ filters.overviewType === 'network' ? copy.allNetworks : copy.allMarkets }}</span></button>
-            <div class="publishers-market-pie" @pointermove="highlightOverview((($event.target as Element).closest('[data-market-highlight]') as HTMLElement)?.dataset.marketHighlight || '')" @pointerleave="clearHighlight">
-              <div v-if="overviewRows.length" class="market-pie-visual">
-                <svg class="market-pie-svg" viewBox="0 0 100 100" role="img" :aria-label="`${copy.marketSummary} ${filters.chartMetric}`"><circle class="market-pie-track" cx="50" cy="50" r="45"></circle><g transform="rotate(-90 50 50)"><circle v-for="segment in overviewSegments" :key="segment.key" class="market-pie-slice" :class="{ 'market-active': highlightedOverviewKey === segment.key, 'market-dimmed': highlightedOverviewKey && highlightedOverviewKey !== segment.key }" cx="50" cy="50" r="45" pathLength="100" :stroke="overviewColor(segment)" :stroke-dasharray="`${segment.dash} ${100 - segment.dash}`" :stroke-dashoffset="segment.offset" :data-market-highlight="segment.key" :data-pct="segment.percentage.toFixed(1)" :data-value="segment.value" tabindex="0" role="button" :aria-label="`Show only ${segment.key}`" @click="focusOverview(segment)" @focus="highlightOverview(segment.key)" @blur="clearHighlight"><title>{{ segment.key }}: {{ formatOverviewMetric(segment) }}</title></circle></g></svg>
-                <div class="market-pie-center"><strong>{{ PUBLISHER_KPI_DEFINITIONS.find((definition) => definition.key === filters.chartMetric)?.label || 'Clicks' }}</strong><span class="market-center-total">{{ formatMetric(overviewTotal, filters.chartMetric) }}</span><small class="market-center-leader">{{ overviewLeader ? `${overviewLeader.key} leads at ${((overviewLeader.value / (overviewTotal || 1)) * 100).toFixed(1)}%` : copy.empty }}</small></div>
-                <ul class="market-pie-legend"><li v-for="row in overviewRows" :key="`legend-${row.key}`" :class="{ 'market-active': highlightedOverviewKey === row.key, 'market-dimmed': highlightedOverviewKey && highlightedOverviewKey !== row.key }" :data-market-highlight="row.key" :style="{ '--market-color': overviewColor(row) }" tabindex="0" role="button" @click="focusOverview(row)" @pointerenter="highlightOverview(row.key)" @pointerleave="clearHighlight"><span class="market-pie-swatch" :style="{ background: overviewColor(row) }"></span><strong>{{ row.key }}</strong><span>{{ (row.value / (overviewTotal || 1) * 100).toFixed(1) }}%</span></li></ul>
-              </div>
-              <div v-else class="publishers-empty">{{ copy.empty }}</div>
-            </div>
-            <div class="publishers-market-cards">
-              <span v-for="row in overviewRows" :key="`card-${row.key}`" class="market-pct-label" :class="{ 'market-active': highlightedOverviewKey === row.key, 'market-dimmed': highlightedOverviewKey && highlightedOverviewKey !== row.key }" :data-market-highlight="row.key" :style="{ '--tag-color': overviewColor(row) }" tabindex="0" role="button" @click="focusOverview(row)" @pointerenter="highlightOverview(row.key)" @pointerleave="clearHighlight"><span class="market-pct-dot" :style="{ background: overviewColor(row) }"></span><span class="market-pct-name">{{ row.key }}</span><span class="market-pct-value">{{ (row.value / (overviewTotal || 1) * 100).toFixed(2) }}%</span></span>
-            </div>
+        <div v-if="filters.overviewExpanded" id="publisher-overview-content">
+          <div v-if="filters.overviewFocus" class="publisher-overview-selection">
+            <span role="status">{{ message("publishers.overviewSelection", "Filtered to: {name}", { name: filters.overviewFocus }) }}</span>
+            <button type="button" class="overview-back" @click="clearOverviewFocus">{{ message("publishers.clearOverview", "Clear chart filter") }} ×</button>
           </div>
-          <div class="publishers-market-detail">
-            <div class="publishers-market-detail-inner">
-              <table class="publishers-market-table"><thead><tr><th>{{ filters.overviewType === 'network' ? copy.network : copy.market }}</th><th>{{ copy.publisherCount }}</th><th>{{ PUBLISHER_KPI_DEFINITIONS.find((definition) => definition.key === filters.chartMetric)?.label || 'Clicks' }}</th><th>{{ copy.orders }}</th><th>{{ copy.commission }}</th></tr></thead><tbody><tr v-for="row in overviewRows" :key="`overview-${row.key}`" :class="{ 'market-active': highlightedOverviewKey === row.key, 'market-dimmed': highlightedOverviewKey && highlightedOverviewKey !== row.key }" :data-market-highlight="row.key" tabindex="0" role="button" @click="focusOverview(row)" @pointerenter="highlightOverview(row.key)" @pointerleave="clearHighlight"><td><strong>{{ row.key }}</strong></td><td>{{ formatNumber(row.publisherCount) }}</td><td>{{ formatOverviewMetric(row) }}</td><td>{{ formatNumber(row.orders) }}</td><td>{{ formatMoney(row.allCommission) }}</td></tr><tr class="market-table-total"><td><strong>{{ copy.total }}</strong></td><td>{{ formatNumber(filteredRows.length) }}</td><td>{{ formatMetric(overviewTotal, filters.chartMetric) }}</td><td>{{ formatNumber(overviewTotals.orders) }}</td><td>{{ formatMoney(overviewTotals.allCommission) }}</td></tr><tr v-if="!overviewRows.length"><td colspan="5">{{ copy.empty }}</td></tr></tbody></table>
+          <div v-if="overviewRows.length" class="publisher-overview-grid">
+            <div class="publisher-donut-wrap">
+              <svg class="publisher-donut" viewBox="0 0 100 100" role="group" :aria-label="copy.marketSummary + ' · ' + chartMetricLabel()" aria-describedby="publisher-overview-hint">
+                <circle cx="50" cy="50" r="38" class="publisher-donut-track" />
+                <path v-for="segment in overviewSegments" :key="segment.key" :d="segment.path" :fill="overviewColor(segment)" class="publisher-donut-segment" :class="{ 'is-highlighted': highlightedOverviewKey === segment.key }" :data-overview-key="segment.key" role="button" tabindex="0" :aria-pressed="filters.overviewFocus === segment.key" :aria-label="message('publishers.showOnly', 'Filter {name}, {percent}% share', { name: segment.key, percent: segment.percentage.toFixed(1) })" @click="focusOverview(segment)" @keydown.enter.prevent="focusOverview(segment)" @keydown.space.prevent="focusOverview(segment)" @pointerenter="highlightOverview(segment.key)" @pointerleave="clearHighlight" @focus="highlightOverview(segment.key)" @blur="clearHighlight"><title>{{ segment.key }} · {{ formatOverviewMetric(segment) }} · {{ segment.percentage.toFixed(1) }}%</title></path>
+              </svg>
+              <div class="publisher-donut-center"><span>{{ chartMetricLabel() }}</span><strong>{{ formatMetric(overviewTotal, filters.chartMetric) }}</strong><small>{{ filters.overviewFocus || copy.total }}</small></div>
             </div>
+            <ol class="publisher-overview-legend" :aria-label="copy.marketSummary">
+              <li v-for="(row, index) in overviewRows" :key="row.key">
+                <button type="button" :data-overview-legend="row.key" :class="{ 'is-highlighted': highlightedOverviewKey === row.key, 'is-selected': filters.overviewFocus === row.key }" :aria-pressed="filters.overviewFocus === row.key" :aria-label="message('publishers.showOnly', 'Filter {name}, {percent}% share', { name: row.key, percent: (row.value / (overviewTotal || 1) * 100).toFixed(1) })" :style="{ '--series-color': overviewColor(row) }" @click="focusOverview(row)" @pointerenter="highlightOverview(row.key)" @pointerleave="clearHighlight" @focus="highlightOverview(row.key)" @blur="clearHighlight">
+                  <span class="publisher-legend-number" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
+                  <span class="publisher-legend-copy"><strong><i :style="{ background: overviewColor(row) }" aria-hidden="true" />{{ row.key }}</strong><span class="publisher-share-track" aria-hidden="true"><i :style="{ width: (row.value / (overviewTotal || 1) * 100) + '%', background: overviewColor(row) }" /></span></span>
+                  <span class="publisher-legend-value"><strong>{{ formatOverviewMetric(row) }}</strong><small>{{ (row.value / (overviewTotal || 1) * 100).toFixed(1) }}% {{ message("publishers.share", "Share") }}</small></span>
+                </button>
+              </li>
+            </ol>
           </div>
-        </template>
+          <p v-else class="publishers-empty">{{ copy.empty }}</p>
+          <div class="publisher-overview-table-wrap" tabindex="0" role="region" :aria-label="copy.marketSummary + ' · ' + copy.tableTitle">
+            <table class="publishers-market-table">
+              <thead><tr><th scope="col">{{ filters.overviewType === 'network' ? copy.network : copy.market }}</th><th scope="col">{{ copy.publisherCount }}</th><th scope="col">{{ chartMetricLabel() }}</th><th scope="col">{{ copy.orders }}</th><th scope="col">{{ copy.commission }}</th></tr></thead>
+              <tbody><tr v-for="row in overviewRows" :key="row.key" :data-overview-row="row.key" :class="{ 'is-selected': filters.overviewFocus === row.key, 'is-highlighted': highlightedOverviewKey === row.key }"><th scope="row"><button type="button" class="publisher-overview-row-button" :aria-pressed="filters.overviewFocus === row.key" @click="focusOverview(row)"><i :style="{ background: overviewColor(row) }" aria-hidden="true" />{{ row.key }}</button></th><td>{{ formatNumber(row.publisherCount) }}</td><td>{{ formatOverviewMetric(row) }}</td><td>{{ formatNumber(row.orders) }}</td><td>{{ formatMoney(row.allCommission) }}</td></tr></tbody>
+              <tfoot><tr class="market-table-total"><th scope="row">{{ copy.total }}</th><td>{{ formatNumber(filteredRows.length) }}</td><td>{{ formatMetric(overviewTotal, filters.chartMetric) }}</td><td>{{ formatNumber(overviewTotals.orders) }}</td><td>{{ formatMoney(overviewTotals.allCommission) }}</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section
@@ -1074,19 +1143,19 @@ defineExpose({ load });
         class="panel publishers-chart-panel"
         :class="[{ hidden: selectedProfile }, layoutSectionClass(section)]"
         data-layout-id="chart"
-        aria-label="Publisher clicks chart"
-        draggable="true"
+        :aria-label="message('publishers.chartTitle', '{metric} by publisher', { metric: chartMetricLabel() })"
+        :draggable="layoutEditing"
         @dragstart="layoutDragStart(section, sectionIndex)"
         @dragover.prevent
         @drop="layoutDrop(sectionIndex)"
         @dragend="layoutDragEnd"
       >
-        <div v-if="layoutEditing" class="drag-handle" aria-hidden="true">⋮⋮</div>
-        <div class="panel-title"><h3>{{ chartMetricLabel() }} by Publisher</h3><button type="button" class="chart-chevron" :class="{ collapsed: !filters.chartExpanded }" @click="toggleChart">{{ filters.chartExpanded ? '▼' : '▶' }}</button></div>
+        <div v-if="layoutEditing" class="publisher-section-move"><span aria-hidden="true">⋮⋮</span><span>{{ message(`publishers.section.${section}`, section) }}</span><button type="button" :disabled="sectionIndex === 0" :aria-label="message('publishers.moveUp', 'Move {name} up', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, -1)">↑</button><button type="button" :disabled="sectionIndex === layout.length - 1" :aria-label="message('publishers.moveDown', 'Move {name} down', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, 1)">↓</button></div>
+        <div class="panel-title"><h3>{{ message("publishers.chartTitle", "{metric} by publisher", { metric: chartMetricLabel() }) }}</h3><button type="button" class="chart-chevron" :aria-expanded="filters.chartExpanded" :aria-label="message(filters.chartExpanded ? 'publishers.collapse' : 'publishers.expand', 'Toggle section')" :class="{ collapsed: !filters.chartExpanded }" @click="toggleChart">{{ filters.chartExpanded ? '▼' : '▶' }}</button></div>
         <div v-if="filters.chartExpanded" class="publishers-chart">
           <div v-for="publisher in chartRows" :key="publisher.userId" class="chart-bar-row">
             <span class="chart-bar-label" :title="publisher.userName">{{ publisher.userName }}</span>
-            <div class="chart-bar-track"><div class="chart-bar-fill" :style="{ width: chartBarWidth(publisher), background: PUBLISHER_CHART_COLORS[filters.chartMetric] }">{{ chartValueLabel(publisher) }}</div></div>
+            <div class="chart-bar-track"><div class="chart-bar-fill" :style="{ width: chartBarWidth(publisher) }">{{ chartValueLabel(publisher) }}</div></div>
             <span class="chart-bar-value">{{ formatMetric(chartMetricValue(publisher), filters.chartMetric) }}</span>
           </div>
           <div v-if="!chartRows.length" class="publishers-empty">{{ copy.empty }}</div>
@@ -1098,20 +1167,20 @@ defineExpose({ load });
         class="panel table-panel publishers-table-panel"
         :class="[{ hidden: selectedProfile }, layoutSectionClass(section)]"
         data-layout-id="table"
-        aria-label="Publisher data table"
-        draggable="true"
+        :aria-label="copy.tableTitle"
+        :draggable="layoutEditing"
         @dragstart="layoutDragStart(section, sectionIndex)"
         @dragover.prevent
         @drop="layoutDrop(sectionIndex)"
         @dragend="layoutDragEnd"
       >
-        <div v-if="layoutEditing" class="drag-handle" aria-hidden="true">⋮⋮</div>
+        <div v-if="layoutEditing" class="publisher-section-move"><span aria-hidden="true">⋮⋮</span><span>{{ message(`publishers.section.${section}`, section) }}</span><button type="button" :disabled="sectionIndex === 0" :aria-label="message('publishers.moveUp', 'Move {name} up', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, -1)">↑</button><button type="button" :disabled="sectionIndex === layout.length - 1" :aria-label="message('publishers.moveDown', 'Move {name} down', { name: message(`publishers.section.${section}`, section) })" @click="moveSection(sectionIndex, 1)">↓</button></div>
         <div class="table-toolbar">
-          <div><h3>{{ copy.tableTitle }}</h3><p>Total: {{ formatNumber(filteredRows.length) }}</p><nav v-if="tablePagination.totalPages > 1" class="publishers-pagination" aria-label="Publisher pages"><button type="button" class="secondary-button" :disabled="tablePagination.page <= 1" :aria-label="copy.previous" @click="pageChange(-1)">{{ copy.previous }}</button><span aria-live="polite">Page {{ tablePagination.page }} of {{ tablePagination.totalPages }}</span><button type="button" class="secondary-button" :disabled="tablePagination.page >= tablePagination.totalPages" :aria-label="copy.next" @click="pageChange(1)">{{ copy.next }}</button></nav></div>
-          <div class="table-toolbar-actions"><div class="column-picker"><button type="button" class="icon-button table-select-button" :aria-expanded="columnsOpen ? 'true' : 'false'" @click="columnsOpen = !columnsOpen">{{ copy.columnsButton }}</button><div v-if="columnsOpen" class="column-picker-panel" role="dialog"><div class="column-picker-header"><strong>{{ copy.columnsTitle }}</strong><span>{{ copy.columnsHint }}</span></div><div class="column-picker-actions"><button type="button" @click="setCoreColumns">{{ copy.coreColumns }}</button><button type="button" @click="setAllColumns">{{ copy.allColumns }}</button></div><div class="column-picker-list"><label v-for="column in PUBLISHER_TABLE_COLUMNS" :key="column.key"><input type="checkbox" :checked="visibleColumnKeys.includes(column.key)" @change="toggleColumn(column.key)" />{{ column.label }}</label></div></div></div></div>
+          <div><h3>{{ copy.tableTitle }}</h3><p>{{ message("publishers.recordCount", "{count} publishers", { count: formatNumber(filteredRows.length) }) }}</p><nav v-if="tablePagination.totalPages > 1" class="publishers-pagination" :aria-label="copy.tableTitle"><button type="button" class="secondary-button" :disabled="tablePagination.page <= 1" :aria-label="copy.previous" @click="pageChange(-1)">{{ copy.previous }}</button><span aria-live="polite">{{ message("publishers.pageCount", "Page {page} of {total}", { page: tablePagination.page, total: tablePagination.totalPages }) }}</span><button type="button" class="secondary-button" :disabled="tablePagination.page >= tablePagination.totalPages" :aria-label="copy.next" @click="pageChange(1)">{{ copy.next }}</button></nav></div>
+          <div class="table-toolbar-actions"><div class="column-picker"><button type="button" class="icon-button table-select-button" :aria-expanded="columnsOpen ? 'true' : 'false'" @click="columnsOpen = !columnsOpen">{{ copy.columnsButton }}</button><div v-if="columnsOpen" class="column-picker-panel" role="dialog" :aria-label="copy.columnsTitle" @keydown.esc="columnsOpen = false"><div class="column-picker-header"><strong>{{ copy.columnsTitle }}</strong><span>{{ copy.columnsHint }}</span></div><div class="column-picker-actions"><button type="button" @click="setCoreColumns">{{ copy.coreColumns }}</button><button type="button" @click="setAllColumns">{{ copy.allColumns }}</button></div><div class="column-picker-list"><label v-for="column in PUBLISHER_TABLE_COLUMNS" :key="column.key"><input type="checkbox" :checked="visibleColumnKeys.includes(column.key)" @change="toggleColumn(column.key)" />{{ metricLabel(column.key, column.label) }}</label></div></div></div></div>
         </div>
         <div class="table-wrap publishers-table-wrap">
-          <table class="publishers-table"><thead><tr><th v-for="column in displayColumns" :key="column.key" :aria-sort="ariaSort(column.key)"><button type="button" class="table-sort-button" :class="{ active: sort.key === column.key }" @click="changeSort(column.key)"><span>{{ column.label }}</span><span class="sort-indicator" aria-hidden="true">{{ sort.key === column.key ? (sort.direction === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th></tr></thead><tbody><tr v-for="(row, rowIndex) in displayTableRows" :key="rowIndex" :class="{ 'total-row': rowIndex === 0 }"><td v-for="column in displayColumns" :key="column.key">{{ tableCell(row, column.key) }}</td></tr><tr v-if="!displayTableRows.length"><td :colspan="displayColumns.length" class="publishers-empty">{{ copy.empty }}</td></tr></tbody></table>
+          <table class="publishers-table"><thead><tr><th v-for="column in displayColumns" :key="column.key" :aria-sort="ariaSort(column.key)"><button type="button" class="table-sort-button" :class="{ active: sort.key === column.key }" @click="changeSort(column.key)"><span>{{ metricLabel(column.key, column.label) }}</span><span class="sort-indicator" aria-hidden="true">{{ sort.key === column.key ? (sort.direction === 'asc' ? '▲' : '▼') : '↕' }}</span></button></th></tr></thead><tbody><tr v-for="(row, rowIndex) in displayTableRows" :key="rowIndex" :class="{ 'total-row': rowIndex === 0 }"><td v-for="column in displayColumns" :key="column.key">{{ tableCell(row, column.key) }}</td></tr><tr v-if="!displayTableRows.length"><td :colspan="displayColumns.length" class="publishers-empty">{{ copy.empty }}</td></tr></tbody></table>
         </div>
       </section>
     </template>

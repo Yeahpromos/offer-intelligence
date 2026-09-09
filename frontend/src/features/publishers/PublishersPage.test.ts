@@ -52,7 +52,7 @@ describe("PublishersPage", () => {
     });
     await flushPromises();
 
-    await wrapper.get('input[aria-label="经理名称"]').setValue("Dora");
+    await wrapper.get('input[aria-label="经理"]').setValue("Dora");
     expect(wrapper.findAll(".publisher-selector-option")).toHaveLength(1);
     await wrapper.find(".publisher-selector-option").trigger("click");
     await flushPromises();
@@ -84,5 +84,80 @@ describe("PublishersPage", () => {
     await flushPromises();
     expect(wrapper.find('[role="alert"]').exists()).toBe(true);
     expect(wrapper.find(".publishers-page").exists()).toBe(true);
+  });
+
+  it("preserves each network color when filtering from a segment, legend or table", async () => {
+    const payload = { ...data, networks: [...data.networks, "PbAmazon"], publishers: [...data.publishers,
+      { ...data.publishers[0], userId: 3, userName: "Pb Media", networks: ["PbAmazon"], total: metric(50) }
+    ] };
+    const wrapper = mount(PublishersPage, { props: { language: "en", loadData: async () => payload } });
+    await flushPromises();
+    const segment = '[data-overview-key="PbAmazon"]';
+    const color = wrapper.get(segment).attributes("fill");
+    expect(color).toBe("#dc4148");
+    await wrapper.get(segment).trigger("keydown", { key: " " });
+    expect((wrapper.get('select[aria-label="Affiliate Network"]').element as HTMLSelectElement).value).toBe("PbAmazon");
+    expect(wrapper.findAll(".publisher-donut-segment")).toHaveLength(1);
+    expect(wrapper.get(segment).attributes("fill")).toBe(color);
+    expect(wrapper.get('[data-overview-legend="PbAmazon"]').text()).toContain("100.0%");
+    await wrapper.get(".overview-back").trigger("click");
+    await wrapper.get('[data-overview-legend="PbAmazon"]').trigger("click");
+    expect(wrapper.get(segment).attributes("fill")).toBe(color);
+    await wrapper.get(".overview-back").trigger("click");
+    await wrapper.get('[data-overview-row="PbAmazon"] button').trigger("click");
+    expect(wrapper.get(segment).attributes("fill")).toBe(color);
+    await wrapper.get('.metric[aria-label="View Sales distribution"]').trigger("click");
+    expect(wrapper.get(segment).attributes("fill")).toBe(color);
+  });
+
+  it("selects the correct publisher with keyboard navigation and dismisses menus", async () => {
+    const calls: string[] = [];
+    const wrapper = mount(PublishersPage, { props: { language: "zh", loadData: async () => data,
+      loadPortfolio: async (id) => { calls.push(id); return { merchants: [] }; }
+    } });
+    await flushPromises();
+    const input = wrapper.get('input[aria-label="媒体"]');
+    await input.trigger("focus");
+    await input.trigger("keydown", { key: "ArrowUp" });
+    expect(input.attributes("aria-activedescendant")).toBe("publisher-publisher-option-1");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(calls).toEqual(["2"]);
+    expect(input.attributes("aria-expanded")).toBe("false");
+    await input.trigger("focus");
+    await input.trigger("keydown", { key: "Escape" });
+    expect(input.attributes("aria-expanded")).toBe("false");
+    expect(wrapper.get("h2").text()).toBe("媒体合作偏好");
+  });
+
+  it("rejects reversed dates and requests portfolio dates only after applying", async () => {
+    const calls: unknown[][] = [];
+    const wrapper = mount(PublishersPage, { props: { language: "zh", loadData: async () => data,
+      loadPortfolio: async (...args) => { calls.push(args); return { merchants: [] }; }
+    } });
+    await flushPromises();
+    await wrapper.get('input[aria-label="媒体"]').trigger("focus");
+    await wrapper.get(".publisher-selector-option").trigger("click");
+    await flushPromises();
+    await wrapper.get('input[data-publisher-date="start"]').setValue("2026-09-20");
+    await wrapper.get('input[data-publisher-date="end"]').setValue("2026-09-01");
+    await wrapper.get(".btn-search").trigger("click");
+    expect(wrapper.get("#publisher-date-status").classes()).toContain("error");
+    expect(calls).toHaveLength(1);
+    await wrapper.get('input[data-publisher-date="end"]').setValue("2026-09-30");
+    expect(calls).toHaveLength(1);
+    await wrapper.get(".btn-search").trigger("click");
+    await flushPromises();
+    expect(calls[1]?.slice(0, 3)).toEqual(["1", "2026-09-20", "2026-09-30"]);
+  });
+
+  it("reorders sections using native buttons without dragging", async () => {
+    const wrapper = mount(PublishersPage, { props: { language: "en", loadData: async () => data } });
+    await flushPromises();
+    await wrapper.get(".layout-customize-btn").trigger("click");
+    await wrapper.get('[data-layout-id="filters"] .publisher-section-move button:last-child').trigger("click");
+    expect(wrapper.findAll("[data-layout-id]").slice(0, 2).map(node => node.attributes("data-layout-id"))).toEqual(["kpi", "filters"]);
+    await wrapper.get(".layout-cancel-btn").trigger("click");
+    expect(wrapper.findAll("[data-layout-id]")[0]?.attributes("data-layout-id")).toBe("filters");
   });
 });
