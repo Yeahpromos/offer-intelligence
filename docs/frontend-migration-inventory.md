@@ -658,6 +658,8 @@
         "frontend/src/features/offer-performance/performanceModel.test.ts",
         "frontend/src/features/offer-performance/OfferPerformancePage.test.ts",
         "frontend/src/features/offer-performance/PromotionRelations.test.ts",
+        "frontend/src/features/offer-performance/PromotionImport.test.ts",
+        "frontend/src/features/offer-performance/promotionAppearance.test.ts",
         "scripts/test_offer_performance.py"
       ],
       "testGap": "Real database validation was intentionally not performed.",

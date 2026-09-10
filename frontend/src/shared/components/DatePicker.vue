@@ -9,6 +9,7 @@ const props = defineProps<{
   label: string;
   disabled?: boolean;
   today?: () => Date;
+  teleportTo?: string | HTMLElement;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const id = useId();
@@ -134,7 +135,7 @@ onBeforeUnmount(() => {
     <button ref="trigger" class="date-picker-trigger" type="button" :disabled="disabled" :aria-label="`${label} · ${t('open')}`" aria-haspopup="dialog" :aria-expanded="open" :aria-controls="id" @click="show">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M7 3v4m10-4v4M4 11h16m-12 4h2m4 0h2"/></svg>
     </button>
-    <Teleport to="body">
+    <Teleport :to="teleportTo || 'body'">
       <section v-if="open" :id="id" ref="panel" class="date-picker-panel" role="dialog" :aria-label="label" :style="position">
         <div class="date-picker-heading"><span>{{ label }}</span><button type="button" :aria-label="t('close')" @click="close()">×</button></div>
         <div class="date-picker-month">

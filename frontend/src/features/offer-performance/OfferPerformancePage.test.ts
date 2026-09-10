@@ -353,7 +353,7 @@ describe("Offer promotion tracking", () => {
     );
     expect(w.get(".promotion-dates .primary").text()).toBe("Apply dates");
   });
-  it("imports multiple sheets into a browser-local batch with its launch date", async () => {
+  it("saves a reviewed list only after confirmation and loads it only after selection", async () => {
     const readFile = vi.fn(async () => [
       [
         ["Merchant ID", "Merchant Name", "Category"],
@@ -371,22 +371,35 @@ describe("Offer promotion tracking", () => {
       .findAll(".promotion-header button")
       .find((b) => b.text().includes("导入商家清单"))!
       .trigger("click");
-    w.get(".promotion-import")
-      .findComponent(DatePicker)
-      .vm.$emit("update:modelValue", "2026-09-09");
     const input = w.get('input[type="file"]');
     Object.defineProperty(input.element, "files", {
       value: [new File(["fixture"], "import.xlsx")],
     });
     await input.trigger("change");
     await flushPromises();
+    expect(readFile).not.toHaveBeenCalled();
+    await w.get(".promotion-import-action button").trigger("click");
+    await flushPromises();
     expect(readFile).toHaveBeenCalledOnce();
+    const dialog = w.get("dialog");
+    expect(dialog.text()).toContain("Imported merchant");
+    dialog
+      .findComponent(DatePicker)
+      .vm.$emit("update:modelValue", "2026-09-09");
+    await dialog.get("form").trigger("submit");
+    await flushPromises();
+    expect(w.get("#promotion-list-selector").element).toBe(
+      document.activeElement,
+    );
+    expect(w.get(".promotion-batch").text()).toContain("Fixture campaign");
+    const saved = JSON.parse(localStorage.getItem("oi-promotion-batches-v1")!);
+    await w.get("#promotion-list-selector").setValue(saved.at(-1).id);
+    await flushPromises();
     expect(loader.mock.calls.at(-1)?.[0]).toMatchObject({
       merchantIds: "202",
       launchDate: "2026-09-09",
     });
     expect(w.get(".promotion-batch").text()).toContain("1 ASIN");
-    const saved = JSON.parse(localStorage.getItem("oi-promotion-batches-v1")!);
     expect(saved.at(-1)).toMatchObject({
       local: true,
       launchDate: "2026-09-09",
@@ -394,5 +407,24 @@ describe("Offer promotion tracking", () => {
         expect.objectContaining({ merchantId: "202", asins: ["B012345678"] }),
       ],
     });
+  });
+  it("filters targets by evidence-backed type with distinct labels", async () => {
+    const w = page();
+    await flushPromises();
+    await w.get(".promotion-merchant-table tbody button").trigger("click");
+    await flushPromises();
+    const filters = w.get(".promotion-target-filters");
+    expect(filters.text()).toContain("单品 · 1");
+    expect(filters.text()).toContain("Storefront · 1");
+    expect(filters.text()).toContain("未识别 · 1");
+    await filters.get('[data-link-kind="unknown"]').trigger("click");
+    const detail = w.get("#promotion-detail");
+    expect(detail.findAll(".promotion-target-type")).toHaveLength(1);
+    expect(
+      detail.get(".promotion-target-type").attributes("data-link-kind"),
+    ).toBe("unknown");
+    expect(detail.text()).toContain("B098765432");
+    await filters.get('[data-link-kind="storefront"]').trigger("click");
+    expect(detail.get(".promotion-target-type").text()).toBe("Storefront");
   });
 });

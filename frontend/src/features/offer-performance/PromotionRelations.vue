@@ -8,6 +8,7 @@ import {
   type TrackedOffer,
 } from "./performanceModel";
 import type { UiLanguage } from "../../shared/i18n";
+import { categoryStyle, linkKind, linkLabel } from "./promotionAppearance";
 
 const props = defineProps<{
   language: UiLanguage;
@@ -296,14 +297,23 @@ watch(
                   class="promotion-relation-path"
                   :class="{ 'has-product': mode === 'products' }"
                 >
-                  <div class="promotion-relation-node">
+                  <div
+                    class="promotion-relation-node promotion-brand"
+                    :style="
+                      categoryStyle(offersById.get(r.merchantId)?.category)
+                    "
+                  >
                     <small>{{ t("商家", "Merchant") }}</small
                     ><button
                       type="button"
                       @click="emit('merchant', r.merchantId)"
                     >
                       {{ offersById.get(r.merchantId)?.merchantName }}</button
-                    ><small>ID {{ r.merchantId }}</small>
+                    ><small>ID {{ r.merchantId }}</small
+                    ><small class="promotion-category-label">{{
+                      offersById.get(r.merchantId)?.category ||
+                      t("未分类", "Uncategorized")
+                    }}</small>
                   </div>
                   <span class="promotion-relation-arrow" aria-hidden="true"
                     >→</span
@@ -311,8 +321,16 @@ watch(
                   <template v-if="mode === 'products'"
                     ><div
                       class="promotion-relation-node promotion-relation-product"
+                      :data-link-kind="linkKind(r)"
                     >
-                      <small>{{ evidence(r) }}</small
+                      <span
+                        class="promotion-target-type"
+                        :data-link-kind="linkKind(r)"
+                        ><span
+                          class="promotion-type-dot"
+                          aria-hidden="true"
+                        />{{ linkLabel(linkKind(r), language) }}</span
+                      ><small>{{ evidence(r) }}</small
                       ><strong>{{ target(r) }}</strong
                       ><small
                         v-if="
