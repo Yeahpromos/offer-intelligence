@@ -108,6 +108,36 @@ afterEach(() => {
 });
 
 describe("Offer promotion tracking", () => {
+  it("filters merchant details between promoted ASINs in and outside the tracked list", async () => {
+    const report = fixture();
+    report.links!.push({ ...report.links![0]!, asin: "B000000001" });
+    const w = page({ reportLoader: async () => report });
+    await flushPromises();
+    await w.get(".promotion-merchant-table tbody button").trigger("click");
+    await flushPromises();
+    const detail = w.get("#promotion-detail");
+    expect(detail.get(".promotion-scope-filters").text()).toContain(
+      "清单内 ASIN · 1",
+    );
+    expect(detail.get(".promotion-scope-filters").text()).toContain(
+      "同品牌 · 清单外 ASIN · 1",
+    );
+    await detail
+      .get('.promotion-scope-filters [data-asin-scope="outside"]')
+      .trigger("click");
+    expect(detail.findAll(".promotion-target-type")).toHaveLength(1);
+    expect(
+      detail.get(".promotion-asin-scope").attributes("data-asin-scope"),
+    ).toBe("outside");
+    expect(
+      detail.get(".promotion-asin-scope").element.closest("tr")?.textContent,
+    ).toContain("B000000001");
+    await detail
+      .get('.promotion-target-filters [data-link-kind="unknown"]')
+      .trigger("click");
+    expect(detail.findAll(".promotion-asin-scope")).toHaveLength(0);
+    expect(detail.get(".promotion-target-type").text()).toBe("未识别");
+  });
   it("adds and renames merchants by exact ID and restores the changed list after remount", async () => {
     const loader = vi.fn(async (_request: unknown) => fixture());
     const w = page({ reportLoader: loader });

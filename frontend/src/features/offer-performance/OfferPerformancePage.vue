@@ -8,6 +8,10 @@ import {
   linkKind,
   linkLabel,
   type LinkKind,
+  ASIN_SCOPES,
+  asinScope,
+  asinScopeLabel,
+  type AsinScope,
 } from "./promotionAppearance";
 import DatePicker from "../../shared/components/DatePicker.vue";
 import type { UiLanguage } from "../../shared/i18n";
@@ -26,6 +30,7 @@ import {
 } from "./performanceModel";
 import type {
   Metric,
+  MediaRow,
   PerformanceReport,
   PromotionBatch,
   ReportRequest,
@@ -70,6 +75,7 @@ const search = ref(""),
 const importOpen = ref(false),
   importNotice = ref("");
 const targetFilter = ref<LinkKind | "all">("all");
+const targetScope = ref<AsinScope | "all">("all");
 const mediaLimit = ref(100),
   linkLimit = ref(100);
 const manualOpen = ref(false),
@@ -148,6 +154,7 @@ const selected = computed(() =>
 const selectedStats = computed(() =>
   report.value?.merchants.find((o) => o.merchantId === selectedId.value),
 );
+const scopeForSelected = (row: MediaRow) => asinScope(row, selected.value);
 const baseline = computed(() =>
   monthlyBaseline(selectedStats.value, asOf.value),
 );
@@ -190,7 +197,9 @@ const searchedLinks = computed(() =>
 const links = computed(() =>
   searchedLinks.value.filter(
     (row) =>
-      targetFilter.value === "all" || linkKind(row) === targetFilter.value,
+      (targetFilter.value === "all" || linkKind(row) === targetFilter.value) &&
+      (targetScope.value === "all" ||
+        scopeForSelected(row) === targetScope.value),
   ),
 );
 const daily = computed(() =>
@@ -463,6 +472,7 @@ async function selectMerchant(id: string) {
   mediaLimit.value = 100;
   linkLimit.value = 100;
   targetFilter.value = "all";
+  targetScope.value = "all";
   if (!selectedId.value) returnFocus = document.activeElement as HTMLElement;
   detailController?.abort();
   detailController = new AbortController();
@@ -1180,6 +1190,7 @@ onBeforeUnmount(() => {
             :aria-pressed="targetFilter === 'all'"
             @click="
               targetFilter = 'all';
+              targetScope = 'all';
               linkLimit = 100;
             "
           >
@@ -1193,6 +1204,7 @@ onBeforeUnmount(() => {
             :aria-pressed="targetFilter === kind"
             @click="
               targetFilter = kind;
+              targetScope = 'all';
               linkLimit = 100;
             "
           >
@@ -1202,6 +1214,42 @@ onBeforeUnmount(() => {
             · {{ searchedLinks.filter((row) => linkKind(row) === kind).length }}
           </button>
         </div>
+        <div
+          v-if="targetFilter === 'all' || targetFilter === 'asin'"
+          class="promotion-scope-filters"
+          role="group"
+          :aria-label="t('单品清单范围', 'Product list scope')"
+        >
+          <span>{{ t("单品范围", "Product scope") }}</span>
+          <button
+            type="button"
+            :aria-pressed="targetScope === 'all'"
+            @click="
+              targetScope = 'all';
+              linkLimit = 100;
+            "
+          >
+            {{ t("不限范围", "Any scope") }}
+          </button>
+          <button
+            v-for="scope in ASIN_SCOPES"
+            :key="scope"
+            type="button"
+            :data-asin-scope="scope"
+            :aria-pressed="targetScope === scope"
+            @click="
+              targetFilter = 'asin';
+              targetScope = scope;
+              linkLimit = 100;
+            "
+          >
+            {{ asinScopeLabel(scope, language) }} ·
+            {{
+              searchedLinks.filter((row) => scopeForSelected(row) === scope)
+                .length
+            }}
+          </button>
+        </div>
         <div class="promotion-scroll" tabindex="0">
           <table>
             <thead>
@@ -1209,6 +1257,7 @@ onBeforeUnmount(() => {
                 <th>{{ t("媒体", "Publisher") }}</th>
                 <th>{{ t("链接类型", "Link type") }}</th>
                 <th>{{ t("推广 ASIN", "Promoted ASIN") }}</th>
+                <th>{{ t("与清单的关系", "List membership") }}</th>
                 <th>{{ t("成交 ASIN", "Purchased ASIN") }}</th>
                 <th>{{ t("观察期营收", "Observed revenue") }}</th>
                 <th>{{ t("点击", "Clicks") }}</th>
@@ -1235,6 +1284,14 @@ onBeforeUnmount(() => {
                   <code>{{ l.asin || "—" }}</code>
                 </td>
                 <td>
+                  <span
+                    v-if="scopeForSelected(l)"
+                    class="promotion-asin-scope"
+                    :data-asin-scope="scopeForSelected(l)"
+                    >{{ asinScopeLabel(scopeForSelected(l)!, language) }}</span
+                  ><span v-else>—</span>
+                </td>
+                <td>
                   <code>{{ l.purchasedAsin || "—" }}</code>
                 </td>
                 <td>{{ format(l.after.revenue, "revenue") }}</td>
@@ -1242,7 +1299,7 @@ onBeforeUnmount(() => {
                 <td>{{ format(l.after.orders, "orders") }}</td>
               </tr>
               <tr v-if="!links.length">
-                <td colspan="7">
+                <td colspan="8">
                   {{
                     t(
                       "当前周期暂无链接明细。",

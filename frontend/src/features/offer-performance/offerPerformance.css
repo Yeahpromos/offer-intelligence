@@ -816,6 +816,53 @@
   color: var(--promotion-type-ink, var(--pp-blue));
   background: var(--promotion-type-bg, var(--pp-soft));
 }
+.promotion-page [data-asin-scope="listed"] {
+  --promotion-scope-ink: light-dark(#255bd4, #9bbcff);
+  --promotion-scope-bg: light-dark(#edf3ff, #243b60);
+}
+.promotion-page [data-asin-scope="outside"] {
+  --promotion-scope-ink: light-dark(#08756e, #8fd5cf);
+  --promotion-scope-bg: light-dark(#e6f6f3, #1d3f42);
+}
+.promotion-page [data-asin-scope="unspecified"] {
+  --promotion-scope-ink: var(--pp-muted);
+  --promotion-scope-bg: var(--pp-panel);
+}
+.promotion-page .promotion-asin-scope {
+  display: inline-block;
+  justify-self: start;
+  padding: 4px 7px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 600;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  color: var(--promotion-scope-ink);
+  background: var(--promotion-scope-bg);
+}
+.promotion-scope-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.promotion-scope-filters > span {
+  font-size: 12px;
+  color: var(--pp-muted);
+  margin-right: 4px;
+}
+.promotion-scope-filters button {
+  font-size: 12px;
+}
+.promotion-scope-filters button[data-asin-scope] {
+  color: var(--promotion-scope-ink);
+}
+.promotion-scope-filters [aria-pressed="true"] {
+  border-color: var(--promotion-scope-ink, var(--pp-blue));
+  background: var(--promotion-scope-bg, var(--pp-soft));
+  font-weight: 650;
+}
 @media (max-width: 760px) {
   .promotion-file-choice {
     flex-wrap: wrap;

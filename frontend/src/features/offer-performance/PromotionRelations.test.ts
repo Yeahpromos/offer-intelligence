@@ -68,6 +68,38 @@ const page = (extra = {}) =>
   });
 
 describe("visible merchant and product relationships", () => {
+  it("separates listed products from same-brand products outside the list without borrowing another merchant list", async () => {
+    const w = page({
+      offers: [
+        { ...offers[0], asins: ["B012345678"] },
+        { ...offers[1], asins: ["B098765432"] },
+      ],
+      report: {
+        ...report,
+        links: [
+          ...report.links!,
+          { ...edge("202", 500), asin: "B012345678", linkType: "asin" },
+        ],
+      },
+    });
+    await w.findAll(".promotion-relation-modes button")[1]!.trigger("click");
+    expect(w.get(".promotion-scope-filters").text()).toContain(
+      "清单内 ASIN · 1",
+    );
+    expect(w.get(".promotion-scope-filters").text()).toContain(
+      "同品牌 · 清单外 ASIN · 1",
+    );
+    await w
+      .get('.promotion-scope-filters [data-asin-scope="outside"]')
+      .trigger("click");
+    expect(w.findAll(".promotion-relation-path")).toHaveLength(1);
+    expect(w.get(".promotion-relation-path").text()).toContain("Second Home");
+    expect(w.get(".promotion-relation-path").text()).toContain("B012345678");
+    await w
+      .get('.promotion-scope-filters [data-asin-scope="listed"]')
+      .trigger("click");
+    expect(w.get(".promotion-relation-path").text()).toContain("First Home");
+  });
   it("shows a separate merchant-to-publisher path for every exact merchant ID immediately", async () => {
     const w = page();
     expect(w.findAll(".promotion-relation-path")).toHaveLength(2);

@@ -1,5 +1,5 @@
 import type { UiLanguage } from "../../shared/i18n";
-import type { MediaRow } from "./performanceModel";
+import type { MediaRow, TrackedOffer } from "./performanceModel";
 
 // Stable category identity keeps brands consistent across filtering and sorting.
 const palette = [
@@ -78,4 +78,30 @@ export function linkLabel(kind: LinkKind, language: UiLanguage) {
       : language === "zh"
         ? "未识别"
         : "Unknown";
+}
+
+export type AsinScope = "listed" | "outside" | "unspecified";
+export const ASIN_SCOPES: readonly AsinScope[] = [
+  "listed",
+  "outside",
+  "unspecified",
+];
+export function asinScope(
+  row: MediaRow,
+  offer?: TrackedOffer,
+): AsinScope | null {
+  if (!row.asin || !offer || row.merchantId !== offer.merchantId) return null;
+  const listed = offer.asins
+    .map((asin) => asin.trim().toUpperCase())
+    .filter(Boolean);
+  if (!listed.length) return "unspecified";
+  return listed.includes(row.asin.trim().toUpperCase()) ? "listed" : "outside";
+}
+export function asinScopeLabel(scope: AsinScope, language: UiLanguage) {
+  const labels = {
+    listed: ["清单内 ASIN", "ASIN in list"],
+    outside: ["同品牌 · 清单外 ASIN", "Same brand · ASIN outside list"],
+    unspecified: ["清单未提供 ASIN", "No ASINs specified in list"],
+  };
+  return labels[scope][language === "zh" ? 0 : 1];
 }
