@@ -3,6 +3,7 @@ import fs from "node:fs";
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const read = (file) => fs.readFileSync(file, "utf8");
 const pages = [
+  ["offer-performance", '"offer-performance": offerPerformanceFactory'],
   ["offer-list-tracker", '"offer-list-tracker": offerTrackerFactory'],
   ["payments", "payments: paymentsFactory"],
   ["publishers", "publishers: publishersFactory"],

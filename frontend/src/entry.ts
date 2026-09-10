@@ -5,6 +5,8 @@ import type { Component } from "vue";
 import "./shared/styles/modern-root.css";
 import "./shared/styles/page-foundations.css";
 import "./features/offer-tracker/offerTracker.css";
+import "./features/offer-performance/offerPerformance.css";
+import OfferPerformancePage from "./features/offer-performance/OfferPerformancePage.vue";
 import "./features/payments/payments.css";
 import "./features/publishers/publishers.css";
 import "./features/brand-media/brandMedia.css";
@@ -648,6 +650,24 @@ const offerTrackerFactory: ModernPageFactory = (element): ModernPageController =
   };
 };
 
+const offerPerformanceFactory: ModernPageFactory = (element): ModernPageController => {
+  const i18n = createI18nStore(getAppSnapshot().value.language);
+  const app = createApp({ setup: () => () => h(OfferPerformancePage, {
+    language: i18n.language.value,
+    readFile: async (file: File): Promise<unknown[][][]> => {
+      if (/\.xlsx?$/i.test(file.name)) {
+        const reader = await loadMonthlySpreadsheetReader();
+        const workbook = reader.read(await file.arrayBuffer(), { type: "array" });
+        return workbook.SheetNames.map(name => reader.utils.sheet_to_json(workbook.Sheets[name], { header: 1, raw: false, defval: "" })).filter((table): table is unknown[][] => Array.isArray(table));
+      }
+      return [parseMonthlyNewMerchantTable(await file.text(), /\.tsv$/i.test(file.name) ? "\t" : "")];
+    },
+    download: (rows: Record<string, unknown>[]) => { downloadWorkbook("offer-promotion-comparison.xlsx", { rows, columns: objectExportColumns(rows) }); }
+  }) });
+  app.mount(element);
+  return { setLanguage: language => i18n.setLanguage(language), unmount: () => { app.unmount(); element.replaceChildren(); } };
+};
+
 const paymentsFactory: ModernPageFactory = (element): ModernPageController => {
   const snapshot = getAppSnapshot().value;
   const i18n = createI18nStore(snapshot.language);
@@ -1047,6 +1067,7 @@ const agentFactory: ModernPageFactory = (element): ModernPageController => {
 
 window.OI_MODERN_APP = createModernAppApi({
   "offer-list-tracker": offerTrackerFactory,
+  "offer-performance": offerPerformanceFactory,
   payments: paymentsFactory,
   publishers: publishersFactory,
   "monthly-new-merchants": monthlyNewMerchantsFactory,

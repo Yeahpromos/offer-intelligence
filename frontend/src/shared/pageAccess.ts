@@ -2,6 +2,7 @@ import type { AccessLevel, AuthUser } from "./contracts/auth";
 
 export const PAGE_NAMES = [
   "offer-list-tracker",
+  "offer-performance",
   "payments",
   "publishers",
   "monthly-new-merchants",

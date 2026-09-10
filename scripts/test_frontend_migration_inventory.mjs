@@ -9,7 +9,7 @@ const inventory = JSON.parse(match[1]);
 assert(Array.isArray(inventory.pages), "迁移清单必须包含 pages 数组");
 
 const expectedPages = [
-  "offer-list-tracker", "payments", "publishers", "monthly-new-merchants",
+  "offer-list-tracker", "offer-performance", "payments", "publishers", "monthly-new-merchants",
   "brand-media", "revenue-flow", "google-ads", "sheets", "category", "tier",
   "dashboard", "agent"
 ].sort();

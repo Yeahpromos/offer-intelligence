@@ -87,7 +87,7 @@ Browser → server.py Handler.do_GET/POST
 
 ### Auth model
 
-Users come from `cnpscy_oi_user`; there is no registration or user-management UI. Session-based auth uses an `HttpOnly` HMAC-signed v2 cookie (`oi_session`) whose payload contains only `v`, `sub`, `exp`, and `iat`. Every protected request re-reads the user's `is_active` and `level`. Level 0 can access all 12 pages, level 1 excludes Google Ads, and level 2 can access only Google Ads. Payment sync can bypass session auth only for `/api/levanta/payments` by presenting `PAYMENT_SYNC_TOKEN` as a Bearer token or `X-Payment-Sync-Token` header.
+Users come from `cnpscy_oi_user`; there is no registration or user-management UI. Session-based auth uses an `HttpOnly` HMAC-signed v2 cookie (`oi_session`) whose payload contains only `v`, `sub`, `exp`, and `iat`. Every protected request re-reads the user's `is_active` and `level`. Level 0 can access all 13 pages, level 1 excludes Google Ads, and level 2 can access only Google Ads. Payment sync can bypass session auth only for `/api/levanta/payments` by presenting `PAYMENT_SYNC_TOKEN` as a Bearer token or `X-Payment-Sync-Token` header.
 
 Unauthenticated, denied, and unavailable requests return 401, 403, and 503 respectively. When `OI_AUTH_ENABLED` is `0`/`false`/`off`, only isolated local development may use the synthetic level 0 user; production fails closed. Old v1 cookies containing `role=admin` are rejected.
 
@@ -138,7 +138,7 @@ A GitHub Actions workflow (`.github/workflows/sync-levanta-payments.yml`) runs d
 - frontend/src/runtime/modernApp.ts owns the standalone application lifecycle, page mounting, navigation, and language.
 - frontend/src/runtime/contracts.ts owns bootstrap and application API types.
 - frontend/src/shell/AppShell.vue owns desktop/mobile navigation, theme, page title, and the single page host.
-- frontend/src/entry.ts registers the 12 Vue page factories and shared export/session services.
+- frontend/src/entry.ts registers the 13 Vue page factories and shared export/session services.
 - frontend/src/features/ contains page-owned models, composables, components, styles, and behavior tests.
 - public/auth.js owns authentication, protected bootstrap loading, the explicit startup error state, and loading the modern bundle.
 - The removed public/app.js and frontend/src/legacy/ runtime must not be restored; rollback uses a prior deploy.

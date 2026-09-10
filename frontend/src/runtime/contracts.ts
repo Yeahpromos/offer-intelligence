@@ -3,6 +3,7 @@ import type { AuthUser } from "../shared/contracts/auth";
 
 export const MODERN_PAGE_NAMES = [
   "offer-list-tracker",
+  "offer-performance",
   "payments",
   "publishers",
   "monthly-new-merchants",

@@ -6,6 +6,11 @@
   "outputDirectory": "public",
   "routes": [
     {
+      "src": "^/api/ui/db/offer-performance/?$",
+      "dest": "/api/db/index",
+      "transforms": [{ "type": "request.headers", "op": "set", "target": { "key": "x-oi-db-route" }, "args": "ui-offer-performance" }]
+    },
+    {
       "src": "^/api/db/status/?$",
       "dest": "/api/db/index",
       "transforms": [

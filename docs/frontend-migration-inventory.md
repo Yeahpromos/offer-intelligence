@@ -618,6 +618,50 @@
       ],
       "testGap": "生产认证、真实数据和部署环境的浏览器冒烟由 M8 负责；页面模型、交互与构建契约已自动化覆盖。",
       "notes": "页面仅由 standalone Vue Runtime 挂载；旧 DOM、旧渲染器、旧 bridge 与旧静态资源已删除。回滚使用上一份可部署构建，不再使用运行时 legacy 开关。"
+    },
+    {
+      "pageKey": "offer-performance",
+      "label": "Offer promotion tracking",
+      "status": "removed",
+      "roots": [
+        "#modernAppRoot",
+        "[data-modern-page-host]"
+      ],
+      "legacyEntry": [],
+      "modernEntry": [
+        "frontend/src/entry.ts",
+        "frontend/src/features/offer-performance/OfferPerformancePage.vue",
+        "frontend/src/features/offer-performance/performanceModel.ts",
+        "offer_performance.py"
+      ],
+      "state": [
+        "batchId",
+        "launch",
+        "start",
+        "end",
+        "selectedId",
+        "metric"
+      ],
+      "apis": [
+        "/api/ui/db/offer-performance"
+      ],
+      "storage": [
+        "oi-promotion-batches-v1"
+      ],
+      "exports": [
+        "offer-promotion-comparison.xlsx"
+      ],
+      "overlays": [
+        "DatePicker"
+      ],
+      "tests": [
+        "frontend/src/features/offer-performance/performanceModel.test.ts",
+        "frontend/src/features/offer-performance/OfferPerformancePage.test.ts",
+        "frontend/src/features/offer-performance/PromotionRelations.test.ts",
+        "scripts/test_offer_performance.py"
+      ],
+      "testGap": "Real database validation was intentionally not performed.",
+      "notes": "Native modern page; no legacy implementation. See docs/offer-promotion-tracking.md."
     }
   ]
 }

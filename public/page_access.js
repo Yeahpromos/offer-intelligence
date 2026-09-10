@@ -1,6 +1,7 @@
 (function () {
   const PAGE_NAMES = Object.freeze([
     "offer-list-tracker",
+    "offer-performance",
     "payments",
     "publishers",
     "monthly-new-merchants",

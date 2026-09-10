@@ -20,6 +20,7 @@ AccessLevel: TypeAlias = Literal[0, 1, 2]
 VALID_ACCESS_LEVELS = {0, 1, 2}
 PAGE_NAMES = (
     "offer-list-tracker",
+    "offer-performance",
     "payments",
     "publishers",
     "monthly-new-merchants",

@@ -32,6 +32,7 @@ def _load_dotenv(path: str = ".env") -> None:
 _load_dotenv()
 # ------------------------------------
 
+from offer_performance import report as offer_performance_report
 from api.tier_moves import handle_tier_moves
 from auth import (
     current_user_for_target,
@@ -128,6 +129,7 @@ UI_DB_PAGE_BY_PATH = {
     "/api/ui/db/tier1-merchants": "tier",
     "/api/ui/db/monthly-new-merchants": "monthly-new-merchants",
     "/api/ui/db/publishers": "publishers",
+    "/api/ui/db/offer-performance": "offer-performance",
     "/api/ui/db/brand-media-sankey": "brand-media",
     "/api/ui/db/brand-media-trend": "brand-media",
     "/api/ui/db/google-ads-workbench": "google-ads",
@@ -677,6 +679,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, monthly_new_merchants_payload(
                     first_query_value(query, "month") or None,
                 ))
+                return
+
+            if parsed.path == "/api/ui/db/offer-performance":
+                self.send_json(200, offer_performance_report(query))
                 return
 
             if parsed.path == "/api/ui/db/publishers":

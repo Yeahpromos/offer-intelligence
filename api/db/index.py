@@ -3,6 +3,7 @@ from io import BytesIO
 import json
 import logging
 
+from offer_performance import report as offer_performance_report
 from auth import _read_json_body, current_user_for_target, require_page_access
 from google_ads_workbench import (
     DEFAULT_WORKBENCH_USER_ID,
@@ -51,6 +52,7 @@ PAGE_ACCESS_BY_ROUTE = {
     "ui-tier1-merchants": "tier",
     "ui-monthly-new-merchants": "monthly-new-merchants",
     "ui-publishers": "publishers",
+    "ui-offer-performance": "offer-performance",
     "ui-brand-media-sankey": "brand-media",
     "ui-brand-media-trend": "brand-media",
     "ui-google-ads-workbench": "google-ads",
@@ -505,6 +507,13 @@ def app(environ, start_response):
                 handle_ui_search(target, query)
             elif route == "ui-keywords":
                 handle_ui_keywords(target)
+            elif route == "ui-offer-performance":
+                try:
+                    send_json(target, 200, offer_performance_report(query))
+                except ValueError as error:
+                    send_json(target, 400, {"ok": False, "error": str(error)})
+                except Exception as error:
+                    send_db_error(target, error)
             elif route == "ui-publishers":
                 handle_ui_publishers(target, query)
             elif route == "ui-brand-media-sankey":

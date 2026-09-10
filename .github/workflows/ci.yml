@@ -55,6 +55,7 @@ jobs:
           python scripts/test_tier_report_date_range.py
           python scripts/test_merchant_aov_estimates.py
           python scripts/test_publishers_portfolio.py
+          python scripts/test_offer_performance.py
           python scripts/test_brand_media_trend.py
           python scripts/test_monthly_new_merchants.py
           node scripts/test_shared_xlsx_frontend.mjs

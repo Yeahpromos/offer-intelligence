@@ -1,0 +1,1063 @@
+{
+  "batches": [
+    {
+      "id": "yp-amazon-2026-09-07",
+      "name": "YP Amazon Offers · 09/07",
+      "launchDate": "2026-09-07",
+      "sourceFile": "YP Amazon Offers (9-7) .xlsx",
+      "sourceSha256": "a620b50434ad915415c9854f62ab5cd9872701ad611eb25967e42d2820b85afe",
+      "offers": [
+        {
+          "merchantId": "406577",
+          "merchantName": "CHEBIO",
+          "category": "Home & Kitchen / Cordless Vacuums",
+          "commissionRate": 0.15,
+          "referenceAov": 89.98,
+          "productReferenceAov": 89.98,
+          "notes": "适合家居清洁类内容推广。 可重点测试无线吸尘器单品链接，B0D7ZT5HN1，B0HCTBRGR7，B0HCBP6QCH为20%佣金",
+          "asins": [
+            "B0H3N4ZT94",
+            "B0D7ZT5HN1",
+            "B0HCTBRGR7",
+            "B0HCBP6QCH"
+          ],
+          "sourceRow": 5
+        },
+        {
+          "merchantId": "385463",
+          "merchantName": "ANTHBOT FR",
+          "category": "Patio, Lawn & Garden / Robotic Lawn Mowers",
+          "commissionRate": 0.1125,
+          "referenceAov": 949.4,
+          "productReferenceAov": 949.4,
+          "notes": "适合重点测试高转化内容。 推荐以单品ASIN/深链进行推广",
+          "asins": [
+            "B0GTZ2J5HQ",
+            "B0G7ZH5Y33",
+            "B0G7YYZC1R"
+          ],
+          "sourceRow": 6
+        },
+        {
+          "merchantId": "380945",
+          "merchantName": "Merach",
+          "category": "Sports & Outdoors / Home Gym Equipment",
+          "commissionRate": 0.15,
+          "referenceAov": 211.88,
+          "productReferenceAov": 211.88,
+          "notes": "适合单品测试。 建议优先投放具体单品ASIN链接。做Meta Ads的媒体可向我们获取更多视频信息",
+          "asins": [
+            "B0F4QHTJLP",
+            "B0FHFYMM1G",
+            "B0DFLZWCPB"
+          ],
+          "sourceRow": 7
+        },
+        {
+          "merchantId": "387792",
+          "merchantName": "RENPHO Wellness",
+          "category": "Health & Household / Wellness Technology",
+          "commissionRate": 0.1875,
+          "referenceAov": 84.28,
+          "productReferenceAov": 84.28,
+          "notes": "适合健康与生活方式媒体。 可围绕按摩、放松、健康管理等使用场景推广",
+          "asins": [
+            "B0FX4TR8DQ",
+            "B0FF9ZCW62",
+            "B07X925BY6"
+          ],
+          "sourceRow": 8
+        },
+        {
+          "merchantId": "398438",
+          "merchantName": "Svater",
+          "category": "Patio, Lawn & Garden / Outdoor Lighting",
+          "commissionRate": 0.15,
+          "referenceAov": 69.72,
+          "productReferenceAov": 69.72,
+          "notes": "户外照明产品场景感强，适合图片及视频内容推广。",
+          "asins": [
+            "B09PNJP48R",
+            "B0FNX3FGQ1",
+            "B0FNX2Z6V7"
+          ],
+          "sourceRow": 9
+        },
+        {
+          "merchantId": "385602",
+          "merchantName": "Beatbot",
+          "category": "Patio, Lawn & Garden / Robotic Pool Cleaners",
+          "commissionRate": 0.15,
+          "referenceAov": 979,
+          "productReferenceAov": 1379,
+          "notes": "高客单泳池机器人，单笔收益空间较高",
+          "asins": [
+            "B0D38X6SLW",
+            "B0DMN819RB",
+            "B0DPMDQ2RD"
+          ],
+          "sourceRow": 10
+        },
+        {
+          "merchantId": "406354",
+          "merchantName": "Koalu",
+          "category": "Home & Kitchen",
+          "commissionRate": 0.1,
+          "referenceAov": 90,
+          "productReferenceAov": 90,
+          "notes": "家居类产品，适合常规内容及Deal流量测试。 建议根据具体单品选择测评、家居场景或促销内容切入",
+          "asins": [
+            "B0HF7VSDHS",
+            "B0HF7MKP4G"
+          ],
+          "sourceRow": 11
+        },
+        {
+          "merchantId": "406220",
+          "merchantName": "AOCHUAN",
+          "category": "Electronics",
+          "commissionRate": 0.23,
+          "referenceAov": 43.99,
+          "productReferenceAov": 43.99,
+          "notes": "适合规模化测试。 电子类产品视觉展示效果较好，推荐短视频、社媒及Meta Ads媒体可以优先测试单品链接",
+          "asins": [
+            "B0H1QHXV1K",
+            "B0FVFWCWHP",
+            "B0C89T698J",
+            "B0D78NVZWJ"
+          ],
+          "sourceRow": 12
+        },
+        {
+          "merchantId": "387598",
+          "merchantName": "EDIFIER US 3000",
+          "category": "Electronics",
+          "commissionRate": 0.1875,
+          "referenceAov": 166.52,
+          "productReferenceAov": 166.52,
+          "notes": "适合科技、音频及消费电子媒体。 推荐重点测试耳机/音频产品测评、对比、使用场景及Deal内容",
+          "asins": [
+            "B0DTHV3QSW",
+            "B0F5B49LLK",
+            "B07ZVP9XBG",
+            "B0F9D8HMK6",
+            "B0F8HFXXVZ"
+          ],
+          "sourceRow": 13
+        },
+        {
+          "merchantId": "406173",
+          "merchantName": "USKEYVISION",
+          "category": "Electronics",
+          "commissionRate": 0.23,
+          "referenceAov": 43.99,
+          "productReferenceAov": 43.99,
+          "notes": "适合电子产品类媒体快速测试。 建议以具体单品链接进行投放",
+          "asins": [
+            "B0FVXYL73W",
+            "B0GSYGN8G8",
+            "B0DL9FKBRS",
+            "B0G3WN7B5H",
+            "B0GLPWTBHL"
+          ],
+          "sourceRow": 14
+        },
+        {
+          "merchantId": "385388",
+          "merchantName": "GreenRex",
+          "category": "Patio, Lawn & Garden",
+          "commissionRate": 0.075,
+          "referenceAov": 57.99,
+          "productReferenceAov": 57.99,
+          "notes": "适合季节性及户外场景内容测试。 推荐结合具体主推单品做庭院、户外生活及Deal类内容",
+          "asins": [
+            "B0FNRFK7XQ",
+            "B0F99J5H9Z",
+            "B0FJQNQJ8D",
+            "B0FJQGL74T",
+            "B0FJR67QDG"
+          ],
+          "sourceRow": 15
+        },
+        {
+          "merchantId": "385389",
+          "merchantName": "Smartwhale",
+          "category": "Health & Household",
+          "commissionRate": 0.075,
+          "referenceAov": 78.99,
+          "productReferenceAov": 78.99,
+          "notes": "健康生活类产品，适合测评及生活方式内容。 可优先测试具体单品链接，并围绕日常健康、放松及使用体验进行内容推广",
+          "asins": [
+            "B0F8VJ3H89",
+            "B0CTQDWLQ2"
+          ],
+          "sourceRow": 16
+        },
+        {
+          "merchantId": "363392",
+          "merchantName": "Casabrews",
+          "category": "Home & Kitchen",
+          "commissionRate": 0.2,
+          "referenceAov": 150,
+          "productReferenceAov": 150,
+          "notes": "咖啡机/意式浓缩咖啡设备品类，产品展示性和内容表现都比较好，适合咖啡、美食、家居生活、厨房电器及礼品类推广",
+          "asins": [
+            "B0F4DBXT8X",
+            "B09X3WGJ3R"
+          ],
+          "sourceRow": 17
+        },
+        {
+          "merchantId": "380798",
+          "merchantName": "Pandora",
+          "category": "Jewelry",
+          "commissionRate": 0.1875,
+          "referenceAov": 80.166667,
+          "productReferenceAov": 80.166667,
+          "notes": "",
+          "asins": [
+            "B0C4R8S6DZ",
+            "B0C4RFMKGL",
+            "B0C4RFMT62",
+            "B0C4RG4BBD",
+            "B0C4RG5FJX"
+          ],
+          "sourceRow": 18
+        },
+        {
+          "merchantId": "362621",
+          "merchantName": "Sports Research & Sweet Sweat",
+          "category": "Health & Household",
+          "commissionRate": 0.3,
+          "referenceAov": 33.95,
+          "productReferenceAov": 33.95,
+          "notes": "",
+          "asins": [
+            "B000J42G3Q",
+            "B001EN14CA",
+            "B003QWG0IA",
+            "B00A39MPNI",
+            "B00CKXJ06K"
+          ],
+          "sourceRow": 19
+        },
+        {
+          "merchantId": "362233",
+          "merchantName": "O Positiv",
+          "category": "Health & Household",
+          "commissionRate": 0.3,
+          "referenceAov": 29.84125,
+          "productReferenceAov": 29.84125,
+          "notes": "",
+          "asins": [
+            "B0CXJG8GXC",
+            "B0CXJGTPW3",
+            "B0D4XJBY2M",
+            "B0D4Y1BYDV",
+            "B0D5FRM49B"
+          ],
+          "sourceRow": 20
+        },
+        {
+          "merchantId": "381376",
+          "merchantName": "PowerStep",
+          "category": "Health & Household",
+          "commissionRate": 0.225,
+          "referenceAov": 59.95,
+          "productReferenceAov": 59.95,
+          "notes": "",
+          "asins": [
+            "B0006VP84Q",
+            "B000KKPWJY",
+            "B000KPIHQ4",
+            "B000KPKMU8",
+            "B000KPKMX0"
+          ],
+          "sourceRow": 21
+        },
+        {
+          "merchantId": "363249",
+          "merchantName": "BettaOfficial",
+          "category": "Patio, Lawn & Garden",
+          "commissionRate": 0.225,
+          "referenceAov": 49.99,
+          "productReferenceAov": 49.99,
+          "notes": "",
+          "asins": [
+            "B0BW33M286",
+            "B0BW38MP5C",
+            "B0BYB4478W",
+            "B0CVMQ3XBX",
+            "B0D42S35RX"
+          ],
+          "sourceRow": 22
+        },
+        {
+          "merchantId": "369334",
+          "merchantName": "Squatty Potty",
+          "category": "Health & Household",
+          "commissionRate": 0.1875,
+          "referenceAov": 26.229286,
+          "productReferenceAov": 26.229286,
+          "notes": "",
+          "asins": [
+            "B007BISCT0",
+            "B00ESKVN7W",
+            "B00HSR1B9W",
+            "B00HSR1BYC",
+            "B00HSR1D3G"
+          ],
+          "sourceRow": 23
+        },
+        {
+          "merchantId": "362805",
+          "merchantName": "TP-Link | Tapo",
+          "category": "Electronics",
+          "commissionRate": 0.153301,
+          "referenceAov": 40.873333,
+          "productReferenceAov": 40.873333,
+          "notes": "",
+          "asins": [
+            "B00A128S24",
+            "B08HQBC678",
+            "B09CYNHL4S",
+            "B09HGQN8TJ",
+            "B09VCVTJV2"
+          ],
+          "sourceRow": 24
+        },
+        {
+          "merchantId": "362292",
+          "merchantName": "PetSafe",
+          "category": "Pet Supplies",
+          "commissionRate": 0.15,
+          "referenceAov": 70.084,
+          "productReferenceAov": 70.084,
+          "notes": "",
+          "asins": [
+            "B0000DAPGK",
+            "B0001ZWZ8O",
+            "B00023N7TG",
+            "B00023ND8G",
+            "B0002AAT72"
+          ],
+          "sourceRow": 25
+        },
+        {
+          "merchantId": "380795",
+          "merchantName": "Momcozy Store2",
+          "category": "Baby",
+          "commissionRate": 0.15,
+          "referenceAov": 66.564,
+          "productReferenceAov": 66.564,
+          "notes": "",
+          "asins": [
+            "B07JMZYJVW",
+            "B07VC2ZJ17",
+            "B08HZ7DYSF",
+            "B08T681D96",
+            "B08V8QBXCW"
+          ],
+          "sourceRow": 26
+        },
+        {
+          "merchantId": "380864",
+          "merchantName": "Project Cloud",
+          "category": "Home & Kitchen",
+          "commissionRate": 0.15,
+          "referenceAov": 52.4,
+          "productReferenceAov": 52.4,
+          "notes": "",
+          "asins": [
+            "B0CBJD3VRM",
+            "B0CBJDPC47",
+            "B0CBJDVC9M",
+            "B0CBJDWM4Z",
+            "B0CBJF55P6"
+          ],
+          "sourceRow": 27
+        },
+        {
+          "merchantId": "363298",
+          "merchantName": "MaryRuth Organics",
+          "category": "Health & Household",
+          "commissionRate": 0.15,
+          "referenceAov": 37.835,
+          "productReferenceAov": 37.835,
+          "notes": "",
+          "asins": [
+            "B00MDRTV8A",
+            "B00WQ1HDKG",
+            "B00WQ683DM",
+            "B012LQWAQM",
+            "B019M7GISY"
+          ],
+          "sourceRow": 28
+        },
+        {
+          "merchantId": "363503",
+          "merchantName": "Luna Bean",
+          "category": "Arts, Crafts & Sewing",
+          "commissionRate": 0.15,
+          "referenceAov": 29.32,
+          "productReferenceAov": 29.32,
+          "notes": "",
+          "asins": [
+            "B003LDV2M8",
+            "B007PULSRM",
+            "B011MT6N7Q",
+            "B01E4LWBLQ",
+            "B01GUNETJS"
+          ],
+          "sourceRow": 29
+        },
+        {
+          "merchantId": "363529",
+          "merchantName": "Luseta Beauty",
+          "category": "Beauty & Personal Care",
+          "commissionRate": 0.15,
+          "referenceAov": 25.49,
+          "productReferenceAov": 25.49,
+          "notes": "",
+          "asins": [
+            "B00LJXQN9Y",
+            "B015GRXWCO",
+            "B06Y5XPRYL",
+            "B076CW6Y78",
+            "B076CXR7XB"
+          ],
+          "sourceRow": 30
+        },
+        {
+          "merchantId": "381366",
+          "merchantName": "WaterBoy",
+          "category": "Health & Household",
+          "commissionRate": 0.15,
+          "referenceAov": 24.99,
+          "productReferenceAov": 24.99,
+          "notes": "",
+          "asins": [
+            "B0B26V97KX",
+            "B0B2FFLWJ3",
+            "B0BGQM56Y1",
+            "B0BGQQC5SN",
+            "B0C2N92TWS"
+          ],
+          "sourceRow": 31
+        },
+        {
+          "merchantId": "385442",
+          "merchantName": "Rhino USA, Inc.",
+          "category": "Sports & Outdoors",
+          "commissionRate": 0.14625,
+          "referenceAov": 69.9,
+          "productReferenceAov": 69.9,
+          "notes": "",
+          "asins": [
+            "B01AS5QBG8",
+            "B01AS5QC1C",
+            "B01AS5QCKS",
+            "B01AS5QD2K",
+            "B01J580F2K"
+          ],
+          "sourceRow": 32
+        },
+        {
+          "merchantId": "383951",
+          "merchantName": "SlumberPod",
+          "category": "Baby",
+          "commissionRate": 0.13125,
+          "referenceAov": 61.87125,
+          "productReferenceAov": 61.87125,
+          "notes": "",
+          "asins": [
+            "B0B7P8HK8M",
+            "B0B7PBRZX5",
+            "B0C59M4J9N",
+            "B0D9C9Q98M",
+            "B0D9CCM17R"
+          ],
+          "sourceRow": 33
+        },
+        {
+          "merchantId": "380741",
+          "merchantName": "Wahl Clipper Corporation",
+          "category": "Beauty & Personal Care",
+          "commissionRate": 0.1125,
+          "referenceAov": 64.99,
+          "productReferenceAov": 64.99,
+          "notes": "",
+          "asins": [
+            "B000H7O5M0",
+            "B000VVT94G",
+            "B000ZMAL2U",
+            "B001FDKGIW",
+            "B00UK8WFQO"
+          ],
+          "sourceRow": 34
+        },
+        {
+          "merchantId": "380959",
+          "merchantName": "Chefman",
+          "category": "Home & Kitchen",
+          "commissionRate": 0.1875,
+          "referenceAov": 89.92,
+          "productReferenceAov": 89.92,
+          "notes": "",
+          "asins": [
+            "B01J1AWMFU",
+            "B0735MX51B",
+            "B077XMNSFP",
+            "B077YR9FFG",
+            "B07FNW57J7"
+          ],
+          "sourceRow": 35
+        },
+        {
+          "merchantId": "381680",
+          "merchantName": "Aerotrunk",
+          "category": "Beauty & Personal Care",
+          "commissionRate": 0.1875,
+          "referenceAov": 85.584,
+          "productReferenceAov": 85.584,
+          "notes": "",
+          "asins": [
+            "B0B6JRSB63",
+            "B0BCR73FL8",
+            "B0BCSTS6JD",
+            "B0BCSZJN11",
+            "B0CJMB8LQ8"
+          ],
+          "sourceRow": 36
+        },
+        {
+          "merchantId": "363057",
+          "merchantName": "grace & stella",
+          "category": "Beauty & Personal Care",
+          "commissionRate": 0.375,
+          "referenceAov": 22.7,
+          "productReferenceAov": 22.7,
+          "notes": "",
+          "asins": [
+            "B013ESHB10",
+            "B014E2D6BY",
+            "B014G1G10Q",
+            "B0156VMBQS",
+            "B0156VMBV8"
+          ],
+          "sourceRow": 37
+        },
+        {
+          "merchantId": "380625",
+          "merchantName": "Root Labs",
+          "category": "Health & Household",
+          "commissionRate": 0.3,
+          "referenceAov": 45,
+          "productReferenceAov": 45,
+          "notes": "",
+          "asins": [
+            "B0DKNTSBX4",
+            "B0DP6HR4CX",
+            "B0DQWLVD4F",
+            "B0DQWT4XV1",
+            "B0F1D14FF8"
+          ],
+          "sourceRow": 38
+        },
+        {
+          "merchantId": "381881",
+          "merchantName": "BB Company",
+          "category": "Health & Household",
+          "commissionRate": 0.253875,
+          "referenceAov": 53,
+          "productReferenceAov": 53,
+          "notes": "",
+          "asins": [
+            "B07WVB2SHC",
+            "B08966BN6P",
+            "B089GZQCD9",
+            "B089QFPV6X",
+            "B089QG3YF8"
+          ],
+          "sourceRow": 39
+        },
+        {
+          "merchantId": "363327",
+          "merchantName": "Seed Health Inc",
+          "category": "Health & Household",
+          "commissionRate": 0.228824,
+          "referenceAov": 61.19,
+          "productReferenceAov": 61.19,
+          "notes": "",
+          "asins": [
+            "B0CMJR4XGR",
+            "B0CPTRHQP7",
+            "B0CPTT5TWD",
+            "B0DMQL1J79",
+            "B0FHYNSJ6M"
+          ],
+          "sourceRow": 40
+        },
+        {
+          "merchantId": "385286",
+          "merchantName": "GOOLOO",
+          "category": "Automotive",
+          "commissionRate": 0.225,
+          "referenceAov": 74.99,
+          "productReferenceAov": 74.99,
+          "notes": "",
+          "asins": [
+            "B0DT5YNC5Z",
+            "B0FG73LCR9",
+            "B0FJW7H3WX",
+            "B0FJXCLKR3",
+            "B0FNMLG15N"
+          ],
+          "sourceRow": 41
+        },
+        {
+          "merchantId": "363262",
+          "merchantName": "PROSPEK",
+          "category": "Sports & Outdoors",
+          "commissionRate": 0.225,
+          "referenceAov": 44.95,
+          "productReferenceAov": 44.95,
+          "notes": "",
+          "asins": [
+            "B00RJ3OYWG",
+            "B00TWOOULU",
+            "B00W0SSZ7U",
+            "B00W0SYLAU",
+            "B01E0RR2FO"
+          ],
+          "sourceRow": 42
+        },
+        {
+          "merchantId": "384651",
+          "merchantName": "BugMD",
+          "category": "Health & Household",
+          "commissionRate": 0.225,
+          "referenceAov": 39.99,
+          "productReferenceAov": 39.99,
+          "notes": "",
+          "asins": [
+            "B08KYB2NTJ",
+            "B08KYBGDW8",
+            "B08LL9DYKB",
+            "B08R16DSJT",
+            "B08R7B84Y8"
+          ],
+          "sourceRow": 43
+        },
+        {
+          "merchantId": "362910",
+          "merchantName": "TRIPPED Travel Gear",
+          "category": "Electronics",
+          "commissionRate": 0.225,
+          "referenceAov": 39.95,
+          "productReferenceAov": 39.95,
+          "notes": "",
+          "asins": [
+            "B06Y3DGCL2",
+            "B06Y3GV4D7",
+            "B06Y3J26QN",
+            "B06Y3P22BR",
+            "B078LJ4VNN"
+          ],
+          "sourceRow": 44
+        },
+        {
+          "merchantId": "380630",
+          "merchantName": "Uquora",
+          "category": "Health & Household",
+          "commissionRate": 0.225,
+          "referenceAov": 29.99,
+          "productReferenceAov": 29.99,
+          "notes": "",
+          "asins": [
+            "B0D5RH9KTL",
+            "B0D5RHHPZR",
+            "B0D5RKRNT6",
+            "B0D5RKYSMC",
+            "B0DB9C6QM7"
+          ],
+          "sourceRow": 45
+        },
+        {
+          "merchantId": "363078",
+          "merchantName": "Bushbalm Skincare",
+          "category": "Beauty & Personal Care",
+          "commissionRate": 0.225,
+          "referenceAov": 24.5,
+          "productReferenceAov": 24.5,
+          "notes": "",
+          "asins": [
+            "B09G4MM3MZ",
+            "B09G4NT92T",
+            "B09G4Q9C52",
+            "B09G4QH5GK",
+            "B09G4RJRGW"
+          ],
+          "sourceRow": 46
+        },
+        {
+          "merchantId": "362570",
+          "merchantName": "Spreetail",
+          "category": "Home & Kitchen",
+          "commissionRate": 0.12,
+          "referenceAov": 88.99,
+          "productReferenceAov": 88.99,
+          "notes": "",
+          "asins": [
+            "B00006LPPB",
+            "B00006LPPJ",
+            "B0000ANJ37",
+            "B0000AQJQR",
+            "B0000AUB58"
+          ],
+          "sourceRow": 47
+        },
+        {
+          "merchantId": "389083",
+          "merchantName": "LUXE Bidet",
+          "category": "Tools & Home Improvement",
+          "commissionRate": 0.1875,
+          "referenceAov": 49.99,
+          "productReferenceAov": 49.99,
+          "notes": "",
+          "asins": [
+            "B00A0RMQ1E",
+            "B00A0RX2UI",
+            "B00JG2824E",
+            "B00JG2DETM",
+            "B00JG3NVG2"
+          ],
+          "sourceRow": 48
+        },
+        {
+          "merchantId": "363038",
+          "merchantName": "Zesty Paws",
+          "category": "Pet Supplies",
+          "commissionRate": 0.1875,
+          "referenceAov": 41.77,
+          "productReferenceAov": 41.77,
+          "notes": "",
+          "asins": [
+            "B01BVRL4UA",
+            "B01H0PQSLC",
+            "B01I5LWQ48",
+            "B01MTFZ8IN",
+            "B01N17VJF7"
+          ],
+          "sourceRow": 49
+        },
+        {
+          "merchantId": "363253",
+          "merchantName": "Mellanni",
+          "category": "Home & Kitchen",
+          "commissionRate": 0.1875,
+          "referenceAov": 37.97,
+          "productReferenceAov": 37.97,
+          "notes": "",
+          "asins": [
+            "B00NLLUMOE",
+            "B00NLLUNSE",
+            "B00NLLUP4G",
+            "B00NLNDO6K",
+            "B00NLNDP1Y"
+          ],
+          "sourceRow": 50
+        },
+        {
+          "merchantId": "362646",
+          "merchantName": "Truly Free Home",
+          "category": "Health & Household",
+          "commissionRate": 0.1875,
+          "referenceAov": 31.99,
+          "productReferenceAov": 31.99,
+          "notes": "",
+          "asins": [
+            "B00NQVFOCO",
+            "B095SZJMF5",
+            "B09643V3L5",
+            "B09644VMLQ",
+            "B09644W8GR"
+          ],
+          "sourceRow": 51
+        },
+        {
+          "merchantId": "369196",
+          "merchantName": "Rocco & Roxie Supply Co.",
+          "category": "Pet Supplies",
+          "commissionRate": 0.1875,
+          "referenceAov": 23.92,
+          "productReferenceAov": 23.92,
+          "notes": "",
+          "asins": [
+            "B00CKFL93K",
+            "B00H2ZS5VM",
+            "B00J9MYM5O",
+            "B00KFLEFE6",
+            "B00KFLELEA"
+          ],
+          "sourceRow": 52
+        },
+        {
+          "merchantId": "362142",
+          "merchantName": "oneisall",
+          "category": "Pet Supplies",
+          "commissionRate": 0.165,
+          "referenceAov": 28.99,
+          "productReferenceAov": 28.99,
+          "notes": "",
+          "asins": [
+            "B01HRSZRXM",
+            "B01LW145RS",
+            "B07H9WJYK2",
+            "B082Y1XZVG",
+            "B095NZLRNM"
+          ],
+          "sourceRow": 53
+        },
+        {
+          "merchantId": "384700",
+          "merchantName": "HUANUO",
+          "category": "Electronics",
+          "commissionRate": 0.1575,
+          "referenceAov": 53.99,
+          "productReferenceAov": 53.99,
+          "notes": "",
+          "asins": [
+            "B073VKC134",
+            "B07H4DMLVH",
+            "B07T3KCQ94",
+            "B07T5SY43L",
+            "B07X262MRK"
+          ],
+          "sourceRow": 54
+        },
+        {
+          "merchantId": "362153",
+          "merchantName": "ROKFORM, LLC",
+          "category": "Cell Phones & Accessories",
+          "commissionRate": 0.15,
+          "referenceAov": 56.656667,
+          "productReferenceAov": 56.656667,
+          "notes": "",
+          "asins": [
+            "B07GKV1WG6",
+            "B07K7XSYQR",
+            "B08336KZCL",
+            "B085LR6X9G",
+            "B08KFQGYXJ"
+          ],
+          "sourceRow": 55
+        },
+        {
+          "merchantId": "363244",
+          "merchantName": "BAUBLEBAR",
+          "category": "Clothing, Shoes & Jewelry",
+          "commissionRate": 0.15,
+          "referenceAov": 46,
+          "productReferenceAov": 46,
+          "notes": "",
+          "asins": [
+            "B0CFWNQXLC",
+            "B0CFWT2R1H",
+            "B0CFWX1NNC",
+            "B0CFWY1ZS5",
+            "B0CFWYRR3Y"
+          ],
+          "sourceRow": 56
+        },
+        {
+          "merchantId": "369328",
+          "merchantName": "Clarifion",
+          "category": "Home & Kitchen",
+          "commissionRate": 0.15,
+          "referenceAov": 45.99,
+          "productReferenceAov": 45.99,
+          "notes": "",
+          "asins": [
+            "B07YN8K22P",
+            "B07YN91J8M",
+            "B07YN9385D",
+            "B07YN9M3LG",
+            "B09Q6DYDTD"
+          ],
+          "sourceRow": 57
+        },
+        {
+          "merchantId": "362764",
+          "merchantName": "hand2mind",
+          "category": "Office Products",
+          "commissionRate": 0.15,
+          "referenceAov": 44.99,
+          "productReferenceAov": 44.99,
+          "notes": "",
+          "asins": [
+            "B0006Z8YBG",
+            "B001DIAHRY",
+            "B001RN6O54",
+            "B004Y81INC",
+            "B005E9KN2W"
+          ],
+          "sourceRow": 58
+        },
+        {
+          "merchantId": "380719",
+          "merchantName": "Gorilla Grip",
+          "category": "Pet Supplies",
+          "commissionRate": 0.15,
+          "referenceAov": 38.99,
+          "productReferenceAov": 38.99,
+          "notes": "",
+          "asins": [
+            "B01F5K9YNS",
+            "B01GP2MTXW",
+            "B01MDNDDYS",
+            "B0721659PF",
+            "B072167MJ7"
+          ],
+          "sourceRow": 59
+        },
+        {
+          "merchantId": "362311",
+          "merchantName": "Lumineux",
+          "category": "Health & Household",
+          "commissionRate": 0.15,
+          "referenceAov": 37.99,
+          "productReferenceAov": 37.99,
+          "notes": "",
+          "asins": [
+            "B00OBRKM24",
+            "B01B5BUUWK",
+            "B01CH6675G",
+            "B01E4PHQKI",
+            "B01GHCKQTY"
+          ],
+          "sourceRow": 60
+        },
+        {
+          "merchantId": "363518",
+          "merchantName": "Le Parfait America",
+          "category": "Kitchen & Dining",
+          "commissionRate": 0.15,
+          "referenceAov": 36.97,
+          "productReferenceAov": 36.97,
+          "notes": "",
+          "asins": [
+            "B001A5SHUY",
+            "B06XJ89K1R",
+            "B06XJDHT4V",
+            "B0778RKCT5",
+            "B0778T8CT5"
+          ],
+          "sourceRow": 61
+        },
+        {
+          "merchantId": "384796",
+          "merchantName": "Nuxe",
+          "category": "Beauty & Personal Care",
+          "commissionRate": 0.15,
+          "referenceAov": 26.045455,
+          "productReferenceAov": 26.045455,
+          "notes": "",
+          "asins": [
+            "B000BO52TE",
+            "B000O7LK1C",
+            "B004MZQQPW",
+            "B017ROE50C",
+            "B01ATJESD6"
+          ],
+          "sourceRow": 62
+        },
+        {
+          "merchantId": "384684",
+          "merchantName": "Hustle Butter Deluxe",
+          "category": "Beauty & Personal Care",
+          "commissionRate": 0.15,
+          "referenceAov": 21.663333,
+          "productReferenceAov": 21.663333,
+          "notes": "",
+          "asins": [
+            "B00AEVIIYK",
+            "B00W3KQPRW",
+            "B072LNGC67",
+            "B07L7XKKQ9",
+            "B0BBSPCSFQ"
+          ],
+          "sourceRow": 63
+        },
+        {
+          "merchantId": "362385",
+          "merchantName": "LAFCO",
+          "category": "Beauty & Personal Care",
+          "commissionRate": 0.15,
+          "referenceAov": 21,
+          "productReferenceAov": 21,
+          "notes": "",
+          "asins": [
+            "B0017362D8",
+            "B002KN5HA8",
+            "B002LJWJT8",
+            "B002LJWJWK",
+            "B002LJXWZS"
+          ],
+          "sourceRow": 64
+        },
+        {
+          "merchantId": "382765",
+          "merchantName": "HUANUO",
+          "category": "Home & Kitchen",
+          "commissionRate": 0.14115,
+          "referenceAov": 57.485,
+          "productReferenceAov": 57.485,
+          "notes": "",
+          "asins": [
+            "B073VKC134",
+            "B07H4DMLVH",
+            "B07T3KCQ94",
+            "B07T5SY43L",
+            "B07X262MRK"
+          ],
+          "sourceRow": 65
+        },
+        {
+          "merchantId": "365036",
+          "merchantName": "FIFINE",
+          "category": "Electronics",
+          "commissionRate": 0.135,
+          "referenceAov": 65.99,
+          "productReferenceAov": 65.99,
+          "notes": "",
+          "asins": [
+            "B01D4HTIOY",
+            "B01MXL3EOU",
+            "B01N6448Q4",
+            "B06XCKGLTP",
+            "B06ZYJ6SJZ"
+          ],
+          "sourceRow": 66
+        },
+        {
+          "merchantId": "367808",
+          "merchantName": "Smart Sheep",
+          "category": "Health & Household",
+          "commissionRate": 0.135,
+          "referenceAov": 26.95,
+          "productReferenceAov": 26.95,
+          "notes": "",
+          "asins": [
+            "B00GA9P5P0",
+            "B00JRP2ZH0",
+            "B00S0U2NVG",
+            "B09FCP8RDV",
+            "B09FCV1MD4"
+          ],
+          "sourceRow": 67
+        }
+      ]
+    }
+  ]
+}
