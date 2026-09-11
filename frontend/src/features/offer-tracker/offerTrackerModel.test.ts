@@ -87,12 +87,23 @@ const baseFilters: OfferTrackerFilters = {
   minCommission: "",
   maxCommission: "",
   networks: [],
-  bbPolicy: "all",
+  bbPolicies: [],
   revenueStatus: "all",
   revenueSort: "priority"
 };
 
 describe("Offer Tracker model", () => {
+  it("combines selected BB policies with OR and migrates legacy saved filters", () => {
+    const rows = [...offers, { merchantId: "m-open", merchantName: "Merach" }];
+    const filters = normalizeOfferTrackerFilters({ bbPolicies: ["mind", "open"] }, defaultDateRange);
+    expect(filterOfferTrackerRows(rows, filters, "").map(row => row.merchantId).sort()).toEqual(["m-mind", "m-open"]);
+    expect(filterOfferTrackerRows(rows, { ...filters, bbPolicies: ["open", "unknown"] }, "")).toHaveLength(4);
+    expect(filterOfferTrackerRows(rows, { ...filters, bbPolicies: [] }, "")).toHaveLength(5);
+    expect(normalizeOfferTrackerFilters({ bbPolicy: "mind" }).bbPolicies).toEqual(["mind"]);
+    expect(normalizeOfferTrackerFilters({ bbPolicy: "all" }).bbPolicies).toEqual([]);
+    expect(normalizeOfferTrackerFilters({ bbPolicy: "mind", bbPolicies: [] }).bbPolicies).toEqual([]);
+  });
+
   it("normalizes commission, revenue, AOV, BB policy, ASINs and priority without mutating source", () => {
     const source = offers[0]!;
     const row = normalizeOfferRecord(source, DEFAULT_OFFER_TRACKER_RULES);

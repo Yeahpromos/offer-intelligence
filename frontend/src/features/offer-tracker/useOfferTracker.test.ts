@@ -7,6 +7,23 @@ const offers = [{ merchantId: "1", category: "Beauty", salesAmount: 100 }];
 const range = { startDate: "2026-06-01", endDate: "2026-09-30" };
 
 describe("Offer Tracker loaded date ranges", () => {
+  it("preserves incomplete date drafts and rejects invalid ranges before loading", async () => {
+    const loadRange = vi.fn().mockResolvedValue(offers);
+    const tracker = useOfferTracker({ offers, defaultDateRange, loadRange });
+    for (const startDate of ["2026-", "", "2026-02-30", "2026-10-01", "2025-01-01"]) {
+      tracker.setDraftFilters({ ...tracker.draftFilters.value, startDate });
+      expect(tracker.draftFilters.value.startDate).toBe(startDate);
+      expect(await tracker.applyFilters()).toBe(false);
+      expect(tracker.filters.value).toMatchObject(defaultDateRange);
+      expect(tracker.sourceRows.value).toEqual(offers);
+    }
+    expect(loadRange).not.toHaveBeenCalled();
+    tracker.setDraftFilters({ ...tracker.draftFilters.value, startDate: "2026-09-02" });
+    expect(await tracker.applyFilters()).toBe(true);
+    expect(loadRange).toHaveBeenCalledTimes(1);
+    expect(tracker.error.value).toBe("");
+  });
+
   it("applies ordinary filters without requesting already loaded dates", async () => {
     const loadRange = vi.fn().mockRejectedValue(new Error("offline"));
     const tracker = useOfferTracker({ offers, defaultDateRange, loadRange });

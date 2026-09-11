@@ -1,6 +1,6 @@
-import { mount } from "@vue/test-utils";
+import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type {
   OfferRecord,
@@ -8,6 +8,8 @@ import type {
   OfferTrackerExportPayload
 } from "../../shared/contracts/offer";
 import OfferTrackerPage from "./OfferTrackerPage.vue";
+
+enableAutoUnmount(afterEach);
 
 const defaultDateRange: OfferTrackerDateRange = {
   startDate: "2026-08-01",
@@ -45,6 +47,7 @@ function mountTracker(
 ) {
   return mount(OfferTrackerPage, {
     attachTo: document.body,
+    global: { stubs: { teleport: true } },
     props: {
       offers,
       language: "zh",
@@ -60,7 +63,7 @@ describe("OfferTrackerPage", () => {
 
     expect(wrapper.find(".offer-tracker-modern-header .offer-tracker-export-button").exists()).toBe(true);
     expect(wrapper.find(".offer-tracker-filter-card").exists()).toBe(true);
-    expect(wrapper.find(".offer-tracker-network-toggle").exists()).toBe(true);
+    expect(wrapper.find(".filter-dropdown-trigger").exists()).toBe(true);
     expect(wrapper.find(".offer-tracker-view-tabs").exists()).toBe(true);
     expect(wrapper.find(".offer-tracker-table-actions .offer-tracker-search").exists()).toBe(true);
     expect(wrapper.find(".offer-tracker-table-footer").exists()).toBe(true);
@@ -90,9 +93,8 @@ describe("OfferTrackerPage", () => {
 
     await search.setValue("");
     await search.trigger("input");
-    const tierSelect = wrapper.get('select[aria-label="Tier 筛选"]');
-    await tierSelect.setValue(["Tier 3"]);
-    await tierSelect.trigger("change");
+    await wrapper.get('button[aria-label="分层"]').trigger("click");
+    await wrapper.get('input[type="checkbox"][value="Tier 3"]').setValue(true);
     await wrapper.get('button[aria-label="应用筛选"]').trigger("click");
     expect(wrapper.findAll("tbody tr[data-row-key]")).toHaveLength(1);
     expect(wrapper.text()).toContain("Merchant 28");
@@ -100,10 +102,8 @@ describe("OfferTrackerPage", () => {
 
   it("changes revenue sort order and keeps the table interaction accessible", async () => {
     const wrapper = mountTracker();
-    const sortSelect = wrapper.get('select[aria-label="排序"]');
-
-    await sortSelect.setValue("revenue-asc");
-    await sortSelect.trigger("change");
+    await wrapper.get('button[aria-label="REVENUE 排序"]').trigger("click");
+    await wrapper.findAll('[role="option"]').find(option => option.text() === "Revenue 从低到高")!.trigger("click");
     expect(wrapper.find("tbody tr[data-row-key]").attributes("data-row-key")).toBe("offer-30");
 
     const search = wrapper.get('input[aria-label="搜索 Offer"]');

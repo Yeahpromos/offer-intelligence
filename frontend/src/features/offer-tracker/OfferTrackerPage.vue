@@ -107,6 +107,10 @@ const priorityCounts = computed(() => filteredRows.value.reduce((counts, row) =>
 
 const errorMessage = computed(() => {
   if (!error.value) return "";
+  if (props.language === "en") {
+    if (error.value.startsWith("请选择有效日期")) return "Choose valid dates in order, covering no more than 366 days.";
+    if (error.value === "最小值不能大于最大值。") return "The minimum cannot exceed the maximum.";
+  }
   return props.language === "zh"
     ? error.value
     : translateMessage(props.language, "offerTracker.loadError", "Failed to load filtered data. Please try again.");

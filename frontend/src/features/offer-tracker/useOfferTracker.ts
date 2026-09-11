@@ -13,6 +13,7 @@ import type {
 } from "../../shared/contracts/offer";
 import {
   filterOfferTrackerRows,
+  validDateRange,
   normalizeOfferRecord,
   normalizeOfferTrackerRules,
   normalizeOfferTrackerFilters,
@@ -88,7 +89,11 @@ export function useOfferTracker(options: UseOfferTrackerOptions) {
   }
 
   function setDraftFilters(input: OfferTrackerFilterInput): void {
-    draftFilters.value = normalizeOfferTrackerFilters(input, options.defaultDateRange);
+    draftFilters.value = Object.freeze({
+      ...normalizeOfferTrackerFilters(input, options.defaultDateRange),
+      startDate: input.startDate ?? draftFilters.value.startDate,
+      endDate: input.endDate ?? draftFilters.value.endDate,
+    });
   }
 
   function setSearch(value: string): void {
@@ -111,6 +116,10 @@ export function useOfferTracker(options: UseOfferTrackerOptions) {
   }
 
   async function applyFilters(): Promise<boolean> {
+    if (!validDateRange(draftFilters.value.startDate, draftFilters.value.endDate)) {
+      error.value = "请选择有效日期，开始日期不能晚于结束日期，范围不超过 366 天。";
+      return false;
+    }
     const normalized = normalizeOfferTrackerFilters(draftFilters.value, options.defaultDateRange);
     const minAov = toNullableNumber(normalized.minAov);
     const maxAov = toNullableNumber(normalized.maxAov);

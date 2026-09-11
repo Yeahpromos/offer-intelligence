@@ -460,13 +460,14 @@
   stroke-linecap: butt;
   stroke-width: 18;
   transition: opacity 240ms cubic-bezier(0.32, 0.72, 0, 1),
+    stroke-width 240ms cubic-bezier(0.32, 0.72, 0, 1),
     filter 240ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .category-page-modern .category-pie-slice:hover,
 .category-page-modern .category-pie-slice:focus-visible {
   filter: drop-shadow(0 8px 14px rgba(30, 67, 87, 0.18));
-  stroke-width: 18;
+  stroke-width: 24;
 }
 
 .category-page-modern .category-pie-spotlight {

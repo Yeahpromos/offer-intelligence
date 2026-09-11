@@ -494,17 +494,17 @@ function categoryMetricValue(group: CategoryReportGroup, metric: ReturnType<type
 export function categoryPalette(category: string): { readonly color: string; readonly tint: string } {
   const lower = category.toLowerCase();
   const palettes: readonly [RegExp, string, string][] = [
-    [/baby|kid|nursery|stroller|children|toddler/, "#ff5aa5", "#fff0f7"],
-    [/electronic|cell phone|camera|audio|video games|computer|software/, "#2563eb", "#edf4ff"],
-    [/beauty|personal care|skin|hair|makeup/, "#a855f7", "#f6edff"],
-    [/home\s*(?:&|and)?\s*kitchen/, "#00a676", "#eafff7"],
-    [/kitchen\s*(?:&|and)?\s*dining|dining|cookware|food/, "#f59e0b", "#fff7e6"],
-    [/home|furniture|bedding|mattress/, "#00a676", "#eafff7"],
-    [/health|household|wellness|medical|vitamin/, "#06b6d4", "#e9fbff"],
-    [/clothing|shoes|jewelry|fashion|apparel/, "#ff6b35", "#fff0ea"],
-    [/patio|lawn|garden|outdoor|sports|camping/, "#84cc16", "#f3ffe7"],
-    [/pet|dog|cat/, "#facc15", "#fff9d8"],
-    [/automotive|motorcycle|car/, "#ef4444", "#fff0f0"]
+    [/baby|kid|nursery|stroller|children|toddler/, "#ff3d9a", "#fff0f7"],
+    [/electronic|cell phone|camera|audio|video games|computer|software/, "#3478ff", "#edf4ff"],
+    [/beauty|personal care|skin|hair|makeup/, "#a23bff", "#f6edff"],
+    [/home\s*(?:&|and)?\s*kitchen/, "#00c985", "#eafff7"],
+    [/kitchen\s*(?:&|and)?\s*dining|dining|cookware|food/, "#ffb000", "#fff7e6"],
+    [/home|furniture|bedding|mattress/, "#00c985", "#eafff7"],
+    [/health|household|wellness|medical|vitamin/, "#00c6e8", "#e9fbff"],
+    [/clothing|shoes|jewelry|fashion|apparel/, "#ff6a2b", "#fff0ea"],
+    [/patio|lawn|garden|outdoor|sports|camping/, "#93db16", "#f3ffe7"],
+    [/pet|dog|cat/, "#ffd21c", "#fff9d8"],
+    [/automotive|motorcycle|car/, "#ff4457", "#fff0f0"]
   ];
   const found = palettes.find(([pattern]) => pattern.test(lower));
   return found ? { color: found[1], tint: found[2] } : { color: "#64748b", tint: "#f1f5f9" };
@@ -534,7 +534,7 @@ export function buildCategoryPieSlices(
     const share = slice.value / total;
     const dash = share * 100;
     const palette = slice.group.category === "Other selected categories"
-      ? { color: "#64748b", tint: "#f1f5f9" }
+      ? { color: "#6366f1", tint: "#eef2ff" }
       : categoryPalette(slice.group.category);
     const result: CategoryPieSlice = {
       group: slice.group,

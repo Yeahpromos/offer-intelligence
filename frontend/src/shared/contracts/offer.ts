@@ -23,12 +23,13 @@ export interface OfferTrackerFilters {
   readonly minCommission: string;
   readonly maxCommission: string;
   readonly networks: readonly string[];
-  readonly bbPolicy: OfferTrackerBbPolicy;
+  readonly bbPolicies: readonly Exclude<OfferTrackerBbPolicy, "all">[];
   readonly revenueStatus: OfferTrackerRevenueStatus;
   readonly revenueSort: OfferTrackerRevenueSort;
 }
 
 export type OfferTrackerFilterInput = Partial<OfferTrackerFilters> & {
+  readonly bbPolicy?: OfferTrackerBbPolicy;
   readonly tier?: string;
   readonly category?: string;
   readonly network?: string;

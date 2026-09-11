@@ -151,7 +151,7 @@ function dateOrdinal(value: unknown): number | null {
   return Math.floor(date.getTime() / 86400000);
 }
 
-function validDateRange(startDate: unknown, endDate: unknown): boolean {
+export function validDateRange(startDate: unknown, endDate: unknown): boolean {
   const start = dateOrdinal(startDate);
   const end = dateOrdinal(endDate);
   return start !== null && end !== null && start <= end && end - start + 1 <= 366;
@@ -261,7 +261,9 @@ export function normalizeOfferTrackerFilters(
   const dateRange = validDateRange(requestedStart, requestedEnd)
     ? { startDate: requestedStart, endDate: requestedEnd }
     : fallback;
-  const bbPolicy = stringValue(input.bbPolicy).toLowerCase();
+  const bbPolicies = selectedValues(input.bbPolicies, input.bbPolicy)
+    .map(value => value.toLowerCase())
+    .filter((value): value is Exclude<OfferTrackerBbPolicy, "all"> => ["mind", "open", "unknown"].includes(value));
   const revenueStatus: OfferTrackerRevenueStatus = input.revenueStatus === "positive" || input.revenueStatus === "none"
     ? input.revenueStatus
     : "all";
@@ -278,7 +280,7 @@ export function normalizeOfferTrackerFilters(
     minCommission: input.minCommission == null ? "" : stringValue(input.minCommission),
     maxCommission: input.maxCommission == null ? "" : stringValue(input.maxCommission),
     networks: selectedValues(input.networks, input.network),
-    bbPolicy: ["mind", "open", "unknown"].includes(bbPolicy) ? bbPolicy as OfferTrackerBbPolicy : "all",
+    bbPolicies,
     revenueStatus,
     revenueSort
   });
@@ -345,7 +347,7 @@ export function filterOfferTrackerRows(
       if (selectedTiers.size && !selectedTiers.has(row.tier)) return false;
       if (selectedCategories.size && !selectedCategories.has(row.category)) return false;
       if (selectedNetworks.size && !selectedNetworks.has(row.network)) return false;
-      if (filters.bbPolicy !== "all" && row.bbPolicy !== filters.bbPolicy) return false;
+      if (filters.bbPolicies.length && !filters.bbPolicies.includes(row.bbPolicy)) return false;
       if (minAov !== null && row.aov < minAov) return false;
       if (maxAov !== null && row.aov > maxAov) return false;
       if (minCommission !== null && row.commissionRate < minCommission) return false;
