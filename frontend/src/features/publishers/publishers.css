@@ -81,8 +81,20 @@
 .publishers-modern-page .publisher-donut-wrap { width:300px; height:300px; position:relative; }
 .publishers-modern-page .publisher-donut { width:100%; height:100%; overflow:visible; }
 .publishers-modern-page .publisher-donut-track { fill:none; stroke:var(--publisher-soft); stroke-width:14; }
-.publishers-modern-page .publisher-donut-segment { cursor:pointer; pointer-events:fill; stroke:var(--publisher-panel); stroke-width:.7; }
-.publishers-modern-page .publisher-donut-segment:is(:focus-visible,.is-highlighted) { outline:none; stroke:var(--publisher-ink); stroke-width:1.3; }
+.publishers-modern-page .publisher-donut-segment {
+  cursor:pointer;
+  pointer-events:fill;
+  stroke:var(--publisher-panel);
+  stroke-width:.7;
+  transform-box:view-box;
+  transform-origin:50% 50%;
+  transition:transform 200ms ease, filter 200ms ease;
+}
+.publishers-modern-page .publisher-donut-segment:is(:hover,:focus-visible,.is-highlighted) {
+  outline:none;
+  transform:scale(1.065);
+  filter:drop-shadow(0 1px 1px rgb(30 67 87 / 20%));
+}
 .publishers-modern-page .publisher-donut-center { position:absolute; inset:30%; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; pointer-events:none; text-align:center; }
 .publishers-modern-page .publisher-donut-center span { color:var(--publisher-muted); font-size:13px; }
 .publishers-modern-page .publisher-donut-center strong { font-size:27px; line-height:1.2; }
@@ -150,6 +162,9 @@
 .publishers-modern-page .publishers-filter-date-range .date-picker { width:100%; }
 .publishers-modern-page .publishers-market-summary { grid-template-columns:minmax(0,1fr); }
 .publishers-modern-page #publisher-overview-content { min-width:0; }
-.publishers-modern-page .publisher-donut-segment:focus { outline:none; stroke:var(--publisher-ink); stroke-width:1.3; }
+.publishers-modern-page .publisher-donut-segment:focus { outline:none; }
+@media (prefers-reduced-motion:reduce) {
+  .publishers-modern-page .publisher-donut-segment { transition:none; }
+}
 .publishers-modern-page .publishers-market-table th .publisher-overview-row-button { font-size:14px; }
 .publishers-modern-page .publishers-filter-date-range .date-separator { display:block; }

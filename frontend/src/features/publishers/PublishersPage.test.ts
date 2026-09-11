@@ -94,7 +94,7 @@ describe("PublishersPage", () => {
     await flushPromises();
     const segment = '[data-overview-key="PbAmazon"]';
     const color = wrapper.get(segment).attributes("fill");
-    expect(color).toBe("#dc4148");
+    expect(color).toBe("#ff4457");
     await wrapper.get(segment).trigger("keydown", { key: " " });
     expect((wrapper.get('select[aria-label="Affiliate Network"]').element as HTMLSelectElement).value).toBe("PbAmazon");
     expect(wrapper.findAll(".publisher-donut-segment")).toHaveLength(1);

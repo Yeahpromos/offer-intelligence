@@ -6,13 +6,13 @@ import { publisherOverviewColor } from "./publisherPresentation";
 
 // Explicit expectations catch accidental reassignment when a row changes rank.
 const networks = [
-  ["Levanta", "#3478ed"], ["Wayward", "#228552"], ["Archer", "#b87512"],
-  ["PbAmazon", "#dc4148"], ["amazon", "#8359ce"]
+  ["Levanta", "#3478ff"], ["Wayward", "#00c985"], ["Archer", "#ffb000"],
+  ["PbAmazon", "#ff4457"], ["amazon", "#a23bff"]
 ] as const;
 const markets = [
-  ["amazon.com", "#3478ed"], ["amazon.co.uk", "#228552"], ["amazon.de", "#b87512"],
-  ["amazon.fr", "#dc4148"], ["amazon.ca", "#8359ce"], ["amazon.it", "#b84983"],
-  ["amazon.es", "#197e92"], ["amazon.com.au", "#bf6635"], ["amazon.co.jp", "#6366c1"]
+  ["amazon.com", "#3478ff"], ["amazon.co.uk", "#00c985"], ["amazon.de", "#ffb000"],
+  ["amazon.fr", "#ff4457"], ["amazon.ca", "#a23bff"], ["amazon.it", "#ff3d9a"],
+  ["amazon.es", "#00c6e8"], ["amazon.com.au", "#ff6a2b"], ["amazon.co.jp", "#6366f1"]
 ] as const;
 
 const metric = (index: number) => ({ clicks: 1000 - index * 50, dpv: 80, atc: 20,

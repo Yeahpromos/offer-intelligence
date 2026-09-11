@@ -1,14 +1,14 @@
 // Category identity must survive filtering and metric/rank changes.
 const NETWORK_COLORS: Readonly<Record<string, string>> = {
-  levanta: "#3478ed", wayward: "#228552", archer: "#b87512",
-  pbamazon: "#dc4148", amazon: "#8359ce"
+  levanta: "#3478ff", wayward: "#00c985", archer: "#ffb000",
+  pbamazon: "#ff4457", amazon: "#a23bff"
 };
 const MARKET_COLORS: Readonly<Record<string, string>> = {
-  "amazon.com": "#3478ed", "amazon.co.uk": "#228552", "amazon.de": "#b87512",
-  "amazon.fr": "#dc4148", "amazon.ca": "#8359ce", "amazon.it": "#b84983",
-  "amazon.es": "#197e92", "amazon.com.au": "#bf6635", "amazon.co.jp": "#6366c1"
+  "amazon.com": "#3478ff", "amazon.co.uk": "#00c985", "amazon.de": "#ffb000",
+  "amazon.fr": "#ff4457", "amazon.ca": "#a23bff", "amazon.it": "#ff3d9a",
+  "amazon.es": "#00c6e8", "amazon.com.au": "#ff6a2b", "amazon.co.jp": "#6366f1"
 };
-const EXTRA_COLORS = ["#3478ed", "#228552", "#b87512", "#dc4148", "#8359ce", "#197e92", "#b84983"];
+const EXTRA_COLORS = ["#3478ff", "#00c985", "#ffb000", "#ff4457", "#a23bff", "#00c6e8", "#ff3d9a"];
 
 export function publisherOverviewColor(type: "market" | "network", key: string): string {
   const normalized = key.trim().toLowerCase();
@@ -27,7 +27,7 @@ export function publisherDonutPath(start: number, fraction: number): string {
   };
   if (fraction <= 0) return "";
   if (fraction >= 1 - 1e-8) {
-    return `M ${point(45, start)} A 45 45 0 1 1 ${point(45, start + .5)} A 45 45 0 1 1 ${point(45, start + 1)} L ${point(31, start + 1)} A 31 31 0 1 0 ${point(31, start + .5)} A 31 31 0 1 0 ${point(31, start)} Z`;
+    return `M ${point(45, start)} A 45 45 0 1 1 ${point(45, start + .5)} A 45 45 0 1 1 ${point(45, start + 1)} Z M ${point(31, start + 1)} A 31 31 0 1 0 ${point(31, start + .5)} A 31 31 0 1 0 ${point(31, start)} Z`;
   }
   const large = fraction > .5 ? 1 : 0;
   return `M ${point(45, start)} A 45 45 0 ${large} 1 ${point(45, start + fraction)} L ${point(31, start + fraction)} A 31 31 0 ${large} 0 ${point(31, start)} Z`;
