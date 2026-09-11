@@ -28,7 +28,7 @@ assert(category.includes(".category-page-modern .dashboard-category-report-table
 assert(category.includes("font-variant-numeric: tabular-nums"), "Category report 数值缺少等宽数字排版");
 assert(category.includes("cubic-bezier(0.32, 0.72, 0, 1)"), "Category report 交互缺少流畅缓动");
 assert(!/^\\s*\\.dashboard-category-report\\s*\\{/m.test(category), "Category report 出现未局部化的面板选择器");
-assertRuleContains(category, ".category-page-modern .dashboard-category-report-table thead th", "position: sticky", "Category report 表格缺少粘性表头");
+assertRuleContains(category, ".category-page-modern .dashboard-category-report-table > thead > tr > th", "position: sticky", "Category report 表格缺少粘性表头");
 assert(category.includes("@media (prefers-reduced-motion: reduce)"), "Category report 缺少 reduced-motion 降级");
 assert(category.includes("--category-muted: light-dark(#536a74, #a5b4c8)"), "Category report 小字号文本缺少深浅主题对比度颜色");
 assert(!category.includes("#71828b"), "Category report 仍使用对比度不足的旧灰色");
