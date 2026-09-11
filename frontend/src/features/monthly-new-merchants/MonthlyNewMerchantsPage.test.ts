@@ -1,7 +1,9 @@
-import { flushPromises, mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
+import { afterEach, describe, expect, it } from "vitest";
 
 import MonthlyNewMerchantsPage from "./MonthlyNewMerchantsPage.vue";
+
+enableAutoUnmount(afterEach);
 
 const records = [
   {
@@ -32,6 +34,7 @@ const records = [
 function mountPage(props: Record<string, unknown> = {}) {
   return mount(MonthlyNewMerchantsPage, {
     attachTo: document.body,
+    global: { stubs: { teleport: true } },
     props: {
       language: "zh",
       month: "2026-08",
@@ -43,12 +46,25 @@ function mountPage(props: Record<string, unknown> = {}) {
 }
 
 describe("MonthlyNewMerchantsPage", () => {
+  it("localizes modal actions and groups the merchant fields", async () => {
+    const wrapper = mountPage();
+    await wrapper.get('[data-modern-action="add"]').trigger("click");
+    expect(wrapper.get('[data-modern-action="cancel-drawer"]').text()).toBe("取消");
+    expect(wrapper.findAll(".monthly-new-merchant-form-section")).toHaveLength(3);
+    expect(wrapper.get('[data-modern-field="gmv-requirement"]').attributes("placeholder")).toContain("例如");
+    await wrapper.get('[data-modern-action="cancel-drawer"]').trigger("click");
+    await wrapper.get('[data-modern-action="import"]').trigger("click");
+    expect(wrapper.get('[data-modern-action="cancel-import"]').text()).toBe("取消");
+    await wrapper.setProps({ language: "en" });
+    expect(wrapper.get('[data-modern-action="cancel-import"]').text()).toBe("Cancel");
+  });
+
   it("keeps the legacy table hierarchy, summary and priority interaction visible", async () => {
     const wrapper = mountPage();
 
     expect(wrapper.find('[data-page="monthly-new-merchants"]').exists()).toBe(true);
     expect(wrapper.find(".monthly-new-merchants-header").exists()).toBe(true);
-    expect(wrapper.find('input[type="month"]').exists()).toBe(true);
+    expect(wrapper.find(".month-picker-trigger").exists()).toBe(true);
     expect(wrapper.findAll(".monthly-new-merchants-table thead th")).toHaveLength(14);
     expect(wrapper.findAll(".monthly-new-merchants-table tbody tr")).toHaveLength(2);
     expect(wrapper.find(".monthly-new-merchants-table tbody tr").classes()).toContain("is-priority");
@@ -64,7 +80,7 @@ describe("MonthlyNewMerchantsPage", () => {
   it("renders the same empty state boundary when a month has no records", () => {
     const wrapper = mountPage({ records: [] });
 
-    expect(wrapper.findAll(".monthly-new-merchants-table tbody tr")).toHaveLength(1);
+    expect(wrapper.find(".monthly-new-merchants-table-wrap").exists()).toBe(false);
     expect(wrapper.find(".monthly-new-merchants-empty").exists()).toBe(true);
     expect(wrapper.text()).toContain("本月还没有上新商家");
   });

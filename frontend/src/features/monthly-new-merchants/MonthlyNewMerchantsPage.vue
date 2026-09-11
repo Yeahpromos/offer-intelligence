@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
 
+import MonthPicker from "../../shared/components/MonthPicker.vue";
+
 import { translateMessage, type UiLanguage } from "../../shared/i18n";
 import {
   buildMonthlyNewMerchantPayload,
@@ -118,6 +120,12 @@ function message(key: string, fallback: string): string {
 }
 
 const copy = computed(() => ({
+  basics: message("monthlyNewMerchants.basics", "Merchant details"),
+  goals: message("monthlyNewMerchants.goals", "Targets and performance"),
+  commissions: message("monthlyNewMerchants.commissions", "Commission and incentives"),
+  gmvPlaceholder: message("monthlyNewMerchants.gmvPlaceholder", "e.g. $100,000 or profitability"),
+  fileHint: message("monthlyNewMerchants.fileHint", "CSV, TSV, XLS or XLSX · Preview before importing"),
+  pastePlaceholder: message("monthlyNewMerchants.pastePlaceholder", "Brand\tProgram\tPlatform\tGMV target"),
   title: message("monthlyNewMerchants.title", "Monthly new merchants"),
   subtitle: message("monthlyNewMerchants.subtitle", "Add this month's merchants manually and save every entry to the database"),
   month: message("monthlyNewMerchants.month", "Month"),
@@ -146,8 +154,8 @@ const copy = computed(() => ({
   editTitle: message("monthlyNewMerchants.editTitle", "Edit new merchant"),
   save: message("monthlyNewMerchants.save", "Save merchant"),
   saving: message("monthlyNewMerchants.saving", "Saving…"),
-  cancel: message("action.cancel", "Cancel"),
-  close: message("action.close", "Close"),
+  cancel: message("monthlyNewMerchants.cancel", "Cancel"),
+  close: message("monthlyNewMerchants.close", "Close"),
   priorityAction: message("monthlyNewMerchants.priorityAction", "Priority recommendation"),
   priorityHelp: message("monthlyNewMerchants.priorityHelp", "Highlight this merchant in the monthly list"),
   reward: message("monthlyNewMerchants.reward", "Reward when achieved"),
@@ -290,20 +298,8 @@ function closeImport(restoreFocus = true): void {
   if (target) focusAfterClose(target);
 }
 
-function monthPicker(event: Event): void {
-  const input = event.currentTarget as HTMLInputElement | null;
-  input?.focus({ preventScroll: true });
-  const picker = input as (HTMLInputElement & { showPicker?: () => void }) | null;
-  if (!picker?.showPicker) return;
-  try {
-    picker.showPicker();
-  } catch {
-    // The focused native month input remains usable when showPicker is unavailable.
-  }
-}
-
-function changeMonth(event: Event): void {
-  const value = (event.target as HTMLInputElement).value;
+function changeMonth(value: string): void {
+  if (value === monthly.month.value) return;
   monthly.setMonth(value);
   if (props.autoLoad) void monthly.loadMonth(true);
 }
@@ -382,7 +378,7 @@ function focusables(dialog: HTMLElement | null): HTMLElement[] {
   if (!dialog) return [];
   return Array.from(dialog.querySelectorAll<HTMLElement>(
     "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
-  )).filter((element) => !element.closest(".hidden"));
+  )).filter((element) => !element.hidden && !(element instanceof HTMLInputElement && element.type === "hidden") && !element.closest(".hidden"));
 }
 
 function trapFocus(event: KeyboardEvent, dialog: HTMLElement | null, close: () => void): void {
@@ -507,6 +503,7 @@ onUnmounted(() => {
     class="oi-modern-page monthly-new-merchants-modern-page"
     data-page="monthly-new-merchants"
     :aria-busy="monthly.loading.value ? 'true' : 'false'"
+    :inert="drawerOpen || importOpen"
   >
     <header class="monthly-new-merchants-header">
       <div>
@@ -514,16 +511,10 @@ onUnmounted(() => {
         <p>{{ copy.subtitle }}</p>
       </div>
       <div class="monthly-new-merchants-header-actions">
-        <label class="monthly-new-merchants-month-control">
+        <div class="monthly-new-merchants-month-control">
           <span>{{ copy.month }}</span>
-          <input
-            type="month"
-            aria-label="Monthly new merchant report month"
-            :value="monthly.month.value"
-            @click="monthPicker"
-            @change="changeMonth"
-          />
-        </label>
+          <MonthPicker :model-value="monthly.month.value" :language="language" :label="copy.month" :today="today" @update:model-value="changeMonth" />
+        </div>
         <button ref="importButton" class="monthly-new-merchants-import" type="button" data-modern-action="import" @click="openImport">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14" /></svg>
           <span>{{ copy.import }}</span>
@@ -559,7 +550,16 @@ onUnmounted(() => {
         <p class="monthly-new-merchants-count">{{ countSummary }}</p>
       </div>
 
-      <div class="monthly-new-merchants-table-wrap">
+      <div v-if="!monthly.filteredRecords.value.length" class="monthly-new-merchants-empty monthly-new-merchants-state" role="status">
+        <template v-if="monthly.loading.value"><strong>{{ copy.loading }}</strong></template>
+        <template v-else-if="monthly.error.value"><strong>{{ copy.databaseError }}</strong><span>{{ monthly.error.value }}</span></template>
+        <template v-else>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4m8-4v4M4 11h16m-12 5h8"/></svg>
+          <strong>{{ monthly.search.value.trim() ? copy.noMatchesTitle : copy.emptyTitle }}</strong>
+          <span>{{ monthly.search.value.trim() ? copy.noMatchesBody : copy.emptyBody }}</span>
+        </template>
+      </div>
+      <div v-else class="monthly-new-merchants-table-wrap" tabindex="0" :aria-label="copy.title">
         <table class="monthly-new-merchants-table">
           <thead>
             <tr>
@@ -580,21 +580,8 @@ onUnmounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="monthly.loading.value && !monthly.records.value.length" class="monthly-new-merchants-empty">
-              <td colspan="14">{{ copy.loading }}</td>
-            </tr>
-            <tr v-else-if="monthly.error.value && !monthly.records.value.length" class="monthly-new-merchants-empty">
-              <td colspan="14"><strong>{{ copy.databaseError }}</strong><span>{{ monthly.error.value }}</span></td>
-            </tr>
-            <tr v-else-if="!monthly.filteredRecords.value.length" class="monthly-new-merchants-empty">
-              <td colspan="14">
-                <strong>{{ monthly.search.value.trim() ? copy.noMatchesTitle : copy.emptyTitle }}</strong>
-                <span>{{ monthly.search.value.trim() ? copy.noMatchesBody : copy.emptyBody }}</span>
-              </td>
-            </tr>
             <tr
               v-for="record in monthly.filteredRecords.value"
-              v-else
               :key="record.recordId || `${record.reportMonth}-${record.merchantName}`"
               :class="{ 'is-priority': record.isPriority }"
               :data-monthly-new-merchant-id="record.recordId"
@@ -636,6 +623,9 @@ onUnmounted(() => {
       </div>
     </section>
 
+  </main>
+    <Teleport to="body">
+    <div v-if="drawerOpen || importOpen" class="monthly-new-merchants-modern-page monthly-new-merchants-overlay-root" data-modern-root>
     <div
       v-if="drawerOpen"
       class="monthly-new-merchant-drawer-backdrop"
@@ -665,6 +655,7 @@ onUnmounted(() => {
             <input v-model="form.recordId" type="hidden" />
             <input v-model="form.reportMonth" type="hidden" />
             <div class="monthly-new-merchant-form-grid">
+              <h3 class="monthly-new-merchant-form-section">{{ copy.basics }}</h3>
               <label>
                 <span>{{ copy.merchantId }}</span>
                 <input v-model="form.merchantId" inputmode="numeric" maxlength="64" data-modern-field="merchant-id" />
@@ -676,11 +667,13 @@ onUnmounted(() => {
               <label><span>{{ copy.bd }}</span><input v-model="form.businessManager" maxlength="128" data-modern-field="business-manager" /></label>
               <label><span>{{ copy.program }}</span><input v-model="form.program" maxlength="128" data-modern-field="program" /></label>
               <label><span>{{ copy.platform }}</span><input v-model="form.platform" maxlength="128" data-modern-field="platform" /></label>
-              <label><span>{{ copy.gmvRequirement }}</span><input v-model="form.gmvRequirement" maxlength="255" placeholder="$ 100,000.00 or Make Money" data-modern-field="gmv-requirement" /></label>
+              <h3 class="monthly-new-merchant-form-section">{{ copy.goals }}</h3>
+              <label><span>{{ copy.gmvRequirement }}</span><input v-model="form.gmvRequirement" maxlength="255" :placeholder="copy.gmvPlaceholder" data-modern-field="gmv-requirement" /></label>
               <label><span>{{ copy.gmvTarget }}</span><input v-model="form.gmvMonthlyTarget" type="number" inputmode="decimal" min="0" max="9999999999999999.99" step="0.01" placeholder="0.00" data-modern-field="gmv-target" /></label>
               <label><span>{{ copy.pastMonthPurchase }}</span><input v-model="form.pastMonthPurchase" maxlength="255" data-modern-field="past-month-purchase" /></label>
               <label><span>{{ copy.independentWebsites }}</span><input v-model="form.independentWebsites" maxlength="255" data-modern-field="independent-websites" /></label>
               <label><span>{{ copy.reviewSummary }}</span><input v-model="form.reviewSummary" maxlength="255" data-modern-field="review-summary" /></label>
+              <h3 class="monthly-new-merchant-form-section">{{ copy.commissions }}</h3>
               <label><span>{{ copy.ourCommission }} (%)</span><input v-model="form.ourCommission" type="number" inputmode="decimal" min="0" max="100" step="0.01" data-modern-field="our-commission" /></label>
               <label><span>{{ copy.presetCommission }} (%)</span><input v-model="form.presetCommission" type="number" inputmode="decimal" min="0" max="100" step="0.01" data-modern-field="preset-commission" /></label>
               <label class="monthly-new-merchant-priority-field">
@@ -730,12 +723,12 @@ onUnmounted(() => {
           <div class="monthly-new-merchant-import-actions">
             <input ref="importFileInput" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" hidden @change="fileChanged" />
             <button type="button" data-modern-action="choose-file" @click="importFileInput?.click()">{{ copy.chooseFile }}</button>
-            <span>{{ monthly.importFileName.value || copy.noFile }}</span>
+            <div class="monthly-new-merchant-file-info"><strong>{{ monthly.importFileName.value || copy.noFile }}</strong><small>{{ copy.fileHint }}</small></div>
             <button type="button" data-modern-action="download-template" @click="downloadTemplate">{{ copy.downloadTemplate }}</button>
           </div>
           <label class="monthly-new-merchant-import-paste">
             <span>{{ copy.pasteLabel }}</span>
-            <textarea v-model="importPaste" rows="7" placeholder="Brand&#9;Program&#9;Platform&#9;GMV need to be reach&#9;..." data-modern-field="import-paste" />
+            <textarea v-model="importPaste" rows="7" :placeholder="copy.pastePlaceholder" data-modern-field="import-paste" />
           </label>
           <div class="monthly-new-merchant-import-preview-actions">
             <button type="button" data-modern-action="preview-import" @click="previewImport">{{ copy.preview }}</button>
@@ -767,5 +760,6 @@ onUnmounted(() => {
         </footer>
       </section>
     </div>
-  </main>
+    </div>
+    </Teleport>
 </template>
