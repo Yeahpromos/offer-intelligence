@@ -212,8 +212,8 @@ watch(
         >{{ t("活动周期", "Activity period")
         }}<select v-model="period">
           <option value="both">{{ t("前后两个周期", "Both periods") }}</option>
-          <option value="after">{{ t("仅观察期", "Observation only") }}</option>
-          <option value="before">{{ t("仅推送前", "Before only") }}</option>
+          <option value="after">{{ t("仅自定观察期", "Custom observation only") }}</option>
+          <option value="before">{{ t("仅比较期", "Comparison only") }}</option>
         </select></label
       >
       <label
@@ -290,7 +290,7 @@ watch(
         ><small
           >{{
             t(
-              "每项指标上方为观察期，下方为推送前。",
+              "每项指标上方为自定观察期，下方为比较期。",
               "Each metric shows observation above and before below.",
             )
           }}
@@ -407,8 +407,8 @@ watch(
                     ><small>ID {{ r.publisherId || "—" }}</small
                     ><span class="promotion-relation-status">{{
                       active(r, "after")
-                        ? t("观察期有活动", "Activity observed")
-                        : t("仅推送前有记录", "Before-period records only")
+                        ? t("自定观察期有活动", "Activity observed")
+                        : t("仅比较期有记录", "Comparison-period records only")
                     }}</span>
                   </div>
                 </div>

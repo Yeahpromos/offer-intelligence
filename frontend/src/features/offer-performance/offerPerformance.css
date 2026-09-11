@@ -293,17 +293,39 @@
   flex-wrap: wrap;
   align-items: end;
 }
-.promotion-page .promotion-checkbox {
+.promotion-date-controls {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.promotion-date-heading {
+  display: grid;
+  gap: 4px;
+}
+.promotion-date-heading strong {
+  color: var(--pp-ink);
+  font-size: 15px;
+}
+.promotion-date-divider {
+  align-self: end;
+  padding-bottom: 12px;
+  color: var(--pp-muted);
+}
+.promotion-launch-date {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--pp-line);
+}
+.promotion-launch-date label {
   display: flex;
   align-items: center;
-  min-height: 44px;
-  gap: 8px;
-  font-weight: 500;
+  gap: 12px;
 }
-.promotion-checkbox input {
-  width: 18px;
-  height: 18px;
-  accent-color: #255bd4;
+.promotion-launch-date small {
+  flex: 1 1 220px;
 }
 .promotion-periods {
   display: flex;
@@ -386,39 +408,6 @@
 .promotion-kpis em {
   color: var(--pp-blue);
 }
-.promotion-bars {
-  display: flex;
-  align-items: end;
-  gap: 12px;
-  height: 175px;
-  margin: 28px 0 4px;
-  overflow-x: auto;
-}
-.promotion-bar-day {
-  flex: 1 0 18px;
-  min-width: 18px;
-  display: grid;
-  grid-template-rows: 132px 22px;
-  gap: 8px;
-  text-align: center;
-}
-.promotion-pair {
-  height: 132px;
-  display: flex;
-  align-items: end;
-  justify-content: center;
-  gap: 4px;
-  border-bottom: 1px solid var(--pp-line);
-}
-.promotion-pair i {
-  display: block;
-  width: min(30px, 40%);
-  background: #3478ed;
-  border-radius: 4px 4px 0 0;
-}
-.promotion-pair i.before {
-  background: light-dark(#7186a6, #819bbc);
-}
 .promotion-page code {
   font-family: ui-monospace, Consolas, monospace;
   font-size: 13px;
@@ -429,16 +418,7 @@
   padding: 10px 0;
   min-height: 44px;
 }
-.promotion-pair i.pending {
-  background: repeating-linear-gradient(
-    135deg,
-    transparent,
-    transparent 4px,
-    var(--pp-soft) 4px,
-    var(--pp-soft) 8px
-  );
-  border: 1px dashed var(--pp-line);
-}
+
 .promotion-table-filters {
   display: flex;
   align-items: center;
@@ -932,11 +912,36 @@
   .promotion-kpis strong {
     font-size: 25px;
   }
-  .promotion-bars {
-    gap: 6px;
-  }
   .promotion-table-filters :is(input, select) {
     width: 100%;
     max-width: 100%;
   }
+}
+
+@media (max-width: 480px) {
+  .promotion-dates {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .promotion-dates .date-picker {
+    width: 100%;
+  }
+  .promotion-date-divider {
+    display: none;
+  }
+  .promotion-dates > button {
+    grid-column: 1 / -1;
+  }
+}
+
+.promotion-import-observation {
+  margin: 18px 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--pp-line);
+}
+.promotion-import-observation legend {
+  padding: 0 12px 0 0;
+  font-weight: 650;
 }

@@ -5,6 +5,7 @@ import {
   emptyMetrics,
   monthlyBaseline,
   observedDays,
+  observationWindow,
   parseBatch,
   sumMetrics,
   windowDates,
@@ -13,6 +14,36 @@ import {
 } from "./performanceModel";
 
 describe("promotion window and metrics", () => {
+  it("keeps old and invalid saved periods usable while restoring valid custom dates", () => {
+    const batch = parseBatch(
+      [
+        [
+          ["Merchant ID", "Merchant Name"],
+          ["101", "Merchant"],
+        ],
+      ],
+      "list.csv",
+      "2026-09-07",
+    );
+    expect(observationWindow(batch)?.startDate).toBe("2026-09-07");
+    expect(
+      observationWindow({ ...batch, observationStart: "2026-08-01" })?.endDate,
+    ).toBe("2026-09-13");
+    expect(
+      observationWindow({
+        ...batch,
+        observationStart: "bad",
+        observationEnd: "2026-08-14",
+      })?.startDate,
+    ).toBe("2026-09-07");
+    const saved = {
+      ...batch,
+      observationStart: "2026-08-01",
+      observationEnd: "2026-08-14",
+    };
+    const restored = restoreBatches([batch], [saved]);
+    expect(observationWindow(restored[0]!)?.beforeStart).toBe("2026-07-18");
+  });
   it("includes launch day in the following seven days", () => {
     expect(windowDates("2026-09-07")).toEqual({
       startDate: "2026-09-07",

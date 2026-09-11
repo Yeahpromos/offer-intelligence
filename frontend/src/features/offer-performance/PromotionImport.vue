@@ -4,6 +4,7 @@ import DatePicker from "../../shared/components/DatePicker.vue";
 import type { UiLanguage } from "../../shared/i18n";
 import {
   parseBatch,
+  addDays,
   windowDates,
   type PromotionBatch,
 } from "./performanceModel";
@@ -24,9 +25,15 @@ const file = ref<File | null>(null),
   error = ref("");
 const preview = ref<PromotionBatch | null>(null),
   date = ref(""),
+  start = ref(""),
+  end = ref(""),
   name = ref("");
 const dragging = ref(false);
-const dates = computed(() => windowDates(date.value));
+const dates = computed(() =>
+  windowDates(date.value) && start.value && end.value
+    ? windowDates(date.value, start.value, end.value)
+    : null,
+);
 const asinCount = computed(
   () => preview.value?.offers.reduce((sum, o) => sum + o.asins.length, 0) || 0,
 );
@@ -71,7 +78,10 @@ function dragOver(event: DragEvent) {
 }
 function dragLeave(event: DragEvent) {
   const current = event.currentTarget as HTMLElement;
-  if (event.relatedTarget instanceof Node && current.contains(event.relatedTarget)) {
+  if (
+    event.relatedTarget instanceof Node &&
+    current.contains(event.relatedTarget)
+  ) {
     return;
   }
   dragging.value = false;
@@ -98,6 +108,8 @@ async function readPreview() {
     const tables = await props.readFile(selectedFile);
     if (disposed || current !== revision) return;
     date.value = windowDates(props.defaultDate) ? props.defaultDate : "";
+    start.value = date.value;
+    end.value = addDays(date.value, 6);
     const item = parseBatch(tables, selectedFile.name, date.value);
     name.value = item.name;
     preview.value = item;
@@ -130,6 +142,8 @@ function confirm() {
     ...preview.value,
     name: name.value.trim(),
     launchDate: date.value,
+    observationStart: start.value,
+    observationEnd: end.value,
   };
   dialog.value?.close();
   unlockScroll();
@@ -285,22 +299,51 @@ onBeforeUnmount(() => {
               :label="t('新清单推送日期', 'New list launch date')"
           /></label>
         </div>
+        <fieldset class="promotion-import-observation">
+          <legend>{{ t("自定观察期", "Custom observation period") }}</legend>
+          <div class="promotion-dates">
+            <label
+              >{{ t("开始日期", "Start date")
+              }}<DatePicker
+                v-model="start"
+                :language="language"
+                :teleport-to="dialog || 'body'"
+                :label="t('新清单观察开始', 'New list observation start')"
+            /></label>
+            <label
+              >{{ t("结束日期", "End date")
+              }}<DatePicker
+                v-model="end"
+                :language="language"
+                :teleport-to="dialog || 'body'"
+                :label="t('新清单观察结束', 'New list observation end')"
+            /></label>
+          </div>
+          <p>
+            {{
+              t(
+                "比较期自动取此前等长区间；导入后仍可修改。",
+                "The comparison uses the preceding period of equal length. You can edit dates after importing.",
+              )
+            }}
+          </p>
+        </fieldset>
         <p v-if="!dates" role="alert">
           {{
             t(
-              "请选择有效推送日期，再确认导入。",
-              "Choose a valid launch date before confirming.",
+              "请填写有效推送日期及 1—92 天的自定观察期，再确认导入。",
+              "Enter a valid launch date and a custom observation period of 1–92 days before confirming.",
             )
           }}
         </p>
         <div v-else class="promotion-periods">
           <span
-            >{{ t("推送前", "Before") }}
+            >{{ t("比较期", "Comparison") }}
             <strong
               >{{ dates.beforeStart }} — {{ dates.beforeEnd }}</strong
             ></span
           ><span
-            >{{ t("观察期", "Observation") }}
+            >{{ t("自定观察期", "Custom observation") }}
             <strong>{{ dates.startDate }} — {{ dates.endDate }}</strong></span
           >
         </div>

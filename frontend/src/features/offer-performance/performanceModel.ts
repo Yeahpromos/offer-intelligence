@@ -22,6 +22,8 @@ export interface PromotionBatch {
   name: string;
   sourceFile: string;
   launchDate: string;
+  observationStart?: string;
+  observationEnd?: string;
   offers: TrackedOffer[];
   local?: boolean;
   customized?: boolean;
@@ -100,6 +102,18 @@ export function windowDates(launch: string, start?: string, end?: string) {
     beforeEnd: addDays(from, -1),
     days,
   };
+}
+export function observationWindow(batch: PromotionBatch) {
+  return (
+    (batch.observationStart &&
+      batch.observationEnd &&
+      windowDates(
+        batch.launchDate,
+        batch.observationStart,
+        batch.observationEnd,
+      )) ||
+    windowDates(batch.launchDate)
+  );
 }
 export function observedDays(
   start: string,
@@ -273,6 +287,18 @@ export function restoreBatches(
         {
           ...b,
           launchDate: override?.launchDate || b.launchDate,
+          ...(override?.observationStart &&
+          override?.observationEnd &&
+          windowDates(
+            override.launchDate,
+            override.observationStart,
+            override.observationEnd,
+          )
+            ? {
+                observationStart: override.observationStart,
+                observationEnd: override.observationEnd,
+              }
+            : {}),
           ...(override?.customized
             ? { offers: override.offers, customized: true }
             : {}),

@@ -85,6 +85,14 @@ describe("review before importing merchant lists", () => {
     await flushPromises();
     expect(w.get('button[type="submit"]').attributes("disabled")).toBeDefined();
     date.vm.$emit("update:modelValue", "2026-08-31");
+    w.findAllComponents(DatePicker)[1]!.vm.$emit(
+      "update:modelValue",
+      "2026-08-31",
+    );
+    w.findAllComponents(DatePicker)[2]!.vm.$emit(
+      "update:modelValue",
+      "2026-09-06",
+    );
     await flushPromises();
     expect(w.get(".promotion-periods").text()).toContain(
       "2026-08-24 — 2026-08-30",
@@ -96,6 +104,28 @@ describe("review before importing merchant lists", () => {
     expect(readFile).toHaveBeenCalledOnce();
     expect(w.emitted("confirm")?.[0]?.[0]).toMatchObject({
       launchDate: "2026-08-31",
+      observationStart: "2026-08-31",
+      observationEnd: "2026-09-06",
+    });
+  });
+  it("saves a custom observation period independently from the launch date", async () => {
+    const { wrapper: w } = setup();
+    await choose(w);
+    await w.get(".promotion-import-action button").trigger("click");
+    await flushPromises();
+    const dates = w.findAllComponents(DatePicker);
+    dates[1]!.vm.$emit("update:modelValue", "2026-08-01");
+    dates[2]!.vm.$emit("update:modelValue", "2026-08-14");
+    await flushPromises();
+    expect(w.get(".promotion-periods").text()).toContain(
+      "2026-07-18 — 2026-07-31",
+    );
+    dates[0]!.vm.$emit("update:modelValue", "2026-09-09");
+    await w.get("form").trigger("submit");
+    expect(w.emitted("confirm")?.[0]?.[0]).toMatchObject({
+      launchDate: "2026-09-09",
+      observationStart: "2026-08-01",
+      observationEnd: "2026-08-14",
     });
   });
   it("cancels the modal without saving and returns focus to preview", async () => {

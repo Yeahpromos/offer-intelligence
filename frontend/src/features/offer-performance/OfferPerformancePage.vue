@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import PromotionRelations from "./PromotionRelations.vue";
 import PromotionImport from "./PromotionImport.vue";
+import PromotionListPicker from "./PromotionListPicker.vue";
 import {
   categoryStyle,
   LINK_KINDS,
@@ -18,11 +19,11 @@ import type { UiLanguage } from "../../shared/i18n";
 import { loadCatalog, loadReport } from "./performanceApi";
 import {
   METRICS,
-  addDays,
   change,
   emptyMetrics,
   monthlyBaseline,
   observedDays,
+  observationWindow,
   sumMetrics,
   windowDates,
   restoreBatches,
@@ -56,7 +57,6 @@ const label = (key: Metric) => t(...labels[key]);
 const batches = ref<PromotionBatch[]>([]),
   batchId = ref("");
 const launch = ref("2026-09-07"),
-  custom = ref(false),
   start = ref(""),
   end = ref("");
 const report = ref<PerformanceReport | null>(null),
@@ -70,7 +70,6 @@ const search = ref(""),
   category = ref("all"),
   selectedId = ref(""),
   metric = ref<Metric>("revenue"),
-  showDaily = ref(false),
   mediaSearch = ref("");
 const importOpen = ref(false),
   importNotice = ref("");
@@ -92,11 +91,9 @@ let relationId = 0,
   relationController: AbortController | undefined;
 const batch = computed(() => batches.value.find((b) => b.id === batchId.value));
 const draftWindow = computed(() =>
-  windowDates(
-    launch.value,
-    custom.value ? start.value : undefined,
-    custom.value ? end.value : undefined,
-  ),
+  start.value && end.value
+    ? windowDates(launch.value, start.value, end.value)
+    : null,
 );
 const range = computed(() => report.value?.dateRange || draftWindow.value);
 const asOf = computed(() => report.value?.availableThrough || "");
@@ -202,34 +199,6 @@ const links = computed(() =>
         scopeForSelected(row) === targetScope.value),
   ),
 );
-const daily = computed(() =>
-  Array.from({ length: range.value?.days || 0 }, (_, index) => {
-    const beforeDate = addDays(range.value!.beforeStart, index),
-      afterDate = addDays(range.value!.startDate, index);
-    const value = (date: string) =>
-      !report.value ||
-      date > asOf.value ||
-      !report.value.supported[metric.value]
-        ? null
-        : rows.value.reduce(
-            (sum, r) =>
-              sum +
-              (r.stats?.daily.find((d) => d.date === date)?.[metric.value] ||
-                0),
-            0,
-          );
-    return {
-      index,
-      beforeDate,
-      afterDate,
-      before: value(beforeDate),
-      after: value(afterDate),
-    };
-  }),
-);
-const chartMax = computed(() =>
-  Math.max(1, ...daily.value.flatMap((d) => [d.before || 0, d.after || 0])),
-);
 function format(
   value: number | null | undefined,
   key: Metric = metric.value,
@@ -250,7 +219,7 @@ function format(
 function delta(before: number | null, after: number | null) {
   const ratio = change(before, after, complete.value);
   if (!report.value) return "—";
-  if (!complete.value) return t("观察期未结束", "Observation in progress");
+  if (!complete.value) return t("自定观察期未结束", "Observation in progress");
   if (ratio === null)
     return before === 0 && (after || 0) > 0
       ? t("新产生数据", "New activity")
@@ -296,14 +265,18 @@ async function initialize() {
     catalogError.value = true;
   }
 }
+async function chooseBatch(id: string) {
+  batchId.value = id;
+  await selectBatch();
+}
 async function selectBatch() {
   if (!batch.value) return;
   launch.value = batch.value.launchDate;
-  custom.value = false;
   category.value = "all";
   search.value = "";
-  start.value = launch.value;
-  end.value = addDays(launch.value, 6);
+  const dates = observationWindow(batch.value);
+  start.value = dates?.startDate || "";
+  end.value = dates?.endDate || "";
   await apply();
 }
 async function apply() {
@@ -330,9 +303,12 @@ async function apply() {
     batchId: batch.value.id,
     merchantIds: batch.value.offers.map((o) => o.merchantId).join(","),
     launchDate: launch.value,
-    ...(custom.value ? { startDate: start.value, endDate: end.value } : {}),
+    startDate: start.value,
+    endDate: end.value,
   };
   batch.value.launchDate = launch.value;
+  batch.value.observationStart = start.value;
+  batch.value.observationEnd = end.value;
   persist();
   try {
     const result = await (props.reportLoader ?? loadReport)(
@@ -673,18 +649,12 @@ onBeforeUnmount(() => {
       :aria-label="t('批次与时间', 'Batch and dates')"
     >
       <div class="promotion-batch">
-        <label
-          >{{ t("追踪清单", "Tracking list")
-          }}<select
-            id="promotion-list-selector"
-            v-model="batchId"
-            @change="selectBatch"
-          >
-            <option v-for="item in batches" :key="item.id" :value="item.id">
-              {{ item.name }}
-            </option>
-          </select></label
-        >
+        <PromotionListPicker
+          :model-value="batchId"
+          :batches="batches"
+          :language="language"
+          @update:model-value="chooseBatch"
+        />
         <p>
           {{ batch.offers.length }} {{ t("个商家", "merchants") }} ·
           {{ batch.offers.reduce((sum, o) => sum + o.asins.length, 0) }} ASIN
@@ -697,48 +667,70 @@ onBeforeUnmount(() => {
           ></small
         >
       </div>
-      <div class="promotion-dates">
-        <label
-          >{{ t("推送日期", "Launch date")
-          }}<DatePicker
-            v-model="launch"
-            :language="language"
-            :label="t('推送日期', 'Launch date')" /></label
-        ><label class="promotion-checkbox"
-          ><input v-model="custom" type="checkbox" />{{
-            t("自定义观察期", "Custom observation period")
-          }}</label
-        ><template v-if="custom"
-          ><DatePicker
-            v-model="start"
-            :language="language"
-            :label="t('观察开始', 'Observation start')" /><span>—</span
-          ><DatePicker
-            v-model="end"
-            :language="language"
-            :label="t('观察结束', 'Observation end')" /></template
-        ><button
-          type="button"
-          class="primary"
-          :disabled="loading"
-          @click="apply"
-        >
-          {{
-            loading ? t("加载中…", "Loading…") : t("应用时间", "Apply dates")
-          }}
-        </button>
+      <div class="promotion-date-controls">
+        <div class="promotion-date-heading">
+          <strong>{{ t("自定观察期", "Custom observation period") }}</strong>
+          <small>{{
+            t(
+              "选择起止日期，比较期自动取此前等长区间。",
+              "Choose dates; compare with the preceding period of equal length.",
+            )
+          }}</small>
+        </div>
+        <div class="promotion-dates">
+          <label
+            >{{ t("开始日期", "Start date")
+            }}<DatePicker
+              v-model="start"
+              :language="language"
+              :label="t('观察开始', 'Observation start')"
+          /></label>
+          <span class="promotion-date-divider" aria-hidden="true">—</span>
+          <label
+            >{{ t("结束日期", "End date")
+            }}<DatePicker
+              v-model="end"
+              :language="language"
+              :label="t('观察结束', 'Observation end')"
+          /></label>
+          <button
+            type="button"
+            class="primary"
+            :disabled="loading"
+            @click="apply"
+          >
+            {{
+              loading ? t("加载中…", "Loading…") : t("应用时间", "Apply dates")
+            }}
+          </button>
+        </div>
+        <div class="promotion-launch-date">
+          <label
+            >{{ t("推送日期", "Launch date")
+            }}<DatePicker
+              v-model="launch"
+              :language="language"
+              :label="t('推送日期', 'Launch date')"
+          /></label>
+          <small>{{
+            t(
+              "用于记录推送时间，修改它不会改变自定观察期。",
+              "Records the launch date; editing it does not change your observation period.",
+            )
+          }}</small>
+        </div>
       </div>
       <div v-if="range" class="promotion-periods">
         <span
-          ><i class="before" />{{ t("推送前", "Before") }}
+          ><i class="before" />{{ t("比较期", "Comparison") }}
           <strong>{{ range.beforeStart }} — {{ range.beforeEnd }}</strong></span
         ><span
-          ><i />{{ t("观察期", "Observation") }}
+          ><i />{{ t("自定观察期", "Custom observation") }}
           <strong>{{ range.startDate }} — {{ range.endDate }}</strong></span
         ><small>{{
           t(
-            "当前报表区间；修改日期后点击应用。前后等长，推送当日计入观察期。",
-            "Applied report dates. Apply after editing. Equal periods; launch day is in observation.",
+            "当前已应用区间；修改起止日期后点击应用时间。每份清单单独保存自定观察期。",
+            "Applied dates. Apply after editing; each list remembers its own observation period.",
           )
         }}</small>
       </div>
@@ -747,7 +739,7 @@ onBeforeUnmount(() => {
       {{
         error === "date"
           ? t(
-              "请选择有效日期，观察期为 1—92 天。",
+              "请选择有效日期，自定观察期为 1—92 天。",
               "Choose valid dates covering 1–92 days.",
             )
           : t(
@@ -759,14 +751,16 @@ onBeforeUnmount(() => {
     <div v-if="report && range" class="promotion-message" role="status">
       <span
         >{{ t("数据记录截至", "Data through") }} <strong>{{ asOf }}</strong> ·
-        {{ t("观察期", "Observation") }} {{ daysAfter }}/{{ range.days }}
+        {{ t("自定观察期", "Custom observation") }} {{ daysAfter }}/{{
+          range.days
+        }}
         {{ t("天", "days") }}</span
       ><span>{{
         complete
           ? t("周期已结束，可查看变化幅度", "Period ended; change is available")
           : t(
-              "数据尚未覆盖完整周期，暂不计算涨跌幅；斜线区为待到数。",
-              "Full period not yet covered; change is withheld. Hatched bars await data.",
+              "数据尚未覆盖完整周期，暂不计算涨跌幅。",
+              "Full period not yet covered; change is withheld.",
             )
       }}</span>
     </div>
@@ -784,7 +778,7 @@ onBeforeUnmount(() => {
           daysAfter || !report ? format(totals.after[key], key, true) : "—"
         }}</strong
         ><small
-          >{{ t("推送前", "Before") }}
+          >{{ t("比较期", "Comparison") }}
           {{ format(totals.before[key], key, true) }}</small
         ><em>{{ delta(totals.before[key], totals.after[key]) }}</em>
       </button>
@@ -799,77 +793,6 @@ onBeforeUnmount(() => {
       @retry="refreshRelations"
       @merchant="selectMerchant"
     />
-    <section class="promotion-panel promotion-trend">
-      <div class="promotion-section-heading">
-        <div>
-          <h3>{{ label(metric) }} · {{ t("逐日对照", "Daily comparison") }}</h3>
-          <p>
-            {{
-              t(
-                "按周期内第 N 天对齐；浅色为推送前，蓝色为观察期。",
-                "Aligned by day within each period. Pale bars: before; blue bars: observation.",
-              )
-            }}
-          </p>
-        </div>
-        <button
-          type="button"
-          :aria-expanded="showDaily"
-          @click="showDaily = !showDaily"
-        >
-          {{ t("查看日期明细", "View date details") }}
-        </button>
-      </div>
-      <div
-        class="promotion-bars"
-        role="img"
-        :aria-label="
-          t(
-            '推送前后每日指标对照，下方可展开数据表。',
-            'Daily comparison; expand the data table for values.',
-          )
-        "
-      >
-        <div v-for="day in daily" :key="day.index" class="promotion-bar-day">
-          <div class="promotion-pair">
-            <i
-              class="before"
-              :title="day.beforeDate + ': ' + format(day.before)"
-              :style="{
-                height: `${Math.max(day.before === null ? 0 : 1, ((day.before || 0) / chartMax) * 100)}%`,
-              }"
-            /><i
-              :class="{ pending: day.after === null }"
-              :title="day.afterDate + ': ' + format(day.after)"
-              :style="{
-                height: `${day.after === null ? 100 : Math.max(1, (day.after / chartMax) * 100)}%`,
-              }"
-            />
-          </div>
-          <small>{{ day.index + 1 }}</small>
-        </div>
-      </div>
-      <div v-if="showDaily" class="promotion-scroll" tabindex="0">
-        <table>
-          <thead>
-            <tr>
-              <th>{{ t("推送前日期", "Before date") }}</th>
-              <th>{{ label(metric) }}</th>
-              <th>{{ t("观察期日期", "Observation date") }}</th>
-              <th>{{ label(metric) }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="d in daily" :key="d.index">
-              <td>{{ d.beforeDate }}</td>
-              <td>{{ format(d.before) }}</td>
-              <td>{{ d.afterDate }}</td>
-              <td>{{ format(d.after) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
     <section class="promotion-panel">
       <div class="promotion-section-heading">
         <div>
@@ -919,8 +842,8 @@ onBeforeUnmount(() => {
           <thead>
             <tr>
               <th>{{ t("商家 / 品类", "Merchant / category") }}</th>
-              <th>{{ t("推送前营收", "Before revenue") }}</th>
-              <th>{{ t("观察期营收", "Observed revenue") }}</th>
+              <th>{{ t("比较期营收", "Comparison revenue") }}</th>
+              <th>{{ t("自定观察期营收", "Observed revenue") }}</th>
               <th>{{ t("营收变化", "Revenue change") }}</th>
               <th>{{ t("点击量", "Clicks") }}</th>
               <th>ATC</th>
@@ -1031,7 +954,7 @@ onBeforeUnmount(() => {
           ><strong>{{ format(baseline.average, "revenue") }}</strong
           ><span>{{
             t(
-              "基于观察期前六个完整自然月的实际营收，不代表预测。",
+              "基于自定观察期前六个完整自然月的实际营收，不代表预测。",
               "Actual revenue across six preceding calendar months; not a forecast.",
             )
           }}</span>
@@ -1124,8 +1047,8 @@ onBeforeUnmount(() => {
             <thead>
               <tr>
                 <th>{{ t("媒体", "Publisher") }}</th>
-                <th>{{ t("推送前营收", "Before revenue") }}</th>
-                <th>{{ t("观察期营收", "Observed revenue") }}</th>
+                <th>{{ t("比较期营收", "Comparison revenue") }}</th>
+                <th>{{ t("自定观察期营收", "Observed revenue") }}</th>
                 <th>{{ t("点击", "Clicks") }}</th>
                 <th>DPV</th>
                 <th>ATC</th>
@@ -1259,7 +1182,7 @@ onBeforeUnmount(() => {
                 <th>{{ t("推广 ASIN", "Promoted ASIN") }}</th>
                 <th>{{ t("与清单的关系", "List membership") }}</th>
                 <th>{{ t("成交 ASIN", "Purchased ASIN") }}</th>
-                <th>{{ t("观察期营收", "Observed revenue") }}</th>
+                <th>{{ t("自定观察期营收", "Observed revenue") }}</th>
                 <th>{{ t("点击", "Clicks") }}</th>
                 <th>{{ t("订单", "Orders") }}</th>
               </tr>
