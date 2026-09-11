@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import { translateMessage, type UiLanguage } from "../../shared/i18n";
 import {
@@ -40,6 +40,50 @@ const category = useCategoryReport({
 const startDraft = ref(category.startDate.value);
 const endDraft = ref(category.endDate.value);
 const searchError = ref(false);
+const fullView = ref(false);
+const recordsPanel = ref<HTMLElement>();
+const fullViewButton = ref<HTMLButtonElement>();
+const recordsScroll = ref<HTMLElement>();
+let previousBodyOverflow = "";
+
+async function toggleFullView(): Promise<void> {
+  const scrollTop = recordsScroll.value?.scrollTop ?? 0;
+  const scrollLeft = recordsScroll.value?.scrollLeft ?? 0;
+  if (!fullView.value) {
+    previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = previousBodyOverflow;
+  }
+  fullView.value = !fullView.value;
+  await nextTick();
+  fullViewButton.value?.focus({ preventScroll: true });
+  if (recordsScroll.value) {
+    recordsScroll.value.scrollTop = scrollTop;
+    recordsScroll.value.scrollLeft = scrollLeft;
+  }
+}
+
+function handleFullViewKey(event: KeyboardEvent): void {
+  if (!fullView.value) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    void toggleFullView();
+  } else if (event.key === "Tab") {
+    const items = Array.from(recordsPanel.value?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), [tabindex="0"]'
+    ) ?? []);
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !recordsPanel.value?.contains(document.activeElement))) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !recordsPanel.value?.contains(document.activeElement))) {
+      event.preventDefault();
+      first?.focus();
+    }
+  }
+}
 
 function message(key: string, fallback: string): string {
   return translateMessage(props.language, key, fallback);
@@ -80,6 +124,9 @@ const copy = computed(() => ({
   allCategories: message("categoryReport.allCategories", "All categories"),
   tableKicker: message("categoryReport.tableKicker", "Record view"),
   tableTitle: message("categoryReport.tableTitle", "Category Records"),
+  fullView: message("categoryReport.fullView", "Full view"),
+  exitFullView: message("categoryReport.exitFullView", "Exit full view"),
+  merchantId: message("categoryReport.merchantId", "Merchant / ID"),
   tableHelp: message("categoryReport.tableHelp", "Performance by category · select a row to inspect merchants"),
   categoriesInView: message("categoryReport.categoriesInView", "categories in view"),
   export: message("categoryReport.export", "Export focused category"),
@@ -199,10 +246,13 @@ function exportSlice(): void {
 }
 
 onMounted(() => {
+  document.addEventListener("keydown", handleFullViewKey);
   if (props.autoLoad && props.loadTier) void category.loadSelectedTiers();
 });
 
 onUnmounted(() => {
+  document.removeEventListener("keydown", handleFullViewKey);
+  if (fullView.value) document.body.style.overflow = previousBodyOverflow;
   category.dispose();
 });
 </script>
@@ -435,19 +485,27 @@ onUnmounted(() => {
           </article>
         </section>
 
-        <section v-if="category.visibleGroups.value.length" class="dashboard-category-records" aria-labelledby="category-records-title">
+        <Teleport v-if="fullView || category.visibleGroups.value.length" to="body" :disabled="!fullView">
+        <div class="category-page-modern category-records-view" :class="{ 'is-full-view': fullView }" data-modern-root>
+        <section ref="recordsPanel" class="dashboard-category-records" :role="fullView ? 'dialog' : 'region'" :aria-modal="fullView ? 'true' : undefined" aria-labelledby="category-records-title">
           <div class="dashboard-category-table-toolbar">
             <div class="dashboard-category-table-heading">
               <span class="dashboard-category-table-kicker">{{ copy.tableKicker }}</span>
               <h3 id="category-records-title">{{ copy.tableTitle }}</h3>
               <p>{{ copy.tableHelp }}</p>
             </div>
+            <div class="dashboard-category-table-actions">
             <div class="dashboard-category-table-meta" data-category-table-count>
               <strong>{{ formatCount(category.visibleGroups.value.length) }}</strong>
               <span>{{ copy.categoriesInView }}</span>
             </div>
+            <button ref="fullViewButton" class="category-full-view-button" type="button" :aria-expanded="fullView" @click="toggleFullView">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path :d="fullView ? 'M9 3v6H3m18 0h-6V3M3 15h6v6m6 0v-6h6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6'" /></svg>
+              {{ fullView ? copy.exitFullView : copy.fullView }}
+            </button>
+            </div>
           </div>
-          <div class="table-wrap tier-category-table-wrap dashboard-category-table-wrap">
+          <div ref="recordsScroll" class="table-wrap tier-category-table-wrap dashboard-category-table-wrap" tabindex="0" :aria-label="copy.tableTitle">
             <table class="sheet-table tier-category-table dashboard-category-report-table">
             <thead>
               <tr>
@@ -471,6 +529,7 @@ onUnmounted(() => {
               </tr>
             </thead>
             <tbody>
+              <tr v-if="!category.visibleGroups.value.length"><td colspan="10">{{ copy.noRows }}</td></tr>
               <template v-for="group in category.visibleGroups.value" :key="group.category">
                 <tr
                   class="dashboard-category-row"
@@ -478,8 +537,10 @@ onUnmounted(() => {
                   data-category-action="toggle-expanded"
                   :data-category-highlight="categoryKey(group.category)"
                   tabindex="0"
+                  :aria-expanded="category.expandedKey.value === categoryKey(group.category)"
                   @click="category.toggleExpanded(categoryKey(group.category))"
                   @keydown.enter="category.toggleExpanded(categoryKey(group.category))"
+                  @keydown.space.prevent="category.toggleExpanded(categoryKey(group.category))"
                 >
                   <td>
                     <span class="category-expand-chevron" aria-hidden="true">›</span>
@@ -512,7 +573,7 @@ onUnmounted(() => {
                   <td colspan="10">
                     <div class="category-detail-scroll">
                       <table class="category-detail-inner-table">
-                        <thead><tr><th>Merchant / ID</th><th>Tier</th><th>Revenue</th><th>Orders</th><th>Clicks</th><th>EPC</th><th>CVR</th><th>AOV</th></tr></thead>
+                        <thead><tr><th>{{ copy.merchantId }}</th><th>Tier</th><th>{{ copy.revenue }}</th><th>{{ copy.orders }}</th><th>{{ copy.clicks }}</th><th>EPC</th><th>CVR</th><th>AOV</th></tr></thead>
                         <tbody>
                           <tr v-for="row in group.rows" :key="'detail-' + row.key" class="category-detail-merchant-row">
                             <td><strong>{{ row.merchantName || "-" }}</strong><br /><small>{{ row.merchantId || "-" }}</small></td>
@@ -534,6 +595,8 @@ onUnmounted(() => {
             </table>
           </div>
         </section>
+        </div>
+        </Teleport>
         <p v-else class="category-report-empty">{{ copy.noRows }}</p>
       </div>
     </section>
