@@ -21,6 +21,69 @@ const report = {
 };
 
 describe("CategoryReportPage", () => {
+  it("translates category surfaces and search without changing grouping, colors or exports", async () => {
+    const downloads: unknown[] = [];
+    const data = { sheets: [{ name: "Tier 1", rows: [
+      { "Merchant ID": "101", "Merchant Name": "Alpha", Category: "Electronics", Revenue: 1000 },
+      { "Merchant ID": "102", "Merchant Name": "Beta", Category: "Home & Kitchen", Revenue: 500 }
+    ] }] };
+    const wrapper = mount(CategoryReportPage, {
+      props: { language: "en", reportData: data, autoLoad: false, download: value => downloads.push(value) }
+    });
+    const keys = wrapper.findAll(".dashboard-category-row").map(row => row.attributes("data-category-highlight"));
+    const colors = wrapper.findAll(".category-name-chip").map(row => row.attributes("style"));
+    await wrapper.setProps({ language: "zh" });
+    expect(wrapper.findAll(".category-name-chip").map(row => row.text())).toEqual(["电子", "家居、厨具、家装"]);
+    expect(wrapper.findAll(".dashboard-category-row").map(row => row.attributes("data-category-highlight"))).toEqual(keys);
+    expect(wrapper.findAll(".category-name-chip").map(row => row.attributes("style"))).toEqual(colors);
+    expect(wrapper.get(".category-pie-legend").text()).toContain("家居、厨具、家装");
+    expect(wrapper.get(".category-pie-slice title").text()).toContain("电子");
+    expect(wrapper.get(".category-pie-spotlight").text()).toContain("电子领先");
+    const search = wrapper.get<HTMLInputElement>("#category-report-search");
+    await search.setValue("电子");
+    await search.trigger("change");
+    expect(wrapper.findAll(".dashboard-category-row")).toHaveLength(1);
+    expect(wrapper.get(".dashboard-category-search-status").text()).toBe("当前品类：电子");
+    await wrapper.get(".dashboard-category-row").trigger("click");
+    await wrapper.get(".category-focus-export").trigger("click");
+    expect(downloads).toMatchObject([{ label: "Electronics", rows: [data.sheets[0]!.rows[0]] }]);
+    await wrapper.get(".category-full-view-button").trigger("click");
+    expect(document.querySelector('[role="dialog"] .category-name-chip')?.textContent?.trim()).toBe("电子");
+    await wrapper.setProps({ language: "en" });
+    expect(document.querySelector('[role="dialog"] .category-name-chip')?.textContent?.trim()).toBe("Electronics");
+    expect(document.querySelectorAll('[role="dialog"] .category-detail-merchant-row')).toHaveLength(1);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await flushPromises();
+    expect(search.element.value).toBe("Electronics");
+    await wrapper.setProps({ language: "zh" });
+    await search.setValue("Home & Kitchen");
+    await search.trigger("change");
+    expect(search.element.value).toBe("家居、厨具、家装");
+    expect(wrapper.get(".category-name-chip").text()).toBe("家居、厨具、家装");
+  });
+
+  it("disambiguates identical Chinese labels and preserves merchant-name searching", async () => {
+    const wrapper = mount(CategoryReportPage, {
+      props: { language: "zh", autoLoad: false, reportData: { sheets: [{ name: "Tier 1", rows: [
+        { "Merchant ID": "1", "Merchant Name": "Alpha", Category: "Baby", Revenue: 10 },
+        { "Merchant ID": "2", "Merchant Name": "Beta", Category: "Baby Products", Revenue: 5 }
+      ] }] } }
+    });
+    expect(wrapper.findAll("#category-report-options option").map(option => option.attributes("value")))
+      .toEqual(expect.arrayContaining(["婴儿用品（Baby）", "婴儿用品（Baby Products）", "Alpha · 1"]));
+    const search = wrapper.get("#category-report-search");
+    await search.setValue("婴儿用品");
+    await search.trigger("change");
+    expect(wrapper.get(".dashboard-category-search-status").classes()).toContain("error");
+    expect(wrapper.findAll(".dashboard-category-row")).toHaveLength(2);
+    await search.setValue("婴儿用品（Baby Products）");
+    await search.trigger("change");
+    await wrapper.get(".dashboard-category-row").trigger("click");
+    expect(wrapper.get(".category-detail-merchant-row").text()).toContain("Beta");
+    await search.setValue("Alpha · 1");
+    await search.trigger("change");
+    expect(wrapper.get(".dashboard-category-search-status").text()).toBe("当前商家：Alpha");
+  });
   it("keeps the exit control available if an in-flight load returns no merchants", async () => {
     const pending: Array<(value: unknown) => void> = [];
     const wrapper = mount(CategoryReportPage, {
