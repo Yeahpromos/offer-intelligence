@@ -64,6 +64,7 @@ jobs:
           node scripts/test_shared_xlsx_frontend.mjs
           python scripts/test_tier1_agency_sync.py
           python scripts/test_manual_tier_automation.py
+          python scripts/test_revenue_tier_promotion.py
           python scripts/test_tier_visual_status_rules.py
           python scripts/test_offer_network_lookup.py
           python scripts/test_workflow_cache_split.py
