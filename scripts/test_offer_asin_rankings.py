@@ -1,5 +1,7 @@
 """Revenue ordering, merchant/date isolation, code fallback and cache migration."""
 import datetime as dt
+import gzip
+import json
 import sqlite3
 import sys
 import time
@@ -62,7 +64,7 @@ class OfferAsinRankingTests(unittest.TestCase):
         self.assertEqual(ranked["1"][:5], [
             "B000000007", "B000000005", "B000000006", "B000000000", "B000000001"
         ])
-        self.assertEqual(len(ranked["1"]), 8)  # Keep complete catalog for ASIN search.
+        self.assertEqual(len(ranked["1"]), 5)
         self.assertEqual(ranked["2"], ["B000000001"])
         self.assertNotIn("9", ranked)
         self.assertEqual(self.rank("2026-09-08", "2026-09-08")["1"][0], "B000000001")
@@ -87,7 +89,7 @@ class OfferAsinRankingTests(unittest.TestCase):
                 self.columns.add(column)
 
     def test_old_snapshots_are_rebuilt_even_when_memory_and_file_are_fresh(self):
-        stale = {"offers": [{"topAsins": ["B000000001"]}]}
+        stale = {"asinRankingVersion": 1, "offers": [{"topAsins": ["B000000001"]}]}
         ranked = {"asinRankingVersion": offer_db.OFFER_ASIN_RANKING_VERSION, "offers": []}
         with patch.object(offer_db, "_offers_memory_cache", (time.time(), stale)), patch.object(
             offer_db, "_load_any_cache", return_value=stale
@@ -98,6 +100,23 @@ class OfferAsinRankingTests(unittest.TestCase):
             self.assertIs(offer_db.offers_payload(), ranked)
             build.assert_called_once()
             save.assert_called_once()
+
+    def test_large_catalog_is_bounded_without_losing_best_revenue_products(self):
+        self.conn.executemany("INSERT INTO cnpscy_oi_offer_products VALUES (?, ?)",
+                              [("1", f"B{i:09d}") for i in range(10000)])
+        self.conn.execute("INSERT INTO cnpscy_amazon_order VALUES (1, 'B000009999', 20260901, 999)")
+        ranked = self.rank()["1"]
+        self.assertEqual(ranked, ["B000009999", "B000000000", "B000000001", "B000000002", "B000000003"])
+
+    def test_committed_bootstrap_stays_within_compressed_response_budget(self):
+        path = Path(__file__).resolve().parents[1] / "protected_data/db_offers_cache.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["asinRankingVersion"], offer_db.OFFER_ASIN_RANKING_VERSION)
+        for offer in payload["offers"]:
+            self.assertLessEqual(len(offer.get("topAsins") or []), 5)
+            self.assertLessEqual(len(offer.get("productAsins") or []), 5)
+        wire = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        self.assertLess(len(gzip.compress(wire, compresslevel=6)), 4_500_000)
 
 
 if __name__ == "__main__":

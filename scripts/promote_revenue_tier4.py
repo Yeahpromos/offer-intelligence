@@ -16,11 +16,38 @@ SOURCE = "revenue_30d_tier4_to_tier3"
 ACTOR = "automation:revenue-30d"
 
 
+def reconcile_visual_status(conn, *, apply: bool) -> list[dict]:
+    """Repair rule-derived Tier 4 colors, including earlier audited promotions."""
+    rows = db.fetch_all(conn, """
+        SELECT v.merchantId, v.color, v.reason_code, v.reason_text, v.source
+        FROM cnpscy_oi_tier_assignments t
+        INNER JOIN cnpscy_oi_tier_visual_status v ON v.merchantId = t.merchantId
+        WHERE t.tier = 'Tier 3' AND t.source = %s AND v.source = 'rule'
+          AND v.reason_code IN ('tier4_demoted_or_inactive', 'tier4_new_offer', 'no_rule_match')
+        ORDER BY v.merchantId
+        FOR UPDATE
+    """, (SOURCE,))
+    if apply:
+        for row in rows:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE cnpscy_oi_tier_visual_status
+                    SET color = 'green', reason_code = 'tier3_new_or_promoted',
+                        reason_text = 'Moved from Tier 4 after positive trailing-30-day revenue'
+                    WHERE merchantId = %s AND source = 'rule'
+                """, (str(row["merchantId"]),))
+                if cursor.rowcount != 1:
+                    raise RuntimeError(f"Visual status changed while locked: {row['merchantId']}")
+    return [{"merchantId": str(row["merchantId"]), "before": row,
+             "after": {"color": "green", "reason_code": "tier3_new_or_promoted", "source": "rule"}}
+            for row in rows]
+
+
 def promote(conn, as_of: dt.date, *, apply: bool = False) -> dict:
     start = as_of - dt.timedelta(days=29)
     start_key, end_key = int(start.strftime("%Y%m%d")), int(as_of.strftime("%Y%m%d"))
     result = {"rule": SOURCE, "startDate": start.isoformat(), "endDate": as_of.isoformat(),
-              "applied": apply, "candidates": [], "promoted": [], "skipped": []}
+              "applied": apply, "candidates": [], "promoted": [], "skipped": [], "visualStatusUpdates": []}
     conn.begin()
     try:
         rows = db.fetch_all(conn, """
@@ -36,6 +63,7 @@ def promote(conn, as_of: dt.date, *, apply: bool = False) -> dict:
         """, (start_key, end_key))
         result["candidates"] = [{**r, "revenue": float(r["revenue"])} for r in rows]
         if not apply:
+            result["visualStatusUpdates"] = reconcile_visual_status(conn, apply=False)
             conn.rollback()
             return result
         moved_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None, microsecond=0)
@@ -64,6 +92,7 @@ def promote(conn, as_of: dt.date, *, apply: bool = False) -> dict:
                 """, (mid, row.get("merchantName"), SOURCE, moved_at, ACTOR))
                 result["promoted"].append({"merchantId": mid, "eventId": cursor.lastrowid,
                                            "revenue": float(row["revenue"])})
+        result["visualStatusUpdates"] = reconcile_visual_status(conn, apply=True)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -85,6 +114,7 @@ def main():
             "cnpscy_oi_tier_assignments": {"merchantId", "tier", "source", "movedFromTier", "movedAt", "updatedBy"},
             "cnpscy_oi_tier_move_history": {"eventId", "merchantId", "merchantName", "sourceTier", "targetTier", "source", "movedAt", "movedBy"},
             "cnpscy_amazon_order": {"advert_id", "order_time_day", "amount"},
+            "cnpscy_oi_tier_visual_status": {"merchantId", "color", "reason_code", "reason_text", "source"},
         }
         for table, columns in required.items():
             missing = columns - db.table_columns(conn, table)
@@ -94,8 +124,9 @@ def main():
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({k: v for k, v in result.items() if k not in {"candidates", "promoted", "skipped"}}, ensure_ascii=False))
+    print(json.dumps({k: v for k, v in result.items() if k not in {"candidates", "promoted", "skipped", "visualStatusUpdates"}}, ensure_ascii=False))
     print(f"Candidates: {len(result['candidates'])}; promoted: {len(result['promoted'])}; skipped: {len(result['skipped'])}")
+    print(f"Rule-derived visual statuses {'updated' if args.apply else 'to update'}: {len(result['visualStatusUpdates'])}")
 
 
 if __name__ == "__main__":

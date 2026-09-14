@@ -3274,7 +3274,7 @@ OFFERS_CACHE_FILE = CACHE_DIR / "db_offers_cache.json"
 KEYWORDS_CACHE_FILE = CACHE_DIR / "db_keywords_cache.json"
 PUBLISHERS_CACHE_FILE = CACHE_DIR / "db_publishers_cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("OFFER_DB_CACHE_TTL", "86400"))  # 24 hours
-OFFER_ASIN_RANKING_VERSION = 1
+OFFER_ASIN_RANKING_VERSION = 2
 MERCHANT_CACHE_TTL = int(os.environ.get("OFFER_DB_MERCHANT_CACHE_TTL", "3600"))  # 1 hour
 SEARCH_CACHE_TTL = int(os.environ.get("OFFER_DB_SEARCH_CACHE_TTL", "3600"))  # 1 hour
 ASIN_CACHE_TTL = int(os.environ.get("OFFER_DB_ASIN_CACHE_TTL", "300"))  # 5 minutes
@@ -3553,7 +3553,8 @@ def offer_asin_rankings(
 ) -> dict[str, list[str]]:
     """Rank each merchant's ASINs by positive period revenue, then code.
 
-    Keep the full list for ASIN search; Offer Tracker displays its first five.
+    Return only the top five in bootstrap responses. Full catalog queries use
+    the ASIN search endpoint; keyword search has its own lazy-loaded payload.
     Catalog and keyword ASINs fill missing revenue slots in code order.
     """
     candidates: dict[str, set[str]] = {
@@ -3604,7 +3605,7 @@ def offer_asin_rankings(
                 revenues[mid][asin] = to_float(row.get("revenue"))
 
     return {
-        mid: sorted(asins, key=lambda asin: (-max(0, revenues[mid].get(asin, 0)), asin))
+        mid: sorted(asins, key=lambda asin: (-max(0, revenues[mid].get(asin, 0)), asin))[:5]
         for mid, asins in candidates.items()
     }
 
@@ -3989,14 +3990,9 @@ def _build_offers_payload(
                 o["paymentState"] = "not_available"
                 o["paymentStatus"] = "No payment issue found"
 
-            # split pipe-delimited product keyword fields (productAsins only;
-            # productTitles/productKeywords are lazy-loaded via /api/ui/db/keywords)
-            for field in ("productAsins",):
-                val = o.get(field)
-                if isinstance(val, str) and val.strip():
-                    o[field] = [item.strip() for item in val.split("|") if item.strip()]
-                else:
-                    o[field] = []
+            # Do not duplicate full catalogs in bootstrap data. Keyword search
+            # can load the complete keyword ASIN list from /api/ui/db/keywords.
+            o["productAsins"] = list(o["topAsins"])
 
         # ?? payment records (with computed fields matching static shape) ??
         payment_records = []

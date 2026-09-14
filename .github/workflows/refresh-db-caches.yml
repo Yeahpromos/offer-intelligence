@@ -20,18 +20,18 @@ jobs:
     name: Rebuild API caches from DB
     if: >-
       github.repository == 'Yeahpromos/offer-intelligence' &&
-      (github.event_name == 'workflow_dispatch' ||
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     env:
-      CACHE_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || 'main' }}
+      CACHE_BRANCH: main
 
     steps:
-      - name: Check out cache target branch
+      - name: Check out trusted main
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.CACHE_BRANCH }}
+          ref: main
           fetch-depth: 0
 
       - name: Set up Python

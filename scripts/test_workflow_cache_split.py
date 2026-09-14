@@ -26,6 +26,14 @@ class WorkflowCacheSplitTests(unittest.TestCase):
         self.assertIn("protected_data/db_offers_cache.json", workflow)
         self.assertIn("protected_data/db_keywords_cache.json", workflow)
 
+    def test_secret_bearing_cache_workflow_only_executes_main(self) -> None:
+        workflow = (ROOT / ".github/workflows/refresh-db-caches.yml").read_text(encoding="utf-8")
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("ref: main", workflow)
+        self.assertIn("CACHE_BRANCH: main", workflow)
+        self.assertNotIn("github.ref_name", workflow)
+        self.assertNotIn("ref: ${{ env.CACHE_BRANCH }}", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

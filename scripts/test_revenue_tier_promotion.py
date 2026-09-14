@@ -20,6 +20,8 @@ class Cursor:
     def execute(self, sql, params=()):
         if self.conn.fail_history and "INSERT INTO cnpscy_oi_tier_move_history" in sql:
             raise RuntimeError("audit unavailable")
+        if self.conn.fail_visual and "UPDATE cnpscy_oi_tier_visual_status" in sql:
+            raise RuntimeError("visual update unavailable")
         return self.raw.execute(sql.replace("%s", "?").replace("FOR UPDATE", ""), params)
 
     def fetchall(self):
@@ -43,6 +45,7 @@ class Connection:
         self.raw = sqlite3.connect(":memory:")
         self.raw.row_factory = sqlite3.Row
         self.fail_history = False
+        self.fail_visual = False
 
     def cursor(self):
         return Cursor(self)
@@ -69,6 +72,8 @@ class PromotionTests(unittest.TestCase):
             CREATE TABLE cnpscy_oi_tier_move_history (eventId INTEGER PRIMARY KEY,
                 merchantId TEXT, merchantName TEXT, sourceTier TEXT, targetTier TEXT,
                 source TEXT, movedAt TEXT, movedBy TEXT);
+            CREATE TABLE cnpscy_oi_tier_visual_status (merchantId TEXT PRIMARY KEY,
+                color TEXT, reason_code TEXT, reason_text TEXT, source TEXT);
         """)
         for mid, tier in [(1,'Tier 4'),(2,'Tier 4'),(3,'Tier 1'),(4,'Tier 2'),(5,'Tier 3'),(6,'BLACK TIER'),(7,'Tier 4'),(8,'Tier 4')]:
             self.conn.raw.execute("INSERT INTO cnpscy_oi_tier_assignments (merchantId,tier) VALUES (?,?)",(str(mid),tier))
@@ -78,6 +83,7 @@ class PromotionTests(unittest.TestCase):
             (3,20260901,100),(4,20260901,100),(5,20260901,100),(6,20260901,100),
             (7,20260901,50),(7,20260902,-50),(8,20260901,-10)
         ])
+        self.conn.raw.execute("INSERT INTO cnpscy_oi_tier_visual_status VALUES ('1','red','tier4_demoted_or_inactive','Old rule','rule')")
         self.conn.commit()
 
     def test_scope_dates_dry_run_and_idempotent_audited_write(self):
@@ -100,6 +106,35 @@ class PromotionTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'audit unavailable'):
             rule.promote(self.conn, dt.date(2026,9,14), apply=True)
         self.assertEqual(self.conn.raw.execute("SELECT tier FROM cnpscy_oi_tier_assignments WHERE merchantId='1'").fetchone()[0],'Tier 4')
+
+    def test_promotions_refresh_rule_colors_and_repair_earlier_promotions(self):
+        self.conn.raw.execute("UPDATE cnpscy_oi_tier_assignments SET source=? WHERE merchantId='5'", (rule.SOURCE,))
+        self.conn.raw.execute("INSERT INTO cnpscy_oi_tier_visual_status VALUES ('5','red','tier4_new_offer','Stale','rule')")
+        self.conn.commit()
+        preview = rule.promote(self.conn, dt.date(2026,9,14))
+        self.assertEqual([r['merchantId'] for r in preview['visualStatusUpdates']], ['5'])
+        self.assertEqual(self.conn.raw.execute("SELECT color FROM cnpscy_oi_tier_visual_status WHERE merchantId='5'").fetchone()[0], 'red')
+        result = rule.promote(self.conn, dt.date(2026,9,14), apply=True)
+        self.assertEqual([r['merchantId'] for r in result['visualStatusUpdates']], ['1','5'])
+        self.assertEqual(result['visualStatusUpdates'][0]['before']['color'], 'red')
+        statuses = self.conn.raw.execute("SELECT color,reason_code FROM cnpscy_oi_tier_visual_status").fetchall()
+        self.assertTrue(all(tuple(r) == ('green','tier3_new_or_promoted') for r in statuses))
+        self.assertEqual(rule.promote(self.conn,dt.date(2026,9,14),apply=True)['visualStatusUpdates'], [])
+
+    def test_manual_colors_survive_promotion(self):
+        self.conn.raw.execute("UPDATE cnpscy_oi_tier_visual_status SET source='manual'")
+        self.conn.commit()
+        result = rule.promote(self.conn, dt.date(2026,9,14), apply=True)
+        self.assertEqual(len(result['promoted']), 1)
+        self.assertEqual(result['visualStatusUpdates'], [])
+        self.assertEqual(self.conn.raw.execute("SELECT color FROM cnpscy_oi_tier_visual_status").fetchone()[0], 'red')
+
+    def test_visual_failure_rolls_back_promotion_and_audit(self):
+        self.conn.fail_visual = True
+        with self.assertRaisesRegex(RuntimeError,'visual update unavailable'):
+            rule.promote(self.conn, dt.date(2026,9,14), apply=True)
+        self.assertEqual(self.conn.raw.execute("SELECT tier FROM cnpscy_oi_tier_assignments WHERE merchantId='1'").fetchone()[0], 'Tier 4')
+        self.assertEqual(self.conn.raw.execute("SELECT COUNT(*) FROM cnpscy_oi_tier_move_history").fetchone()[0], 0)
 
     def test_concurrent_manual_tier_change_is_preserved(self):
         with patch.object(rule.db,'fetch_one',return_value={'tier':'Tier 2'}):
