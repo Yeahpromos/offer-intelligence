@@ -72,6 +72,7 @@ const copy = computed(() => {
 
 const {
   draftFilters,
+  filters,
   search,
   view,
   loading,
@@ -226,6 +227,7 @@ onMounted(() => {
 
     <OfferTrackerFilters
       :model-value="draftFilters"
+      :applied-filters="filters"
       :language="props.language"
       :tiers="availableTiers"
       :categories="availableCategories"

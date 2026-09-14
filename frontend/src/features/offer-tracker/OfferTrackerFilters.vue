@@ -12,6 +12,7 @@ import { translateMessage } from "../../shared/i18n";
 
 const props = defineProps<{
   modelValue: TrackerFilters;
+  appliedFilters: TrackerFilters;
   language: UiLanguage;
   tiers: readonly string[];
   categories: readonly string[];
@@ -89,6 +90,8 @@ const copy = computed(() => {
     reset: message("common.reset", "重置"),
     apply: message("common.apply", "应用筛选"),
     loading: message("common.loading", "加载中…"),
+    pending: message("offerTracker.pendingFilterSummary", "当前选择（待应用）"),
+    applied: message("offerTracker.appliedFilterSummary", "已应用条件"),
   };
 });
 
@@ -126,9 +129,44 @@ const sortOptions = computed(() => [
   { value: "revenue-asc", label: copy.value.revenueAsc },
 ]);
 
-const filterChips = computed(() => [
-  `${copy.value.datePrefix} ${props.modelValue.startDate}至${props.modelValue.endDate}`,
-]);
+const hasPendingChanges = computed(() => {
+  const signature = (filters: TrackerFilters) => JSON.stringify(
+    Object.entries(filters).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => (
+      [key, Array.isArray(value) ? [...value].sort() : value]
+    )),
+  );
+  return signature(props.modelValue) !== signature(props.appliedFilters);
+});
+
+const filterChips = computed(() => {
+  const filters = props.modelValue;
+  const labels = copy.value;
+  const chips = [`${labels.datePrefix} ${filters.startDate} – ${filters.endDate}`];
+  const separator = props.language === "zh" ? "、" : ", ";
+  const addChoices = (label: string, values: readonly string[]) => {
+    if (values.length) chips.push(`${label}: ${values.join(separator)}`);
+  };
+  const addRange = (label: string, min: string | number, max: string | number, unit = "") => {
+    const lower = String(min).trim();
+    const upper = String(max).trim();
+    if (lower && upper) chips.push(`${label}: ${lower}${unit} – ${upper}${unit}`);
+    else if (lower) chips.push(`${label} ≥ ${lower}${unit}`);
+    else if (upper) chips.push(`${label} ≤ ${upper}${unit}`);
+  };
+  addChoices(labels.tiers, filters.tiers);
+  addChoices(labels.categories, filters.categories);
+  addRange(labels.aovRange, filters.minAov, filters.maxAov);
+  addRange(labels.commissionRange, filters.minCommission, filters.maxCommission, "%");
+  addChoices(labels.networks, filters.networks);
+  addChoices(labels.bbPolicy, filters.bbPolicies.map(value => (
+    bbOptions.value.find(option => option.value === value)?.label ?? value
+  )));
+  if (filters.revenueStatus !== "all") {
+    chips.push(`${labels.revenueStatus}: ${revenueOptions.value.find(option => option.value === filters.revenueStatus)?.label}`);
+  }
+  chips.push(`${labels.sort}: ${sortOptions.value.find(option => option.value === filters.revenueSort)?.label}`);
+  return chips;
+});
 </script>
 
 <template>
@@ -185,7 +223,7 @@ const filterChips = computed(() => [
             />
           </div>
           <small
-            >{{ copy.rangeHint }}{{ modelValue.startDate }}至{{
+            >{{ copy.rangeHint }}{{ modelValue.startDate }} – {{
               modelValue.endDate
             }}</small
           >
@@ -288,8 +326,13 @@ const filterChips = computed(() => [
       </div>
 
       <div class="offer-tracker-filter-footer">
-        <div class="offer-tracker-filter-chips">
-          <span v-for="chip in filterChips" :key="chip">{{ chip }}</span>
+        <div class="offer-tracker-filter-summary" role="status" aria-live="polite" aria-atomic="true">
+          <p class="offer-tracker-filter-summary-state" :data-pending="hasPendingChanges">
+            {{ hasPendingChanges ? copy.pending : copy.applied }}
+          </p>
+          <div class="offer-tracker-filter-chips">
+            <span v-for="chip in filterChips" :key="chip">{{ chip }}</span>
+          </div>
         </div>
         <div class="offer-tracker-filter-actions">
           <button

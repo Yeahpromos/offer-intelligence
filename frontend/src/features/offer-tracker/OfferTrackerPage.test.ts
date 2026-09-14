@@ -58,6 +58,29 @@ function mountTracker(
 }
 
 describe("OfferTrackerPage", () => {
+  it("updates the summary while editing and marks it applied only after successful application", async () => {
+    const wrapper = mountTracker();
+    const summary = () => wrapper.get('.offer-tracker-filter-summary');
+    expect(summary().text()).toContain("已应用条件");
+    await wrapper.get('input[aria-label="最小 AOV"]').setValue("101");
+    expect(summary().text()).toContain("AOV 范围 ≥ 101");
+    expect(summary().text()).toContain("当前选择（待应用）");
+    expect(wrapper.findAll('tbody tr[data-row-key]')).toHaveLength(25);
+    await wrapper.get('button[aria-label="应用筛选"]').trigger("click");
+    await nextTick();
+    expect(summary().text()).toContain("已应用条件");
+    expect(wrapper.findAll('tbody tr[data-row-key]')).toHaveLength(0);
+    await wrapper.get('input[aria-label="最大 AOV"]').setValue("50");
+    await wrapper.get('button[aria-label="应用筛选"]').trigger("click");
+    expect(summary().text()).toContain("当前选择（待应用）");
+    const reset = wrapper.findAll('.offer-tracker-filter-actions button').find(button => button.text() === "重置")!;
+    await reset.trigger("click");
+    await nextTick();
+    expect(summary().text()).toContain("已应用条件");
+    expect(summary().text()).not.toContain("AOV 范围");
+    expect(wrapper.findAll('tbody tr[data-row-key]')).toHaveLength(25);
+  });
+
   it("保留旧页面的头部、筛选卡和表格工具栏结构", () => {
     const wrapper = mountTracker();
 

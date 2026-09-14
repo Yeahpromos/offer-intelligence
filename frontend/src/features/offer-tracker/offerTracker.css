@@ -558,6 +558,18 @@
   border-top: 1px solid light-dark(#e7edf0, #40526b);
 }
 
+.offer-tracker-filter-summary {
+  flex: 1;
+  min-width: 0;
+}
+
+.offer-tracker-filter-summary-state {
+  margin: 0 0 8px;
+  color: var(--tracker-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .offer-tracker-filter-chips {
   align-items: center;
   display: flex;
@@ -572,8 +584,11 @@
   background: light-dark(#f1f6fd, #1c2b3f);
   color: light-dark(#2d5f99, #a1b7d1);
   padding: 5px 9px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 750;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 
 .offer-tracker-filter-actions button {
