@@ -21,6 +21,48 @@ const report = {
 };
 
 describe("CategoryReportPage", () => {
+  it("masks monetary values and tooltips across overview, drilldown and full view while retaining percentages", async () => {
+    const wrapper = mount(CategoryReportPage, { attachTo: document.body, props: { language: 'zh', reportData: report, autoLoad: false } });
+    const legendShares = wrapper.findAll('.category-pie-legend li').map(item => item.text().split(' / ')[1]);
+    expect(wrapper.get('.category-pie-spotlight').text()).toContain('$3.5K');
+    await wrapper.get('.category-revenue-toggle').trigger('click');
+    expect(wrapper.get('.category-revenue-toggle').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('.category-revenue-toggle').text()).toBe('显示营收');
+    expect(wrapper.html()).not.toMatch(/\$[\d,]+/);
+    expect(wrapper.findAll('.category-pie-legend li').map(item => item.text().split(' / ')[1])).toEqual(legendShares);
+    expect(wrapper.get('.category-pie-slice title').text()).toContain('%');
+    await wrapper.get('.category-pie-legend [data-category-focus="home"]').trigger('click');
+    await wrapper.get('.dashboard-category-row').trigger('click');
+    expect(wrapper.findAll('.category-detail-merchant-row')).toHaveLength(2);
+    expect(wrapper.findAll('[data-sensitive-revenue]').every(item => item.text() === '••••••')).toBe(true);
+    await wrapper.get('[data-category-sort="avgEpc"]').trigger('click');
+    expect(wrapper.html()).not.toMatch(/\$[\d,]+/);
+    await wrapper.get('.category-full-view-button').trigger('click');
+    await flushPromises();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.closest('.is-revenue-hidden')).not.toBeNull();
+    expect(dialog.innerHTML).not.toMatch(/\$[\d,]+/);
+    expect(dialog.textContent).toContain('10%');
+    (dialog.querySelector('.category-revenue-toggle') as HTMLButtonElement).click();
+    await flushPromises();
+    expect(dialog.closest('.is-revenue-hidden')).toBeNull();
+    expect(dialog.textContent).toContain('$3K');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(wrapper.get('.category-revenue-toggle').text()).toBe('隐藏营收');
+    await wrapper.get('.category-focus-back').trigger('click');
+    expect(wrapper.get('.category-pie-spotlight').text()).toContain('$3.5K');
+  });
+
+  it("keeps non-monetary chart metrics visible and localizes the privacy control", async () => {
+    const wrapper = mount(CategoryReportPage, { props: { language: 'en', reportData: report, autoLoad: false } });
+    expect(wrapper.get('.category-revenue-toggle').text()).toBe('Hide revenue');
+    await wrapper.get('.category-revenue-toggle').trigger('click');
+    await wrapper.get('.category-metric-pills [data-category-sort="orders"]').trigger('click');
+    expect(wrapper.get('.category-pie-legend').text()).toContain('30 / 85.7%');
+    expect(wrapper.get('.category-pie-spotlight [data-sensitive-revenue]').attributes('aria-label')).toBe('Amount hidden');
+    expect(wrapper.get('.category-revenue-toggle').text()).toBe('Show revenue');
+  });
   it("links hover and keyboard focus without changing total revenue until click", async () => {
     const wrapper = mount(CategoryReportPage, { props: { language: "zh", reportData: report, autoLoad: false } });
     const ring = wrapper.get('.category-pie-slice[data-category-focus="beauty"]');

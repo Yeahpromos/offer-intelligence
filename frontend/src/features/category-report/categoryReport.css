@@ -546,6 +546,12 @@
 .category-page-modern .category-pie-legend.is-expanded { max-height: 480px; overflow-y: auto; padding: 4px; align-content: start; }
 .category-page-modern .category-list-toggle { border: 1px solid #aac3fa; border-radius: 8px; padding: 9px 14px; background: light-dark(#edf4ff, #223b61); color: light-dark(#2054bd, #bbd4ff); cursor: pointer; font: inherit; }
 .category-page-modern .category-list-toggle:focus-visible { outline: 3px solid #3478ff; outline-offset: 3px; }
+.category-page-modern .category-revenue-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.category-page-modern .category-revenue-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px solid #aac3fa; border-radius: 9px; padding: 8px 14px; background: light-dark(#edf4ff, #223b61); color: light-dark(#2054bd, #bbd4ff); font: inherit; cursor: pointer; white-space: nowrap; }
+.category-page-modern .category-revenue-toggle svg { width: 18px; height: 18px; }
+.category-page-modern .category-revenue-toggle[aria-pressed="true"] { background: light-dark(#dbeafe, #2e4d7c); border-color: #3478ff; }
+.category-page-modern .category-revenue-toggle:focus-visible { outline: 3px solid #3478ff; outline-offset: 3px; }
+.category-page-modern.is-revenue-hidden [data-sensitive-revenue] { filter: blur(4px); user-select: none; }
 .category-page-modern .category-pie-copy .category-distribution-hint { margin: 8px 0 12px; }
 @media (prefers-reduced-motion: reduce) {
   .category-page-modern .category-pie-slice, .category-page-modern .category-pie-legend li { transition: none; }

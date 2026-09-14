@@ -25,6 +25,8 @@ export interface ExportSheetContext {
   readonly workbookBackgroundColors?: readonly string[];
   readonly rowBackgroundRanges?: readonly ExportRowBackgroundRange[];
   readonly referenceStyle?: boolean;
+  readonly wrapText?: boolean;
+  readonly freezeHeader?: boolean;
 }
 
 export interface ExportSheet extends ExportSheetContext {
@@ -203,6 +205,7 @@ export function worksheetXml(
   )).join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  ${context.freezeHeader ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : ""}
   <cols>${widths}</cols>
   <sheetData>${rowXml}</sheetData>
 </worksheet>`;
@@ -251,7 +254,7 @@ export function contentTypesXml(sheetCount = 1): string {
 </Types>`;
 }
 
-export function stylesXml(backgroundColors: readonly string[] = []): string {
+export function stylesXml(backgroundColors: readonly string[] = [], wrapText = false): string {
   const colors = backgroundColors
     .map(normalizeExportColor)
     .filter((color, index, values) => color && values.indexOf(color) === index);
@@ -264,7 +267,7 @@ export function stylesXml(backgroundColors: readonly string[] = []): string {
     <xf numFmtId="10" fontId="0" fillId="${fillId}" borderId="1" applyNumberFormat="1" applyFill="1" applyBorder="1"/>
     <xf numFmtId="1" fontId="0" fillId="${fillId}" borderId="1" applyNumberFormat="1" applyFill="1" applyBorder="1"/>`;
   }).join("\n    ");
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <fonts count="2">
     <font><sz val="11"/><name val="Calibri"/></font>
@@ -290,6 +293,10 @@ export function stylesXml(backgroundColors: readonly string[] = []): string {
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
+  // Opt in per workbook so other exports retain their established styles.
+  return wrapText ? styles.replace(/<cellXfs([\s\S]*?)<\/cellXfs>/, block => block
+    .replace(/<xf([^>]*?)\/>/g, '<xf$1 applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>')
+    .replace('<alignment horizontal="center"/>', '<alignment horizontal="center" vertical="center" wrapText="1"/>')) : styles;
 }
 
 function crc32(bytes: Uint8Array): number {
@@ -406,7 +413,7 @@ export function buildWorkbookFiles(sheets: readonly ExportSheet[]): WorkbookFile
     { name: "_rels/.rels", data: rootRelsXml() },
     { name: "xl/workbook.xml", data: workbookXml(normalizedSheets.map((sheet) => sheet.sheetName || "Export")) },
     { name: "xl/_rels/workbook.xml.rels", data: workbookRelsXml(sheetCount) },
-    { name: "xl/styles.xml", data: stylesXml(workbookBackgroundColors) },
+    { name: "xl/styles.xml", data: stylesXml(workbookBackgroundColors, sheets.some(sheet => sheet.wrapText)) },
     ...normalizedSheets.map((sheet, index) => ({
       name: `xl/worksheets/sheet${index + 1}.xml`,
       data: worksheetXml(sheet.rows, { ...sheet, workbookBackgroundColors })

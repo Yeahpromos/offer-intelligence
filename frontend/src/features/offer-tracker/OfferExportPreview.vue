@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
-import type { OfferTrackerExportPayload, UiLanguage } from "../../shared/contracts/offer";
-import { worksheetRowBackgroundColor } from "../../shared/export/xlsx";
-import { EXPORT_PRESETS, exportMerchantSummary, exportRowColor, limitExportMerchants, validExportRanges, offerTrackerExportSheet, type ExportPreset } from "./offerTrackerExport";
+import type { OfferRecord, OfferTrackerExportPayload, UiLanguage } from "../../shared/contracts/offer";
+import { exportNumberForFormat, worksheetRowBackgroundColor, type ExportColumn } from "../../shared/export/xlsx";
+import { EXPORT_PRESETS, exportMerchantSummary, exportRowColor, limitExportMerchants, validExportRanges, offerTrackerExportSheets, type ExportPreset } from "./offerTrackerExport";
 
 const props = defineProps<{ payload: OfferTrackerExportPayload; language: UiLanguage }>();
 const emit = defineEmits<{ close: []; confirm: [payload: OfferTrackerExportPayload] }>();
@@ -17,7 +17,9 @@ const ranges = ref<{ start: number; end: number; color: string }[]>([]);
 const outputRows = computed(() => limitExportMerchants(props.payload.rows, quantities.value));
 const outputSummary = computed(() => exportMerchantSummary(outputRows.value));
 const rangesValid = computed(() => validExportRanges(ranges.value, outputRows.value.length));
-const sheet = computed(() => offerTrackerExportSheet({ ...props.payload, rows: outputRows.value, backgroundPreset: preset.value, backgroundRanges: rangesValid.value ? ranges.value : [] }));
+const sheetIndex = ref(props.payload.view === "products" ? 1 : 0);
+const sheets = computed(() => offerTrackerExportSheets({ ...props.payload, rows: outputRows.value, backgroundPreset: preset.value, backgroundRanges: rangesValid.value ? ranges.value : [] }));
+const sheet = computed(() => sheets.value[sheetIndex.value]!);
 const pages = computed(() => Math.max(1, Math.ceil(outputRows.value.length / 25)));
 const visibleRows = computed(() => outputRows.value.slice((page.value - 1) * 25, page.value * 25));
 watch(outputRows, () => { page.value = Math.min(page.value, pages.value); });
@@ -32,14 +34,23 @@ function confirm(): void {
 const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 const previousOverflow = document.body.style.overflow;
 const columnNames: Readonly<Record<string, readonly [string, string]>> = {
-  merchantName: ["商家名称", "Merchant name"], merchantId: ["商家 ID", "Merchant ID"],
-  tier: ["分层", "Tier"], network: ["联盟网络", "Network"],
-  affCommissionRate: ["AFF 佣金", "AFF commission"], aov: ["客单价", "AOV"],
-  revenue: ["营收", "Revenue"], category: ["品类", "Category"], topAsins: ["营收优先 ASIN", "Revenue-ranked ASINs"]
+  "Priority": ["优先级", "Priority"], "Merchant Name": ["商家名称", "Merchant Name"], "Merchant ID": ["商家 ID", "Merchant ID"],
+  "Tier": ["分层", "Tier"], "AFF Commission": ["AFF 佣金", "AFF Commission"], "AOV": ["客单价", "AOV"],
+  "Revenue": ["营收", "Revenue"], "AOV Type": ["AOV 类型", "AOV Type"], "BB Preference": ["是否介意 BB", "BB Preference"],
+  "Category": ["品类", "Category"], "Recommendation": ["推荐信息", "Recommendation"], "Top Rank ASINs": ["营收优先 ASIN · 前 5 个", "Revenue-ranked ASINs · Top 5"]
 };
 function columnLabel(key: string): string {
   const labels = columnNames[key];
   return labels ? text(labels[0]!, labels[1]!) : key;
+}
+
+function cellValue(column: ExportColumn, row: OfferRecord, index: number): string {
+  const value = column[1](row, (page.value - 1) * 25 + index, sheet.value);
+  if (column[3] === "percentage") {
+    const number = exportNumberForFormat(value, "percentage");
+    return number === null ? String(value ?? "") : `${(number * 100).toFixed(2)}%`;
+  }
+  return String(value ?? "");
 }
 
 function keydown(event: KeyboardEvent): void {
@@ -91,10 +102,13 @@ onBeforeUnmount(() => { document.body.style.overflow = previousOverflow; void ne
             <button type="button" :disabled="!outputRows.length || ranges.some(range => range.end >= outputRows.length)" @click="addRange">{{ text('添加高亮区间', 'Add highlight range') }}</button>
           </details>
           <p v-if="!rangesValid" role="alert" class="offer-export-error">{{ text('请检查高亮区间：行号必须在导出范围内，起始行不能大于结束行，区间不能重叠。', 'Highlight ranges must be within the output rows, in ascending order, and must not overlap.') }}</p>
-          <p>{{ text('下表按导出顺序预览全部字段；背景颜色会保留在 Excel 中。每页显示 25 行，下载包含全部预览行。', 'Preview all fields in export order. Excel retains these background colors. The preview shows 25 rows per page; the download includes every row.') }}</p>
+          <p>{{ text('一个 Excel 包含 Offer 清单和品牌产品清单，按列设置导出。ASIN 仅保留营收优先排序的前 5 个。背景颜色在两个工作表中一致；每页预览 25 行，下载包含全部预览行。', 'One Excel file contains both the offer list and brand product list, using your column settings. ASINs are limited to the revenue-ranked top 5. Both sheets retain the same backgrounds; the preview shows 25 rows per page and the download includes every row.') }}</p>
+          <div class="offer-export-sheets" :aria-label="text('工作表预览', 'Worksheet preview')">
+            <button v-for="(item, index) in sheets" :key="item.sheetName" type="button" :aria-pressed="sheetIndex === index" @click="sheetIndex = index">{{ index === 0 ? text('Offer 清单', 'Offer list') : text('品牌产品清单', 'Brand product list') }}</button>
+          </div>
           <div class="offer-export-table" tabindex="0" :aria-label="text('导出数据预览，可横向滚动', 'Export data preview, scroll horizontally')">
             <table><thead><tr><th v-for="column in sheet.columns" :key="column[0]" scope="col" :title="column[0]">{{ columnLabel(column[0]) }}</th></tr></thead>
-              <tbody><tr v-for="(row, index) in visibleRows" :key="index" :style="{ background: worksheetRowBackgroundColor((page - 1) * 25 + index + 1, sheet.rowBackgroundRanges) || '#fff' }"><td v-for="column in sheet.columns" :key="column[0]">{{ String(column[1](row, (page - 1) * 25 + index, sheet) ?? '') }}</td></tr></tbody>
+              <tbody><tr v-for="(row, index) in visibleRows" :key="index" :style="{ background: worksheetRowBackgroundColor((page - 1) * 25 + index + 1, sheet.rowBackgroundRanges) || '#fff' }"><td v-for="column in sheet.columns" :key="column[0]">{{ cellValue(column, row, index) }}</td></tr></tbody>
             </table>
           </div>
           <nav :aria-label="text('预览分页', 'Preview pagination')"><button :disabled="page <= 1" @click="page--">{{ text('上一页', 'Previous') }}</button><span aria-live="polite">{{ page }} / {{ pages }}</span><button :disabled="page >= pages" @click="page++">{{ text('下一页', 'Next') }}</button></nav>
@@ -111,6 +125,8 @@ onBeforeUnmount(() => { document.body.style.overflow = previousOverflow; void ne
 header, footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 24px; flex-shrink: 0; }
 header { border-bottom: 1px solid #d8e3f5; } h2 { margin: 0; font-size: 22px; } p { font-size: 13px; line-height: 1.6; margin: 8px 0; color: #526786; }
 .offer-export-content { padding: 20px 24px; overflow: auto; }
+.offer-export-sheets { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.offer-export-sheets button[aria-pressed="true"] { color: #1d4ed8; background: #eff6ff; border-color: #2563eb; }
 .offer-export-tier-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
 .offer-export-tier-counts > div { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; background: #f2f6ff; border: 1px solid #d8e3f5; border-radius: 10px; padding: 14px; font-size: 13px; }
 .offer-export-tier-counts .offer-export-quantity { grid-column: 1 / -1; width: auto; min-width: 0; border: 0; padding: 0; justify-content: space-between; }

@@ -47,7 +47,7 @@ import {
 import { createI18nStore } from "./shared/i18n";
 import { defaultPageForLevel } from "./shared/pageAccess";
 import OfferTrackerPage from "./features/offer-tracker/OfferTrackerPage.vue";
-import { offerTrackerExportSheet } from "./features/offer-tracker/offerTrackerExport";
+import { offerTrackerExportSheets } from "./features/offer-tracker/offerTrackerExport";
 import { loadOfferTrackerRange } from "./features/offer-tracker/offerTrackerApi";
 import PaymentsPage from "./features/payments/PaymentsPage.vue";
 import PublishersPage from "./features/publishers/PublishersPage.vue";
@@ -211,8 +211,8 @@ function defaultDateRange(data: AppBootstrapData): OfferTrackerDateRange {
 function downloadOfferTracker(payload: OfferTrackerExportPayload): boolean {
   if (!payload.rows.length) return false;
   return downloadWorkbook(
-    `offer-tracker_${payload.rows.length}_rows_${exportDateStamp()}.xlsx`,
-    { sheets: [offerTrackerExportSheet(payload)] }
+    `YP_Amazon_Offer_List_Tracker_${payload.selectedOnly ? "selected" : "filtered"}_${payload.rows.length}_${exportDateStamp()}.xlsx`,
+    { sheets: offerTrackerExportSheets(payload) }
   );
 }
 
@@ -1042,6 +1042,8 @@ window.OI_MODERN_RUNTIME = {
         rows: payload.rows.filter(isRecord),
         view: payload.view === "products" ? "products" : "offers",
         selectedOnly: payload.selectedOnly === true,
+        visibleColumns: isRecord(payload.visibleColumns) ? Object.fromEntries(Object.entries(payload.visibleColumns).filter(([, value]) => typeof value === "boolean")) : undefined,
+        rules: isRecord(payload.rules) ? { highScore: Number(payload.rules.highScore), lowAovMax: Number(payload.rules.lowAovMax) } : undefined,
         backgroundPreset: payload.backgroundPreset === "blue" || payload.backgroundPreset === "none" ? payload.backgroundPreset : "tier",
         backgroundRanges: Array.isArray(payload.backgroundRanges) ? payload.backgroundRanges.filter(isRecord).map((range) => ({ start: Number(range.start), end: Number(range.end), color: String(range.color || "") })) : []
       });

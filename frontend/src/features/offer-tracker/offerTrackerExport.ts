@@ -1,7 +1,7 @@
-import type { OfferRecord, OfferTrackerExportPayload } from "../../shared/contracts/offer";
+import type { OfferRecord, OfferTrackerExportPayload, OfferTrackerOptionalColumn } from "../../shared/contracts/offer";
 import { TIER_NAMES } from "../../shared/contracts/tier";
-import { normalizeExportColor, objectExportColumns, type ExportSheet } from "../../shared/export/xlsx";
-import { normalizeOfferRecord } from "./offerTrackerModel";
+import { normalizeExportColor, type ExportColumn, type ExportSheet } from "../../shared/export/xlsx";
+import { aovTypeLabel, bbPolicyLabel, normalizeOfferRecord, offerTrackerExportColumns, priorityLabel } from "./offerTrackerModel";
 
 export const EXPORT_PRESETS = ["tier", "blue", "none"] as const;
 export type ExportPreset = typeof EXPORT_PRESETS[number];
@@ -53,18 +53,46 @@ export function validExportRanges(ranges: NonNullable<OfferTrackerExportPayload[
     && Boolean(normalizeExportColor(range.color)) && (!index || sorted[index - 1]!.end < range.start));
 }
 
-// Keep all source fields and row order; preview and download share the same sheet.
+const widths: Readonly<Record<string, number>> = {
+  priority: 22, merchantId: 16, merchantName: 28, tier: 14, commission: 16,
+  aov: 14, revenue: 16, aovType: 14, bbPolicy: 18, category: 34, recommendation: 54, asins: 42
+};
+
+// Both preview and workbook use the business schema, never raw API fields.
 export function offerTrackerExportSheet(payload: OfferTrackerExportPayload): ExportSheet {
   const preset = payload.backgroundPreset || "tier";
   const ranges = payload.backgroundRanges || [];
   if (!validExportRanges(ranges, payload.rows.length)) throw new Error("Invalid export background ranges");
+  const normalized = new Map(payload.rows.map(row => [row, normalizeOfferRecord(row, payload.rules)]));
+  const columns: ExportColumn[] = offerTrackerExportColumns(payload.view)
+    .filter(({ key }) => ["priority", "merchantId", "merchantName"].includes(key)
+      || payload.visibleColumns?.[(key === "aovType" ? "aov" : key) as OfferTrackerOptionalColumn] !== false)
+    .map(({ label, key }): ExportColumn => [label, source => {
+      const row = normalized.get(source) || normalizeOfferRecord(source, payload.rules);
+      switch (key) {
+        case "priority": return priorityLabel(row.priority.key, "en");
+        case "commission": return `${row.commissionRate}%`;
+        case "aovType": return aovTypeLabel(row.aovType, "en");
+        case "bbPolicy": return bbPolicyLabel(row.bbPolicy, "en");
+        case "asins": return row.asins.slice(0, 5).join(", ");
+        case "recommendation": return row.priority.key === "high" ? "Prioritize outreach and placement"
+          : row.priority.key === "low-aov" ? "Good fit for low-AOV testing" : "Keep in the standard opportunity pool";
+        default: return row[key as keyof typeof row] ?? "";
+      }
+    }, widths[key], key === "commission" ? "percentage" : ""]);
   return {
-    sheetName: payload.view === "products" ? "Products" : "Offers",
+    sheetName: payload.view === "products" ? "Brand Product List" : "List of Offers",
     rows: payload.rows,
-    columns: objectExportColumns(payload.rows, ["merchantName", "merchantId", "tier", "network", "affCommissionRate", "aov", "revenue", "category", "topAsins"]),
+    columns,
     referenceStyle: true,
+    wrapText: true,
+    freezeHeader: true,
     rowBackgroundRanges: [...ranges, ...(preset === "none" ? [] : payload.rows.map((row, index) => ({
       start: index + 1, end: index + 1, color: exportRowColor(row, preset)
     }))) ]
   };
+}
+
+export function offerTrackerExportSheets(payload: OfferTrackerExportPayload): readonly ExportSheet[] {
+  return ["offers", "products"].map(view => offerTrackerExportSheet({ ...payload, view: view as "offers" | "products" }));
 }

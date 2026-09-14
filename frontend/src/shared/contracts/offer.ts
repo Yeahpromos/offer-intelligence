@@ -2,6 +2,8 @@ export type OfferRecord = Readonly<Record<string, unknown>>;
 
 export type { UiLanguage } from "../i18n";
 export type OfferTrackerView = "offers" | "products";
+export type OfferTrackerOptionalColumn = "tier" | "commission" | "aov" | "revenue" | "bbPolicy" | "category" | "asins" | "recommendation";
+export type OfferTrackerColumnVisibility = Readonly<Partial<Record<OfferTrackerOptionalColumn, boolean>>>;
 export type OfferTrackerBbPolicy = "all" | "mind" | "open" | "unknown";
 export type OfferTrackerRevenueStatus = "all" | "positive" | "none";
 export type OfferTrackerRevenueSort = "priority" | "revenue-desc" | "revenue-asc";
@@ -88,6 +90,8 @@ export interface OfferTrackerExportPayload {
   readonly rows: readonly OfferRecord[];
   readonly view: OfferTrackerView;
   readonly selectedOnly: boolean;
+  readonly visibleColumns?: OfferTrackerColumnVisibility;
+  readonly rules?: OfferTrackerRules;
   readonly backgroundPreset?: "tier" | "blue" | "none";
   readonly backgroundRanges?: readonly { start: number; end: number; color: string }[];
 }

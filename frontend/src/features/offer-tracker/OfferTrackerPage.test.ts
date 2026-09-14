@@ -233,8 +233,9 @@ describe("OfferTrackerPage", () => {
     expect(wrapper.find('nav[aria-label="Offer Tracker pagination"]').exists()).toBe(true);
   });
 
-  it("opens column settings and hides an optional column", async () => {
-    const wrapper = mountTracker();
+  it("carries column settings into both export sheets and the download payload", async () => {
+    const payloads: OfferTrackerExportPayload[] = [];
+    const wrapper = mountTracker({ download: payload => payloads.push(payload) });
 
     expect(wrapper.findAll("#offerTrackerColumnsPanel")).toHaveLength(0);
     await wrapper.get('button[aria-label="列设置"]').trigger("click");
@@ -248,6 +249,24 @@ describe("OfferTrackerPage", () => {
     expect(wrapper.findAll(".offer-tracker-table th")).toHaveLength(9);
     expect(wrapper.find('th[data-column="revenue"]').exists()).toBe(false);
     expect(wrapper.find('td[data-column="revenue"]').exists()).toBe(false);
+    await wrapper.get('button[aria-label="导出当前筛选"]').trigger("click");
+    expect(wrapper.find('.offer-export-table th[title="Revenue"]').exists()).toBe(false);
+    await wrapper.get('.offer-export-sheets button:last-child').trigger("click");
+    expect(wrapper.find('.offer-export-table th[title="Revenue"]').exists()).toBe(false);
+    await wrapper.get('.offer-export-confirm').trigger("click");
+    expect(payloads[0]?.visibleColumns?.revenue).toBe(false);
+    expect(payloads[0]?.rules).toEqual({ highScore: 8, lowAovMax: 100 });
+  });
+
+  it("restores saved column settings before opening an export preview", async () => {
+    window.localStorage.setItem("offerListTrackerColumnsV1", JSON.stringify({ aov: false, asins: false }));
+    const wrapper = mountTracker({ download: () => undefined });
+    await nextTick();
+    await wrapper.get('button[aria-label="导出当前筛选"]').trigger("click");
+    expect(wrapper.get('.offer-export-table thead').text()).not.toContain("客单价");
+    expect(wrapper.get('.offer-export-table thead').text()).not.toContain("AOV 类型");
+    await wrapper.get('.offer-export-sheets button:last-child').trigger("click");
+    expect(wrapper.get('.offer-export-table thead').text()).not.toContain("ASIN");
   });
 
   it("saves priority rules and recalculates row priority", async () => {

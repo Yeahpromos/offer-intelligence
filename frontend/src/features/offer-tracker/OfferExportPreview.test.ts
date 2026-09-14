@@ -28,6 +28,22 @@ describe("Offer export preview", () => {
     await wrapper.get('[role="dialog"]').trigger('keydown', { key: 'Escape' });
     expect(wrapper.emitted('close')).toHaveLength(2);
   });
+  it("previews both worksheets with selected columns and the same top five ASINs", async () => {
+    const asins = ["B000000009", "B000000007", "B000000005", "B000000003", "B000000001", "B000000002"];
+    const wrapper = mount(OfferExportPreview, { global: { stubs: { teleport: true } }, props: {
+      language: "en", payload: { rows: [{ ...rows[0], affCommissionRate: 18.75, topAsins: asins }], view: "offers", selectedOnly: true, visibleColumns: { revenue: false, aov: false } }
+    } });
+    expect(wrapper.get("thead").text()).toContain("AFF Commission");
+    expect(wrapper.get("tbody").text()).toContain("18.75%");
+    expect(wrapper.get("thead").text()).not.toContain("Revenue");
+    expect(wrapper.get("thead").text()).not.toContain("AOV");
+    await wrapper.get('.offer-export-sheets button:last-child').trigger("click");
+    expect(wrapper.get("thead").text()).not.toContain("AFF Commission");
+    expect(wrapper.get("tbody").text()).toContain(asins.slice(0, 5).join(", "));
+    expect(wrapper.get("tbody").text()).not.toContain(asins[5]);
+    await wrapper.get('.offer-export-confirm').trigger("click");
+    expect(wrapper.emitted("confirm")?.[0]?.[0]).toMatchObject({ visibleColumns: { revenue: false, aov: false } });
+  });
   it("keeps keyboard navigation within the dialog", async () => {
     const wrapper = preview();
     const last = wrapper.get('.offer-export-confirm');

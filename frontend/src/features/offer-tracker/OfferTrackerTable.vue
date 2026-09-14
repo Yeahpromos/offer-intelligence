@@ -6,6 +6,8 @@ import { formatInteger } from "../../shared/format/number";
 import { formatPercentage } from "../../shared/format/percentage";
 import { translateMessage } from "../../shared/i18n";
 import type {
+  OfferTrackerColumnVisibility,
+  OfferTrackerOptionalColumn,
   OfferTrackerRow,
   OfferTrackerRules,
   OfferTrackerSelectionSummary,
@@ -20,7 +22,7 @@ import {
   priorityLabel
 } from "./offerTrackerModel";
 
-type OptionalColumnKey = "tier" | "commission" | "aov" | "revenue" | "bbPolicy" | "category" | "asins" | "recommendation";
+type OptionalColumnKey = OfferTrackerOptionalColumn;
 type PanelName = "columns" | "rules" | null;
 
 const DEFAULT_VISIBLE_COLUMNS: Readonly<Record<OptionalColumnKey, boolean>> = Object.freeze({
@@ -59,10 +61,12 @@ const emit = defineEmits<{
   (event: "page-change", page: number): void;
   (event: "view-change", view: OfferTrackerView): void;
   (event: "rules-change", rules: OfferTrackerRules): void;
+  (event: "columns-change", columns: OfferTrackerColumnVisibility): void;
 }>();
 
 const isProductsView = computed(() => props.view === "products");
 const visibleColumns = ref<Record<OptionalColumnKey, boolean>>({ ...DEFAULT_VISIBLE_COLUMNS });
+watch(visibleColumns, columns => emit("columns-change", { ...columns }), { immediate: true });
 const openPanel = ref<PanelName>(null);
 const draftHighScore = ref(DEFAULT_OFFER_TRACKER_RULES.highScore);
 const draftLowAovMax = ref(DEFAULT_OFFER_TRACKER_RULES.lowAovMax);

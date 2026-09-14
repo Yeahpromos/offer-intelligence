@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 
 import type {
   OfferRecord,
+  OfferTrackerColumnVisibility,
   OfferTrackerDateRange,
   OfferTrackerExportPayload,
   OfferTrackerRules,
@@ -119,6 +120,7 @@ const errorMessage = computed(() => {
 });
 
 const exportPreview = ref<OfferTrackerExportPayload | null>(null);
+const visibleColumns = ref<OfferTrackerColumnVisibility>({});
 
 function emitDownload(selectedOnly: boolean): void {
   if (!props.download) return;
@@ -127,7 +129,9 @@ function emitDownload(selectedOnly: boolean): void {
   exportPreview.value = {
     rows: [...rows],
     view: view.value,
-    selectedOnly
+    selectedOnly,
+    visibleColumns: { ...visibleColumns.value },
+    rules: { ...rules.value }
   };
 }
 
@@ -289,6 +293,7 @@ onMounted(() => {
       @page-change="tracker.setPage"
       @view-change="tracker.setView"
       @rules-change="saveRules"
+      @columns-change="visibleColumns = $event"
     >
       <template #footer-actions>
         <button

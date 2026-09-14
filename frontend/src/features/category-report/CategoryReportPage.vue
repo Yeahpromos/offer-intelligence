@@ -6,6 +6,7 @@ import { categoryName } from "../../shared/i18n/categoryNames";
 import {
   categoryKey,
   categoryPalette,
+  categoryPieMetricKey,
   type CategoryPieSlice,
   type CategoryReportData,
   type CategoryReportGroup,
@@ -43,6 +44,14 @@ const startDraft = ref(category.startDate.value);
 const endDraft = ref(category.endDate.value);
 const searchError = ref(false);
 const fullView = ref(false);
+const revenueHidden = ref(false);
+const privacyLabel = computed(() => revenueHidden.value
+  ? (props.language === "zh" ? "显示营收" : "Show revenue")
+  : (props.language === "zh" ? "隐藏营收" : "Hide revenue"));
+const hiddenAmountLabel = computed(() => revenueHidden.value ? (props.language === "zh" ? "金额已隐藏" : "Amount hidden") : undefined);
+const privacyHint = computed(() => props.language === "zh"
+  ? "隐藏页面中的营收、AOV 和 EPC，保留百分比；导出文件仍包含原始金额。"
+  : "Hide revenue, AOV and EPC on this page while keeping percentages. Export files still contain original amounts.");
 const recordsPanel = ref<HTMLElement>();
 const fullViewButton = ref<HTMLButtonElement>();
 const recordsScroll = ref<HTMLElement>();
@@ -218,6 +227,7 @@ function formatCount(value: number): string {
 }
 
 function formatMoney(value: number | null): string {
+  if (revenueHidden.value) return "••••••";
   const numeric = Number(value) || 0;
   if (Math.abs(numeric) >= 1_000_000) return "$" + (numeric / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 2 }) + "M";
   if (Math.abs(numeric) >= 1_000) return "$" + (numeric / 1_000).toLocaleString("en-US", { maximumFractionDigits: 1 }) + "K";
@@ -229,6 +239,7 @@ function formatPercent(value: number | null): string {
 }
 
 function formatEpc(value: number | null): string {
+  if (revenueHidden.value) return "••••••";
   return value === null || !Number.isFinite(value) ? "-" : "$" + value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
@@ -257,7 +268,7 @@ function metricValue(group: CategoryReportGroup): number {
 
 function metricText(group: CategoryReportGroup): string {
   const value = metricValue(group);
-  return category.sortKey.value === "revenue" ? formatMoney(value) : formatCount(value);
+  return categoryPieMetricKey(category.sortKey.value) === "revenue" ? formatMoney(value) : formatCount(value);
 }
 
 function metricShare(group: CategoryReportGroup): string {
@@ -307,15 +318,21 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="category-page-modern" data-page="category" :aria-busy="category.loading.value ? 'true' : 'false'">
+  <main class="category-page-modern" :class="{ 'is-revenue-hidden': revenueHidden }" data-page="category" :aria-busy="category.loading.value ? 'true' : 'false'">
     <header class="tier-header">
       <div>
         <h2>{{ copy.title }}</h2>
         <p>{{ copy.subtitle }}</p>
       </div>
+      <div class="category-revenue-actions">
       <span class="category-report-source" :class="'is-' + category.source.value">
         {{ copy.source }} · {{ sourceLabel }}
       </span>
+      <button class="category-revenue-toggle" type="button" :aria-pressed="revenueHidden" :title="privacyHint" @click="revenueHidden = !revenueHidden">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /><path v-if="revenueHidden" d="m3 3 18 18" /></svg>
+        {{ privacyLabel }}
+      </button>
+      </div>
     </header>
 
     <section class="panel table-panel dashboard-category-report" aria-label="Category-wise report">
@@ -400,7 +417,7 @@ onUnmounted(() => {
         <dl class="dashboard-category-report-totals">
           <div v-for="card in summaryCards" :key="card.key">
             <dt>{{ card.label }}</dt>
-            <dd>{{ card.value }}</dd>
+            <dd :data-sensitive-revenue="card.key === 'revenue' ? '' : undefined" :aria-label="card.key === 'revenue' ? hiddenAmountLabel : undefined">{{ card.value }}</dd>
           </div>
         </dl>
 
@@ -441,7 +458,7 @@ onUnmounted(() => {
             </svg>
             <div class="category-pie-spotlight">
               <strong>{{ category.focusKey.value ? copy.revenue : centerLabel }}</strong>
-              <span>{{ formatMoney(category.summary.value.revenue) }}</span>
+              <span data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatMoney(category.summary.value.revenue) }}</span>
               <small>{{ centerLabel }}</small>
             </div>
           </div>
@@ -470,7 +487,7 @@ onUnmounted(() => {
               >
                 <span class="category-pie-swatch" aria-hidden="true" />
                 <strong>{{ displayCategory(slice.label) }}</strong>
-                <span>{{ metricText(slice.group) }} / {{ (slice.share * 100).toFixed(1) }}%</span>
+                <span><span :data-sensitive-revenue="categoryPieMetricKey(category.sortKey.value) === 'revenue' ? '' : undefined" :aria-label="categoryPieMetricKey(category.sortKey.value) === 'revenue' ? hiddenAmountLabel : undefined">{{ metricText(slice.group) }}</span> / {{ (slice.share * 100).toFixed(1) }}%</span>
               </li>
             </ul>
             <div v-if="firstSlice" class="category-pie-actions" :style="{ '--category-color': firstSlice.color, '--category-tint': firstSlice.tint }">
@@ -504,7 +521,7 @@ onUnmounted(() => {
             <ul class="category-preview-bars">
               <li v-for="group in category.visibleGroups.value.slice(0, 4)" :key="group.category" :style="{ '--category-color': categoryPalette(group.category).color }">
                 <span>{{ displayCategory(group.category) }}</span>
-                <strong>{{ metricText(group) }}</strong>
+                <strong :data-sensitive-revenue="categoryPieMetricKey(category.sortKey.value) === 'revenue' ? '' : undefined" :aria-label="categoryPieMetricKey(category.sortKey.value) === 'revenue' ? hiddenAmountLabel : undefined">{{ metricText(group) }}</strong>
                 <i aria-hidden="true"><b :style="{ width: Math.max(5, metricShare(group) === '-' ? 5 : parseFloat(metricShare(group))) + '%' }" /></i>
               </li>
             </ul>
@@ -516,14 +533,14 @@ onUnmounted(() => {
             </div>
             <div class="category-drawer-preview">
               <dl>
-                <div><dt>{{ copy.revenue }}</dt><dd>{{ formatMoney(category.visibleGroups.value[0].revenue) }}</dd></div>
+                <div><dt>{{ copy.revenue }}</dt><dd data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatMoney(category.visibleGroups.value[0].revenue) }}</dd></div>
                 <div><dt>{{ copy.cvr }}</dt><dd>{{ formatPercent(category.visibleGroups.value[0].avgCvr) }}</dd></div>
                 <div><dt>{{ copy.orders }}</dt><dd>{{ formatCount(category.visibleGroups.value[0].orders) }}</dd></div>
               </dl>
               <ul>
                 <li v-for="row in category.visibleGroups.value[0].rows.slice(0, 4)" :key="row.key">
                   <span>{{ row.merchantName || "-" }}</span>
-                  <strong>{{ formatMoney(row.revenue) }}</strong>
+                  <strong data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatMoney(row.revenue) }}</strong>
                 </li>
               </ul>
             </div>
@@ -546,7 +563,7 @@ onUnmounted(() => {
         </section>
 
         <Teleport v-if="fullView || category.visibleGroups.value.length" to="body" :disabled="!fullView">
-        <div class="category-page-modern category-records-view" :class="{ 'is-full-view': fullView }" data-modern-root>
+        <div class="category-page-modern category-records-view" :class="{ 'is-full-view': fullView, 'is-revenue-hidden': revenueHidden }" data-modern-root>
         <section ref="recordsPanel" class="dashboard-category-records" :role="fullView ? 'dialog' : 'region'" :aria-modal="fullView ? 'true' : undefined" aria-labelledby="category-records-title">
           <div class="dashboard-category-table-toolbar">
             <div class="dashboard-category-table-heading">
@@ -563,6 +580,7 @@ onUnmounted(() => {
               <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path :d="fullView ? 'M9 3v6H3m18 0h-6V3M3 15h6v6m6 0v-6h6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6'" /></svg>
               {{ fullView ? copy.exitFullView : copy.fullView }}
             </button>
+            <button v-if="fullView" class="category-revenue-toggle" type="button" :aria-pressed="revenueHidden" :title="privacyHint" @click="revenueHidden = !revenueHidden">{{ privacyLabel }}</button>
             </div>
           </div>
           <div ref="recordsScroll" class="table-wrap tier-category-table-wrap dashboard-category-table-wrap" tabindex="0" :aria-label="copy.tableTitle">
@@ -611,12 +629,12 @@ onUnmounted(() => {
                     <span class="category-rank-bar" aria-hidden="true"><span :style="{ width: Math.max(4, group.revenue / Math.max(...category.visibleGroups.value.map((item) => item.revenue), 1) * 100) + '%', '--category-color': categoryPalette(group.category).color }" /></span>
                   </td>
                   <td>{{ formatCount(group.merchantCount) }}</td>
-                  <td>{{ formatMoney(group.revenue) }}</td>
+                  <td data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatMoney(group.revenue) }}</td>
                   <td>{{ formatCount(group.orders) }}</td>
                   <td>{{ formatCount(group.clicks) }}</td>
                   <td>{{ formatPercent(group.avgCvr) }}</td>
-                  <td>{{ formatEpc(group.avgEpc) }}</td>
-                  <td>{{ formatMoney(group.avgAov) }}</td>
+                  <td data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatEpc(group.avgEpc) }}</td>
+                  <td data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatMoney(group.avgAov) }}</td>
                   <td>{{ group.previewMerchants || "-" }}</td>
                   <td>
                     <div class="category-tier-mix" :aria-label="message('categoryReport.categoryTierMix', '{category} tier mix', { category: displayCategory(group.category) })">
@@ -638,12 +656,12 @@ onUnmounted(() => {
                           <tr v-for="row in group.rows" :key="'detail-' + row.key" class="category-detail-merchant-row">
                             <td><strong>{{ row.merchantName || "-" }}</strong><br /><small>{{ row.merchantId || "-" }}</small></td>
                             <td>{{ tierLabel(row.tier) }}</td>
-                            <td>{{ formatMoney(row.revenue) }}</td>
+                            <td data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatMoney(row.revenue) }}</td>
                             <td>{{ formatCount(row.orders) }}</td>
                             <td>{{ formatCount(row.clicks) }}</td>
-                            <td>{{ formatEpc(row.epc) }}</td>
+                            <td data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatEpc(row.epc) }}</td>
                             <td>{{ formatPercent(row.cvr) }}</td>
-                            <td>{{ formatMoney(row.aov) }}</td>
+                            <td data-sensitive-revenue :aria-label="hiddenAmountLabel">{{ formatMoney(row.aov) }}</td>
                           </tr>
                         </tbody>
                       </table>
