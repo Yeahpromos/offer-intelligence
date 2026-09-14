@@ -13,6 +13,7 @@ import type {
 import { translateMessage } from "../../shared/i18n";
 import OfferTrackerFilters from "./OfferTrackerFilters.vue";
 import OfferTrackerTable from "./OfferTrackerTable.vue";
+import OfferExportPreview from "./OfferExportPreview.vue";
 import { useOfferTracker, type OfferTrackerLoader } from "./useOfferTracker";
 
 const props = withDefaults(defineProps<{
@@ -117,13 +118,22 @@ const errorMessage = computed(() => {
     : translateMessage(props.language, "offerTracker.loadError", "Failed to load filtered data. Please try again.");
 });
 
+const exportPreview = ref<OfferTrackerExportPayload | null>(null);
+
 function emitDownload(selectedOnly: boolean): void {
   if (!props.download) return;
-  props.download({
-    rows: tracker.exportRows(selectedOnly),
+  const rows = tracker.exportRows(selectedOnly);
+  if (!rows.length) return;
+  exportPreview.value = {
+    rows: [...rows],
     view: view.value,
     selectedOnly
-  });
+  };
+}
+
+function confirmDownload(payload: OfferTrackerExportPayload): void {
+  props.download?.(payload);
+  exportPreview.value = null;
 }
 
 function persistSavedViews(): void {
@@ -189,7 +199,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="oi-modern-page offer-tracker-modern-page" data-page="offer-list-tracker">
+  <main class="oi-modern-page offer-tracker-modern-page" data-page="offer-list-tracker" :inert="Boolean(exportPreview)">
     <header class="offer-tracker-modern-header offer-tracker-header">
       <div>
         <span class="offer-tracker-modern-eyebrow">{{ copy.eyebrow }}</span>
@@ -291,4 +301,5 @@ onMounted(() => {
       </template>
     </OfferTrackerTable>
   </main>
+  <OfferExportPreview v-if="exportPreview" :payload="exportPreview" :language="language" @close="exportPreview = null" @confirm="confirmDownload" />
 </template>

@@ -91,6 +91,7 @@ export function useCategoryReport(options: UseCategoryReportOptions = {}) {
   const sortKey = ref<CategoryReportSortKey>("revenue");
   const sortDirection = ref<CategoryReportSortDirection>("desc");
   const focusKey = ref("");
+  const showAllCategories = ref(false);
   const expandedKey = ref("");
   const loading = ref(false);
   const loadingTiers = ref<string[]>([]);
@@ -141,7 +142,8 @@ export function useCategoryReport(options: UseCategoryReportOptions = {}) {
     visibleGroups.value,
     selectedTiers.value,
     sortKey.value,
-    focusKey.value
+    focusKey.value,
+    showAllCategories.value
   ));
 
   const summary = computed(() => ({
@@ -313,6 +315,7 @@ export function useCategoryReport(options: UseCategoryReportOptions = {}) {
     sortKey,
     sortDirection,
     focusKey,
+    showAllCategories,
     expandedKey,
     loading,
     loadingTiers,

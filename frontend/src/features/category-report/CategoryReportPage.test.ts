@@ -21,6 +21,46 @@ const report = {
 };
 
 describe("CategoryReportPage", () => {
+  it("links hover and keyboard focus without changing total revenue until click", async () => {
+    const wrapper = mount(CategoryReportPage, { props: { language: "zh", reportData: report, autoLoad: false } });
+    const ring = wrapper.get('.category-pie-slice[data-category-focus="beauty"]');
+    const legend = wrapper.get('.category-pie-legend [data-category-focus="beauty"]');
+    expect(wrapper.get('.category-pie-spotlight').text()).toContain('$3.5K');
+    await ring.trigger('mouseenter');
+    expect(legend.classes()).toContain('is-highlighted');
+    expect(wrapper.get('.category-pie-spotlight').text()).toContain('$3.5K');
+    await ring.trigger('mouseleave');
+    await legend.trigger('mouseenter');
+    expect(ring.classes()).toContain('is-highlighted');
+    await legend.trigger('mouseleave');
+    await legend.trigger('focus');
+    expect(ring.classes()).toContain('is-highlighted');
+    await legend.trigger('keydown', { key: ' ' });
+    expect(wrapper.get('.category-pie-spotlight').text()).toContain('$500');
+    expect(wrapper.get('.category-pie-slice').attributes('d')?.match(/ A /g)).toHaveLength(2);
+    await wrapper.get('.category-focus-back').trigger('click');
+    expect(wrapper.get('.category-pie-spotlight').text()).toContain('$3.5K');
+  });
+
+  it("expands all categories including zero revenue while preserving the total", async () => {
+    const data = { sheets: [{ name: 'Tier 1', rows: Array.from({ length: 12 }, (_, index) => ({
+      'Merchant ID': String(index), 'Merchant Name': `Brand ${index}`, Category: `Category ${index}`, Revenue: index === 11 ? 0 : 1000 - index * 95
+    })) }] };
+    const wrapper = mount(CategoryReportPage, { props: { language: 'zh', reportData: data, autoLoad: false } });
+    const total = wrapper.get('.category-pie-spotlight').text();
+    expect(wrapper.findAll('.category-pie-legend li')).toHaveLength(8);
+    expect(wrapper.get('.category-pie-legend').text()).toContain('其他');
+    await wrapper.get('.category-list-toggle').trigger('click');
+    expect(wrapper.findAll('.category-pie-legend li')).toHaveLength(12);
+    expect(wrapper.findAll('.category-pie-slice')).toHaveLength(12);
+    expect(wrapper.get('.category-pie-legend').text()).toContain('Category 11');
+    expect(wrapper.get('.category-pie-spotlight').text()).toBe(total);
+    await wrapper.get('.category-list-toggle').trigger('click');
+    expect(wrapper.findAll('.category-pie-legend li')).toHaveLength(8);
+    expect(wrapper.get('.category-pie-spotlight').text()).toBe(total);
+    await wrapper.get('.category-pie-legend [data-category-focus="other-categories"]').trigger('click');
+    expect(wrapper.findAll('.category-pie-legend li')).toHaveLength(5);
+  });
   it("translates category surfaces and search without changing grouping, colors or exports", async () => {
     const downloads: unknown[] = [];
     const data = { sheets: [{ name: "Tier 1", rows: [
@@ -38,7 +78,8 @@ describe("CategoryReportPage", () => {
     expect(wrapper.findAll(".category-name-chip").map(row => row.attributes("style"))).toEqual(colors);
     expect(wrapper.get(".category-pie-legend").text()).toContain("家居、厨具、家装");
     expect(wrapper.get(".category-pie-slice title").text()).toContain("电子");
-    expect(wrapper.get(".category-pie-spotlight").text()).toContain("电子领先");
+    expect(wrapper.get(".category-pie-spotlight").text()).toContain("总营收");
+    expect(wrapper.get(".category-pie-spotlight").text()).toContain("$1.5K");
     const search = wrapper.get<HTMLInputElement>("#category-report-search");
     await search.setValue("电子");
     await search.trigger("change");

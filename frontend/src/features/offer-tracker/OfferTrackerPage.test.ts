@@ -163,17 +163,24 @@ describe("OfferTrackerPage", () => {
     expect(wrapper.text()).toContain("没有符合当前筛选条件的 Offer");
   });
 
-  it("emits selected/all export payloads through the injected legacy callback", async () => {
+  it("previews selected/all rows and exports only after confirmation", async () => {
     const payloads: OfferTrackerExportPayload[] = [];
     const wrapper = mountTracker({ download: (payload) => payloads.push(payload) });
 
     await wrapper.get('button[aria-label="导出当前筛选"]').trigger("click");
+    expect(payloads).toHaveLength(0);
+    expect(wrapper.get('[role="dialog"]').text()).toContain("30 个商家");
+    expect(wrapper.get('.offer-export-tier-counts').text()).toContain("Tier 129");
+    await wrapper.get('.offer-export-confirm').trigger("click");
     expect(payloads[0]).toMatchObject({ view: "offers", selectedOnly: false });
     expect(payloads[0]?.rows).toHaveLength(30);
 
     await wrapper.get('input[data-row-select="offer-01"]').setValue(true);
     await wrapper.get('button[aria-label="导出已选择"]').trigger("click");
-    expect(payloads[1]).toMatchObject({ view: "offers", selectedOnly: true });
+    expect(payloads).toHaveLength(1);
+    await wrapper.get('input[value="blue"]').setValue(true);
+    await wrapper.get('.offer-export-confirm').trigger("click");
+    expect(payloads[1]).toMatchObject({ view: "offers", selectedOnly: true, backgroundPreset: "blue" });
     expect(payloads[1]?.rows).toHaveLength(1);
 
     await wrapper.get('button[aria-label="产品视图"]').trigger("click");

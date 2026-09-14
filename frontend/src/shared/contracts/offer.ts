@@ -88,4 +88,6 @@ export interface OfferTrackerExportPayload {
   readonly rows: readonly OfferRecord[];
   readonly view: OfferTrackerView;
   readonly selectedOnly: boolean;
+  readonly backgroundPreset?: "tier" | "blue" | "none";
+  readonly backgroundRanges?: readonly { start: number; end: number; color: string }[];
 }

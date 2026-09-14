@@ -514,24 +514,24 @@ export function buildCategoryPieSlices(
   groups: readonly CategoryReportGroup[],
   selectedTiers: readonly string[] = CATEGORY_REPORT_STANDARD_TIERS,
   sortKey: CategoryReportSortKey = "revenue",
-  focusKey = ""
+  focusKey = "",
+  showAll = false
 ): CategoryPieSlice[] {
   const metric = categoryPieMetricKey(sortKey);
-  const positive = groups.map((group) => ({ group, value: categoryMetricValue(group, metric) })).filter((slice) => slice.value > 0);
-  const total = positive.reduce((sum, slice) => sum + slice.value, 0);
-  if (!total) return [];
-  const selected = new Set(selectedTiers.map(canonicalTier));
-  const globalOverview = CATEGORY_REPORT_STANDARD_TIERS.every((tier) => selected.has(tier))
-    && selected.size === CATEGORY_REPORT_STANDARD_TIERS.length;
-  const visible = globalOverview && !focusKey ? positive.slice(0, 7) : positive.slice();
-  const overflow = globalOverview && !focusKey ? positive.slice(7) : [];
+  const ranked = groups.map((group) => ({ group, value: Math.max(0, categoryMetricValue(group, metric)) }))
+    .sort((left, right) => right.value - left.value || categoryCompare(left.group.category, right.group.category));
+  const total = ranked.reduce((sum, slice) => sum + Math.max(0, slice.value), 0);
+  const expanded = showAll || Boolean(focusKey);
+  const visible = expanded ? ranked.slice() : ranked.filter((slice, index) => index < 7 && total > 0 && slice.value / total >= 0.02);
+  const included = new Set(visible);
+  const overflow = expanded ? [] : ranked.filter(slice => !included.has(slice));
   if (overflow.length) visible.push({
     group: otherGroup(overflow),
     value: overflow.reduce((sum, slice) => sum + slice.value, 0)
   });
   let current = 0;
   return visible.map((slice) => {
-    const share = slice.value / total;
+    const share = total ? Math.max(0, slice.value) / total : 0;
     const dash = share * 100;
     const palette = slice.group.category === "Other selected categories"
       ? { color: "#6366f1", tint: "#eef2ff" }

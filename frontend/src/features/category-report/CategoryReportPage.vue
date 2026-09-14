@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { translateMessage, type UiLanguage } from "../../shared/i18n";
 import { categoryName } from "../../shared/i18n/categoryNames";
 import {
   categoryKey,
   categoryPalette,
+  type CategoryPieSlice,
   type CategoryReportData,
   type CategoryReportGroup,
   type CategoryReportSortKey
@@ -91,6 +92,7 @@ function message(key: string, fallback: string, values: Record<string, string | 
 }
 
 function displayCategory(value: string): string {
+  if (value === "Other selected categories") return props.language === "zh" ? "其他" : "Other";
   return categoryName(value, props.language);
 }
 
@@ -190,6 +192,26 @@ const selectedMetricLabel = computed(() =>
   metricButtons.value.find((item) => item.key === category.sortKey.value)?.label || copy.value.revenue
 );
 const firstSlice = computed(() => category.pieSlices.value[0] || null);
+const hoveredCategory = ref("");
+const focusedCategory = ref("");
+const highlightedCategory = computed(() => hoveredCategory.value || focusedCategory.value);
+watch(category.pieSlices, () => { hoveredCategory.value = ""; focusedCategory.value = ""; });
+const centerLabel = computed(() => !category.focusKey.value
+  ? (props.language === "zh" ? "总营收" : "Total revenue")
+  : category.focusKey.value === "other-categories" ? displayCategory("Other selected categories")
+    : displayCategory(category.visibleGroups.value[0]?.category || ""));
+function toggleCategoryList(): void {
+  category.clearFocus();
+  category.showAllCategories.value = !category.showAllCategories.value;
+}
+
+function slicePath(slice: CategoryPieSlice): string {
+  if (slice.share <= 0) return "";
+  const start = -slice.dashOffset / 100 * Math.PI * 2;
+  const point = (angle: number) => `${50 + 40 * Math.cos(angle)} ${50 + 40 * Math.sin(angle)}`;
+  if (slice.share >= 1) return `M ${point(start)} A 40 40 0 1 1 ${point(start + Math.PI)} A 40 40 0 1 1 ${point(start + 2 * Math.PI)}`;
+  return `M ${point(start)} A 40 40 0 ${slice.share > .5 ? 1 : 0} 1 ${point(start + slice.share * 2 * Math.PI)}`;
+}
 
 function formatCount(value: number): string {
   return (Number(value) || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -265,11 +287,10 @@ function selectMetric(key: CategoryReportSortKey): void {
 }
 
 function exportSlice(): void {
-  const slice = firstSlice.value;
-  if (!slice || !props.download) return;
+  if (!category.visibleGroups.value.length || !props.download) return;
   props.download({
-    label: slice.label,
-    rows: slice.group.rows.map((row) => row.raw)
+    label: category.visibleGroups.value.length === 1 ? category.visibleGroups.value[0]!.category : copy.value.allCategories,
+    rows: category.visibleGroups.value.flatMap(group => group.rows.map(row => row.raw))
   });
 }
 
@@ -389,52 +410,63 @@ onUnmounted(() => {
             <span>{{ copy.allCategories }}</span>
           </button>
           <div class="category-pie-visual" :style="{ '--leader-color': firstSlice?.color || '#2f80ff' }">
-            <svg class="category-pie-svg" viewBox="0 0 100 100" role="img" :aria-label="message('categoryReport.metricMix', '{metric} mix by category', { metric: selectedMetricLabel })">
+            <svg class="category-pie-svg" viewBox="-4 -4 108 108" role="group" :aria-label="message('categoryReport.metricMix', '{metric} mix by category', { metric: selectedMetricLabel })">
               <circle class="category-pie-track" cx="50" cy="50" r="40" />
               <g transform="rotate(-90 50 50)">
-                <circle
+                <path
                   v-for="slice in category.pieSlices.value"
                   :key="slice.key"
                   class="category-pie-slice"
-                  cx="50"
-                  cy="50"
-                  r="40"
-                  pathLength="100"
+                  :class="{ 'is-highlighted': highlightedCategory === slice.key, 'is-muted': Boolean(highlightedCategory) && highlightedCategory !== slice.key }"
+                  :d="slicePath(slice)"
+                  fill="none"
                   :stroke="slice.color"
-                  :stroke-dasharray="slice.dash.toFixed(4) + ' ' + (100 - slice.dash).toFixed(4)"
-                  :stroke-dashoffset="slice.dashOffset.toFixed(4)"
                   :data-category-highlight="slice.key"
                   :data-category-focus="slice.key"
                   :data-category-title="displayCategory(slice.label)"
-                  tabindex="0"
+                  :tabindex="slice.share > 0 ? 0 : -1"
                   role="button"
+                  :aria-label="`${displayCategory(slice.label)}: ${metricText(slice.group)}`"
+                  @mouseenter="hoveredCategory = slice.key"
+                  @mouseleave="hoveredCategory = ''"
+                  @focus="focusedCategory = slice.key"
+                  @blur="focusedCategory = ''"
                   @click="category.setFocus(slice.key)"
                   @keydown.enter="category.setFocus(slice.key)"
+                  @keydown.space.prevent="category.setFocus(slice.key)"
                 >
                   <title>{{ displayCategory(slice.label) }}: {{ metricText(slice.group) }} / {{ (slice.share * 100).toFixed(1) }}%</title>
-                </circle>
+                </path>
               </g>
             </svg>
             <div class="category-pie-spotlight">
-              <strong>{{ selectedMetricLabel }}</strong>
-              <span>{{ firstSlice ? metricText(firstSlice.group) : "-" }}</span>
-              <small>{{ firstSlice ? message("categoryReport.leaderShare", "{category} leads at {share}%", { category: displayCategory(firstSlice.label), share: (firstSlice.share * 100).toFixed(1) }) : "-" }}</small>
+              <strong>{{ category.focusKey.value ? copy.revenue : centerLabel }}</strong>
+              <span>{{ formatMoney(category.summary.value.revenue) }}</span>
+              <small>{{ centerLabel }}</small>
             </div>
           </div>
           <div class="category-pie-copy">
             <h4>{{ message("categoryReport.metricMix", "{metric} mix by category", { metric: selectedMetricLabel }) }}</h4>
-            <p>{{ message("categoryReport.categoriesFrom", "{count} categories from {tiers}.", { count: category.pieSlices.value.length, tiers: category.selectedTierText.value }) }}</p>
-            <ul class="category-pie-legend" aria-label="Category legend">
+            <p>{{ message("categoryReport.categoriesFrom", "{count} categories from {tiers}.", { count: category.visibleGroups.value.length, tiers: category.selectedTierText.value }) }}</p>
+            <button type="button" class="category-list-toggle" :aria-expanded="category.showAllCategories.value" aria-controls="category-distribution-list" @click="toggleCategoryList">{{ category.showAllCategories.value ? (language === 'zh' ? '收起为主要品类' : 'Show major categories') : (language === 'zh' ? '展开全部品类' : 'Show all categories') }}</button>
+            <p class="category-distribution-hint">{{ language === 'zh' ? '主要视图显示占比至少 2% 的前 7 个品类，其余合并为其他；展开后包含零营收品类。' : 'Major view shows up to 7 categories with at least 2% share; the rest are grouped as Other. Expand to include zero-revenue categories.' }}</p>
+            <ul id="category-distribution-list" class="category-pie-legend" :class="{ 'is-expanded': category.showAllCategories.value }" aria-label="Category legend">
               <li
                 v-for="slice in category.pieSlices.value"
                 :key="'legend-' + slice.key"
+                :class="{ 'is-highlighted': highlightedCategory === slice.key, 'is-muted': Boolean(highlightedCategory) && highlightedCategory !== slice.key }"
                 :style="{ '--category-color': slice.color, '--category-tint': slice.tint }"
                 :data-category-highlight="slice.key"
                 :data-category-focus="slice.key"
                 tabindex="0"
                 role="button"
+                @mouseenter="hoveredCategory = slice.key"
+                @mouseleave="hoveredCategory = ''"
+                @focus="focusedCategory = slice.key"
+                @blur="focusedCategory = ''"
                 @click="category.setFocus(slice.key)"
                 @keydown.enter="category.setFocus(slice.key)"
+                @keydown.space.prevent="category.setFocus(slice.key)"
               >
                 <span class="category-pie-swatch" aria-hidden="true" />
                 <strong>{{ displayCategory(slice.label) }}</strong>
@@ -443,9 +475,9 @@ onUnmounted(() => {
             </ul>
             <div v-if="firstSlice" class="category-pie-actions" :style="{ '--category-color': firstSlice.color, '--category-tint': firstSlice.tint }">
               <button class="category-focus-export" data-category-action="export" type="button" :disabled="!props.download" :title="copy.exportHint" @click="exportSlice">
-                {{ copy.export }}
+                {{ category.focusKey.value ? copy.export : (language === 'zh' ? '导出全部当前品类' : 'Export all visible categories') }}
               </button>
-              <span>{{ message("categoryReport.categoryRows", "{category}: {count} rows in selected tiers", { category: displayCategory(firstSlice.label), count: formatCount(firstSlice.group.rowCount) }) }}</span>
+              <span>{{ message("categoryReport.categoryRows", "{category}: {count} rows in selected tiers", { category: category.focusKey.value ? centerLabel : copy.allCategories, count: formatCount(category.visibleGroups.value.reduce((sum, group) => sum + group.rowCount, 0)) }) }}</span>
             </div>
           </div>
         </section>
