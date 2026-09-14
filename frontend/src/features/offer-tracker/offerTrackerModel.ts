@@ -195,7 +195,7 @@ function offerTrackerAsins(record: OfferRecord): readonly string[] {
     .flatMap((value) => stringValue(value).split(/[|,;\s]+/))
     .map((value) => value.toUpperCase())
     .filter((value) => {
-      if (!/^B0[A-Z0-9]{8}$/.test(value) || seen.has(value)) return false;
+      if (!/^B[A-Z0-9]{9}$/.test(value) || seen.has(value)) return false;
       seen.add(value);
       return true;
     })

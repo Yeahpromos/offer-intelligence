@@ -3274,6 +3274,7 @@ OFFERS_CACHE_FILE = CACHE_DIR / "db_offers_cache.json"
 KEYWORDS_CACHE_FILE = CACHE_DIR / "db_keywords_cache.json"
 PUBLISHERS_CACHE_FILE = CACHE_DIR / "db_publishers_cache.json"
 CACHE_TTL_SECONDS = int(os.environ.get("OFFER_DB_CACHE_TTL", "86400"))  # 24 hours
+OFFER_ASIN_RANKING_VERSION = 1
 MERCHANT_CACHE_TTL = int(os.environ.get("OFFER_DB_MERCHANT_CACHE_TTL", "3600"))  # 1 hour
 SEARCH_CACHE_TTL = int(os.environ.get("OFFER_DB_SEARCH_CACHE_TTL", "3600"))  # 1 hour
 ASIN_CACHE_TTL = int(os.environ.get("OFFER_DB_ASIN_CACHE_TTL", "300"))  # 5 minutes
@@ -3381,14 +3382,14 @@ def offers_payload(
     # Memory cache ? avoid 23MB file read + json.loads on warm requests
     if not force_refresh and _offers_memory_cache is not None:
         ts, payload = _offers_memory_cache
-        if now - ts < CACHE_TTL_SECONDS:
+        if now - ts < CACHE_TTL_SECONDS and payload.get("asinRankingVersion") == OFFER_ASIN_RANKING_VERSION:
             return payload
         # TTL expired: fall through to file cache
 
     # File cache ? shared across Vercel instances
     if not force_refresh:
         cached = _load_any_cache(OFFERS_CACHE_FILE)
-        if cached is not None:
+        if cached is not None and cached.get("asinRankingVersion") == OFFER_ASIN_RANKING_VERSION:
             age = _cache_age(OFFERS_CACHE_FILE)
             if age is not None and age < CACHE_TTL_SECONDS:
                 _offers_memory_cache = (now, cached)
@@ -3422,7 +3423,7 @@ def offers_payload(
         # Double-check: ?????????????
         if not force_refresh and _offers_memory_cache is not None:
             ts, cached = _offers_memory_cache
-            if now - ts < CACHE_TTL_SECONDS:
+            if now - ts < CACHE_TTL_SECONDS and cached.get("asinRankingVersion") == OFFER_ASIN_RANKING_VERSION:
                 return cached
         payload = _build_offers_payload(month)
         _save_cache(OFFERS_CACHE_FILE, payload)
@@ -3542,6 +3543,70 @@ def offer_network_fallback_map(
                     network_map[mid] = net
 
     return network_map
+
+
+def offer_asin_rankings(
+    conn,
+    offers: list[dict[str, Any]],
+    start_day: dt.date,
+    end_day: dt.date,
+) -> dict[str, list[str]]:
+    """Rank each merchant's ASINs by positive period revenue, then code.
+
+    Keep the full list for ASIN search; Offer Tracker displays its first five.
+    Catalog and keyword ASINs fill missing revenue slots in code order.
+    """
+    candidates: dict[str, set[str]] = {
+        str(offer["merchantId"]): set() for offer in offers
+    }
+    revenues: dict[str, dict[str, float]] = {mid: {} for mid in candidates}
+
+    def add(mid: str, value: Any) -> str | None:
+        asin = str(value or "").strip().upper()
+        if mid in candidates and ASIN_RE.fullmatch(asin):
+            candidates[mid].add(asin)
+            return asin
+        return None
+
+    for offer in offers:
+        values = offer.get("productAsins") or []
+        if isinstance(values, str):
+            values = re.split(r"[|,;\s]+", values)
+        for value in values:
+            add(str(offer["merchantId"]), value)
+
+    # Read rows directly: GROUP_CONCAT can truncate a merchant's ASIN catalog.
+    for row in fetch_all(conn, "SELECT DISTINCT merchantId, asin FROM cnpscy_oi_offer_products"):
+        add(str(row.get("merchantId") or ""), row.get("asin"))
+
+    columns = table_columns(conn, "cnpscy_amazon_order")
+    asin_col = pick_column(columns, ["asin", "product_asin", "item_asin", "amazon_asin"])
+    merchant_col = pick_column(columns, ["advert_id", "merchant_id"])
+    revenue_col = pick_column(columns, ["amount", "sales_amount", "revenue"])
+    date_col = pick_column(columns, ["order_time_day"])
+    if asin_col and merchant_col and revenue_col and date_col:
+        rows = fetch_all(
+            conn,
+            f"""
+            SELECT CAST(o.{q(merchant_col)} AS CHAR) AS merchantId,
+                   UPPER(TRIM(o.{q(asin_col)})) AS asin,
+                   SUM(COALESCE(o.{q(revenue_col)}, 0)) AS revenue
+            FROM cnpscy_amazon_order o
+            WHERE o.{q(date_col)} BETWEEN %s AND %s
+            GROUP BY o.{q(merchant_col)}, UPPER(TRIM(o.{q(asin_col)}))
+            """,
+            (int(start_day.strftime("%Y%m%d")), int(end_day.strftime("%Y%m%d"))),
+        )
+        for row in rows:
+            mid = str(row.get("merchantId") or "")
+            asin = add(mid, row.get("asin"))
+            if asin:
+                revenues[mid][asin] = to_float(row.get("revenue"))
+
+    return {
+        mid: sorted(asins, key=lambda asin: (-max(0, revenues[mid].get(asin, 0)), asin))
+        for mid, asins in candidates.items()
+    }
 
 
 def _build_offers_payload(
@@ -3798,18 +3863,7 @@ def _build_offers_payload(
 
             offers.append(o)
 
-        # ?? top ASINs per merchant (aggregated from products view) ??
-        asin_rows = fetch_all(
-            conn,
-            """
-            SELECT merchantId,
-                   GROUP_CONCAT(DISTINCT asin ORDER BY asin SEPARATOR ',') AS topAsins,
-                   COUNT(DISTINCT asin) AS asinCount
-            FROM cnpscy_oi_offer_products
-            GROUP BY merchantId
-            """,
-        )
-        asin_map: dict[str, dict] = {r["merchantId"]: r for r in asin_rows}
+        asin_map = offer_asin_rankings(conn, offers, range_start, range_end)
 
         # ?? payment records (?? 24 ??????????? /tmp) ??
         payment_records_raw = fetch_all(
@@ -3891,14 +3945,8 @@ def _build_offers_payload(
             o["mayRevenue"] = float(pr[prev_month1]) if prev_month1 and prev_month1 in pr else None
             o["juneRevenue"] = float(pr[prev_month2]) if prev_month2 and prev_month2 in pr else None
 
-            # top ASINs
-            asin_data = asin_map.get(mid)
-            if asin_data and asin_data.get("topAsins"):
-                o["topAsins"] = [a.strip() for a in str(asin_data["topAsins"]).split(",") if a.strip()]
-                o["hasAsin"] = True
-            else:
-                o["topAsins"] = []
-                o["hasAsin"] = False
+            o["topAsins"] = asin_map.get(str(mid), [])
+            o["hasAsin"] = bool(o["topAsins"])
 
             # payment risk
             pr = payment_risk_map.get(mid)
@@ -4089,6 +4137,7 @@ def _build_offers_payload(
 
         result = {
             "ok": True,
+            "asinRankingVersion": OFFER_ASIN_RANKING_VERSION,
             "checkedAt": utc_now_iso(),
             "month": month,
             "startDate": range_start.isoformat(),

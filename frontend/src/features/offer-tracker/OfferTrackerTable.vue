@@ -92,7 +92,8 @@ const copy = computed(() => {
     bbPolicy: message("offerTracker.tableBbPolicy", props.language === "zh" ? "是否介意 BB" : "BB Preference"),
     category: message("offerTracker.category", "品类"),
     recommendation: message("offerTracker.tableRecommendation", props.language === "zh" ? "推荐信息" : "Recommendation"),
-    topAsins: message("offerTracker.topAsins", "TOP RANK ASINS"),
+    topAsins: message("offerTracker.topAsins", "Revenue-first ASINs · Top 5"),
+    topAsinsHelp: message("offerTracker.topAsinsHelp", "Rank by period revenue; fill remaining slots by ASIN code."),
     columns: message("offerTracker.columns", "列设置"),
     visibleColumns: message("offerTracker.visibleColumns", props.language === "zh" ? "显示列" : "Visible columns"),
     priorityRules: message("offerTracker.priorityRules", "优先级规则"),
@@ -371,7 +372,7 @@ function recommendation(row: OfferTrackerRow): string {
             <th v-if="isColumnVisible('revenue')" scope="col" data-column="revenue">{{ copy.revenue }}</th>
             <th v-if="isColumnVisible('bbPolicy')" scope="col" data-column="bbPolicy">{{ copy.bbPolicy }}</th>
             <th v-if="isColumnVisible('category')" scope="col" data-column="category">{{ copy.category }}</th>
-            <th v-if="isColumnVisible('asins')" scope="col" data-column="asins">{{ copy.topAsins }}</th>
+            <th v-if="isColumnVisible('asins')" scope="col" data-column="asins" :title="copy.topAsinsHelp" :aria-description="copy.topAsinsHelp">{{ copy.topAsins }}</th>
             <th v-if="isColumnVisible('recommendation')" scope="col" data-column="recommendation">{{ copy.recommendation }}</th>
           </tr>
         </thead>

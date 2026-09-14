@@ -93,6 +93,15 @@ const baseFilters: OfferTrackerFilters = {
 };
 
 describe("Offer Tracker model", () => {
+  it("keeps revenue-ranked ASIN order from the server and shows only five unique products", () => {
+    const row = normalizeOfferRecord({
+      topAsins: ["B199999999", "b099999998", "B099999998", "B000000001", "B000000002", "B000000003", "B000000004"],
+      productAsins: ["B000000000", "B000000001"]
+    });
+    expect(row.asins).toEqual(["B199999999", "B099999998", "B000000001", "B000000002", "B000000003"]);
+    expect(normalizeOfferRecord({ topAsins: ["B000000002", "B000000001"] }).asins).toEqual(["B000000002", "B000000001"]);
+  });
+
   it("combines selected BB policies with OR and migrates legacy saved filters", () => {
     const rows = [...offers, { merchantId: "m-open", merchantName: "Merach" }];
     const filters = normalizeOfferTrackerFilters({ bbPolicies: ["mind", "open"] }, defaultDateRange);

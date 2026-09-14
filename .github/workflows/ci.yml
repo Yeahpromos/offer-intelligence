@@ -49,6 +49,8 @@ jobs:
           python scripts/test_vercel_function_budget.py
           python scripts/test_vercel_db_wsgi.py
           python scripts/test_asin_performance.py
+          python scripts/test_offer_asin_rankings.py
+          python scripts/test_offer_tracker_date_range.py
           python scripts/test_vercel_auth_routes.py
           python scripts/test_vercel_chat_routes.py
           python scripts/test_vercel_payment_packaging.py
