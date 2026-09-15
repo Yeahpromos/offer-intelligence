@@ -1,10 +1,11 @@
 """Promotion reporting regression tests. No database or external API requests."""
 import datetime as dt
+import json
 import sys
 import unittest
 from contextlib import nullcontext
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import offer_performance as p
@@ -12,6 +13,39 @@ from scripts.test_vercel_db_wsgi import load_app_module, request
 
 
 class PromotionTests(unittest.TestCase):
+    def test_storage_full_schema_lookup_uses_zero_row_metadata(self):
+        conn = MagicMock()
+        cursor = conn.cursor.return_value.__enter__.return_value
+        cursor.description = [("advert_id",), ("order_time_day",), ("amount",)]
+        with patch.dict(p.db.TABLE_COLUMNS_CACHE, {}, clear=True), patch.object(p.db, "fetch_all", side_effect=Exception(1030, "Got error 28 from storage engine")) as fetch:
+            columns = p.db.table_columns(conn, "cnpscy_amazon_order", strict=True)
+            self.assertEqual(columns, {"advert_id", "order_time_day", "amount"})
+            cursor.execute.assert_called_once_with("SELECT * FROM `cnpscy_amazon_order` LIMIT 0")
+            cursor.fetchall.assert_not_called()
+            self.assertEqual(p.db.table_columns(conn, "cnpscy_amazon_order", strict=True), columns)
+            fetch.assert_called_once()
+
+    def test_failed_schema_lookup_is_retried_after_recovery(self):
+        with patch.dict(p.db.TABLE_COLUMNS_CACHE, {}, clear=True), patch.object(p.db, "fetch_all", side_effect=[Exception(2013, "Lost connection"), [{"Field": "amount"}]]) as fetch:
+            self.assertEqual(p.db.table_columns(None, "cnpscy_amazon_order"), set())
+            self.assertNotIn("cnpscy_amazon_order", p.db.TABLE_COLUMNS_CACHE)
+            self.assertEqual(p.db.table_columns(None, "cnpscy_amazon_order"), {"amount"})
+            self.assertEqual(fetch.call_count, 2)
+        with patch.dict(p.db.TABLE_COLUMNS_CACHE, {}, clear=True), patch.object(p.db, "fetch_all", side_effect=Exception(2013, "Lost connection")):
+            with self.assertRaisesRegex(Exception, "Lost connection"):
+                p.db.table_columns(None, "cnpscy_amazon_order", strict=True)
+        with patch.dict(p.db.TABLE_COLUMNS_CACHE, {}, clear=True), patch.object(p.db, "fetch_all", side_effect=Exception(1146, "Table missing")):
+            self.assertEqual(p.db.table_columns(None, "cnpscy_amazon_click", strict=True), set())
+
+    def test_storage_failure_returns_safe_retryable_status(self):
+        module = load_app_module()
+        error = Exception(1030, "Got error 28 from storage engine: private-server-path")
+        with patch.dict("os.environ", {"OI_AUTH_ENABLED": "0", "VERCEL_ENV": "", "VERCEL": ""}), patch.object(module, "offer_performance_report", side_effect=error), self.assertLogs("vercel_db_wsgi", level="ERROR"):
+            response = request(module.app, "ui-offer-performance", "merchantIds=101")
+        self.assertEqual(response["status"], 503)
+        self.assertEqual(json.loads(response["body"])["errorCode"], "db_storage_full")
+        self.assertNotIn(b"private-server-path", response["body"])
+
     def setUp(self):
         self.window = p.date_window("2026-09-07")
         self.supported = dict.fromkeys(p.METRICS, True)

@@ -1,56 +1,84 @@
 name: Refresh DB caches
+
 on:
+  workflow_run:
+    workflows:
+      - Sync Levanta payments
+    types:
+      - completed
   workflow_dispatch:
+
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: refresh-db-caches-main
+  cancel-in-progress: false
+
 jobs:
-  diagnose-report:
-    if: github.repository == 'Yeahpromos/offer-intelligence' && github.ref == 'refs/heads/halfl1fe/repair-promotion-report'
+  refresh-caches:
+    name: Rebuild API caches from DB
+    if: >-
+      github.repository == 'Yeahpromos/offer-intelligence' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
+    env:
+      CACHE_BRANCH: main
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out trusted main
+        uses: actions/checkout@v4
         with:
-          python-version: '3.12'
-      - run: pip install PyMySQL==1.1.1
-      - name: Read promotion report without writing data
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyMySQL
+        run: pip install PyMySQL==1.1.1
+
+      - name: Promote revenue-producing Tier 4 merchants to Tier 3
         env:
           OFFER_DB_HOST: ${{ vars.OFFER_DB_HOST }}
           OFFER_DB_NAME: ${{ vars.OFFER_DB_NAME }}
           OFFER_DB_USER: ${{ vars.OFFER_DB_USER }}
           OFFER_DB_PASSWORD: ${{ secrets.OFFER_DB_PASSWORD }}
           OFFER_DB_PORT: ${{ vars.OFFER_DB_PORT }}
+          OFFER_DB_READ_TIMEOUT: "300"
         run: |
-          python - <<'PY'
-          import time
-          import offer_performance as p
-          original = p.db.fetch_all
-          def traced(conn, sql, params=()):
-              start = time.monotonic()
-              try:
-                  result = original(conn, sql, params)
-                  print('QUERY', sql[:100], 'rows', len(result), 'seconds', round(time.monotonic()-start, 2), flush=True)
-                  return result
-              except Exception as error:
-                  print('FAILED SQL', sql, type(error).__name__, str(error), flush=True)
-                  raise
-          with p.db.db_connection() as conn:
-              for sql in ["SHOW VARIABLES WHERE Variable_name IN ('version','tmpdir','datadir','tmp_table_size','max_heap_table_size')", "SHOW GLOBAL STATUS LIKE 'Created_tmp%%'", "SHOW FULL PROCESSLIST"]:
-                  try:
-                      rows = original(conn, sql)
-                      if 'PROCESSLIST' in sql:
-                          rows = [{k: r.get(k) for k in ('Id','Command','Time','State','Info')} for r in rows]
-                      print('SYSTEM', sql, rows, flush=True)
-                  except Exception as e:
-                      print('ERROR', type(e).__name__, str(e), flush=True)
-              for table in ('cnpscy_amazon_order','cnpscy_amazon_click'):
-                  try:
-                      with conn.cursor() as cursor:
-                          cursor.execute('SELECT * FROM ' + p.db.q(table) + ' LIMIT 0')
-                          print('DIRECT METADATA', table, [c[0] for c in cursor.description], flush=True)
-                  except Exception as e:
-                      print('DIRECT ERROR', table, type(e).__name__, str(e), flush=True)
-          p.db.fetch_all = traced
-          result = p.report({k: [v] for k, v in dict(merchantIds='399096,385463,380945,387792,398438,385602,406354,406220,387598,406173,385388,385389,369290,383951,362292,362448,362342,363300,381027,362934,362285,363249,380558,382846,387267,380843,369100,384570,362570,382417,363260,380767,368498,363250,363524,385286,365036,362847,365227,364682,387317,398749,363199,363140,381721,363486,362137,369405,362382,381624,388530,388530,362632,385304,362737,385514,384805,362838,380938,380928,380616,380539,365057,369155,362770,362488,383962,363445,369166,382327,384704,363373,384580,386807,384814,381886,362482,363392,385306,384791,369199,398435', launchDate='2026-08-31', startDate='2026-08-31', endDate='2026-09-15', periodMode='observation').items()})
-          print('RESULT', result['ok'], 'merchants', len(result['merchants']), 'daily_rows', sum(len(m['daily']) for m in result['merchants']), flush=True)
-          PY
+          python scripts/promote_revenue_tier4.py --output output/tier4-revenue-preview.json
+          python scripts/promote_revenue_tier4.py --apply --output output/tier4-revenue-promotions.json
+
+      - name: Save Tier promotion audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier4-revenue-promotions
+          path: output/tier4-revenue-*.json
+          if-no-files-found: error
+
+      - name: Rebuild API caches from DB
+        env:
+          OFFER_DB_HOST: ${{ vars.OFFER_DB_HOST }}
+          OFFER_DB_NAME: ${{ vars.OFFER_DB_NAME }}
+          OFFER_DB_USER: ${{ vars.OFFER_DB_USER }}
+          OFFER_DB_PASSWORD: ${{ secrets.OFFER_DB_PASSWORD }}
+          OFFER_DB_PORT: ${{ vars.OFFER_DB_PORT }}
+          OFFER_DB_READ_TIMEOUT: "300"
+        run: python scripts/refresh_api_caches.py
+
+      - name: Commit updated caches
+        run: |
+          git add protected_data/db_offers_cache.json protected_data/db_keywords_cache.json protected_data/db_publishers_cache.json
+          if git diff --cached --quiet; then
+            echo "No cache changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh ranked offer caches / 刷新排序后的 Offer 缓存"
+          git push origin "HEAD:$CACHE_BRANCH"
