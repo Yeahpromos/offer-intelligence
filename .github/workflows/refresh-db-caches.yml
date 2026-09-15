@@ -31,10 +31,13 @@ jobs:
                   result = original(conn, sql, params)
                   print('QUERY', sql[:100], 'rows', len(result), 'seconds', round(time.monotonic()-start, 2), flush=True)
                   return result
-              except Exception:
-                  print('FAILED SQL', sql, flush=True)
+              except Exception as error:
+                  print('FAILED SQL', sql, type(error).__name__, str(error), flush=True)
                   raise
           p.db.fetch_all = traced
+          with p.db.db_connection() as conn:
+              tables = original(conn, "SHOW FULL TABLES")
+              print('REPORT TABLES', [r for r in tables if any(word in str(r).lower() for word in ('amazon', 'maxai'))], flush=True)
           result = p.report({k: [v] for k, v in dict(merchantIds='399096', launchDate='2026-08-31', startDate='2026-08-31', endDate='2026-09-15', periodMode='observation').items()})
           print('RESULT', result['ok'], 'merchants', len(result['merchants']))
           PY
