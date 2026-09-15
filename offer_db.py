@@ -291,7 +291,13 @@ def require_db_token(target) -> bool:
     return False
 
 
+def is_db_storage_full(error: BaseException) -> bool:
+    return bool(error.args and error.args[0] == 1030 and re.search(r"\berror\s+28\b", str(error), re.I))
+
+
 def public_error_payload(error: BaseException) -> dict[str, Any]:
+    if is_db_storage_full(error):
+        return {"ok": False, "error": "Database storage is unavailable; retry after server recovery", "errorCode": "db_storage_full", "status": 503}
     if isinstance(error, OfferDbConfigError):
         message = error.public_message
         status = error.status
@@ -480,13 +486,25 @@ def offer_network_fallback_map(
     return result
 
 
-def table_columns(conn, table: str) -> set[str]:
+def table_columns(conn, table: str, *, strict: bool = False) -> set[str]:
     if table in TABLE_COLUMNS_CACHE:
         return TABLE_COLUMNS_CACHE[table]
     try:
         rows = fetch_all(conn, f"SHOW COLUMNS FROM {q(table)}")
-    except Exception:
-        TABLE_COLUMNS_CACHE[table] = set()
+    except Exception as error:
+        if is_db_storage_full(error):
+            # MySQL 5.6 can need temporary disk space for SHOW COLUMNS even
+            # while base-table reads work. LIMIT 0 returns schema, never rows.
+            with conn.cursor() as cursor:
+                cursor.execute(f"SELECT * FROM {q(table)} LIMIT 0")
+                columns = {column[0] for column in (cursor.description or ())}
+            if columns:
+                TABLE_COLUMNS_CACHE[table] = columns
+            return columns
+        # A failed lookup is not an empty schema. Retry after transient recovery.
+        # Missing optional tables may still fall back to another source.
+        if strict and (not error.args or error.args[0] != 1146):
+            raise
         return set()
     columns = {str(row.get("Field")) for row in rows if row.get("Field")}
     TABLE_COLUMNS_CACHE[table] = columns

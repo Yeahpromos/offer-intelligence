@@ -35,11 +35,11 @@ jobs:
                   print('FAILED SQL', sql, type(error).__name__, str(error), flush=True)
                   raise
           with p.db.db_connection() as conn:
-              for sql in ["SHOW VARIABLES WHERE Variable_name IN ('version','tmpdir','datadir','tmp_table_size','max_heap_table_size')", "SHOW GLOBAL STATUS LIKE 'Created_tmp%'", "SHOW FULL PROCESSLIST"]:
+              for sql in ["SHOW VARIABLES WHERE Variable_name IN ('version','tmpdir','datadir','tmp_table_size','max_heap_table_size')", "SHOW GLOBAL STATUS LIKE 'Created_tmp%%'", "SHOW FULL PROCESSLIST"]:
                   try:
                       rows = original(conn, sql)
                       if 'PROCESSLIST' in sql:
-                          rows = [{k: r.get(k) for k in ('Id','Command','Time','State')} for r in rows]
+                          rows = [{k: r.get(k) for k in ('Id','Command','Time','State','Info')} for r in rows]
                       print('SYSTEM', sql, rows, flush=True)
                   except Exception as e:
                       print('ERROR', type(e).__name__, str(e), flush=True)
@@ -50,4 +50,7 @@ jobs:
                           print('DIRECT METADATA', table, [c[0] for c in cursor.description], flush=True)
                   except Exception as e:
                       print('DIRECT ERROR', table, type(e).__name__, str(e), flush=True)
+          p.db.fetch_all = traced
+          result = p.report({k: [v] for k, v in dict(merchantIds='399096,385463,380945,387792,398438,385602,406354,406220,387598,406173,385388,385389,369290,383951,362292,362448,362342,363300,381027,362934,362285,363249,380558,382846,387267,380843,369100,384570,362570,382417,363260,380767,368498,363250,363524,385286,365036,362847,365227,364682,387317,398749,363199,363140,381721,363486,362137,369405,362382,381624,388530,388530,362632,385304,362737,385514,384805,362838,380938,380928,380616,380539,365057,369155,362770,362488,383962,363445,369166,382327,384704,363373,384580,386807,384814,381886,362482,363392,385306,384791,369199,398435', launchDate='2026-08-31', startDate='2026-08-31', endDate='2026-09-15', periodMode='observation').items()})
+          print('RESULT', result['ok'], 'merchants', len(result['merchants']), 'daily_rows', sum(len(m['daily']) for m in result['merchants']), flush=True)
           PY

@@ -568,6 +568,7 @@ def app(environ, start_response):
                 except ValueError as error:
                     send_json(target, 400, {"ok": False, "error": str(error)})
                 except Exception as error:
+                    logging.getLogger(__name__).exception("Promotion report query failed")
                     send_db_error(target, error)
             elif route == "ui-publishers":
                 handle_ui_publishers(target, query)

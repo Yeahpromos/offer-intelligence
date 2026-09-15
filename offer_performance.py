@@ -241,8 +241,8 @@ def report(query):
     months = month_keys(window["startDate"])
     history_end = (dt.date.fromisoformat(window["startDate"]).replace(day=1) - dt.timedelta(days=1)).isoformat()
     with db.db_connection() as conn:
-        order_cols = db.table_columns(conn, "cnpscy_amazon_order")
-        click_cols = db.table_columns(conn, "cnpscy_amazon_click")
+        order_cols = db.table_columns(conn, "cnpscy_amazon_order", strict=True)
+        click_cols = db.table_columns(conn, "cnpscy_amazon_click", strict=True)
         # Choose a single clicks source for all periods and dimensions, never add both.
         has_clicks = all(db.pick_column(click_cols, c) for c in (["advert_id", "merchant_id"], ["time_day", "click_time_day", "date"], ["click", "clicks"]))
         relation_options = {"report_window": window}
