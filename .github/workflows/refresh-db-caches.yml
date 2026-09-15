@@ -34,10 +34,20 @@ jobs:
               except Exception as error:
                   print('FAILED SQL', sql, type(error).__name__, str(error), flush=True)
                   raise
-          p.db.fetch_all = traced
           with p.db.db_connection() as conn:
-              tables = original(conn, "SHOW FULL TABLES")
-              print('REPORT TABLES', [r for r in tables if any(word in str(r).lower() for word in ('amazon', 'maxai'))], flush=True)
-          result = p.report({k: [v] for k, v in dict(merchantIds='399096', launchDate='2026-08-31', startDate='2026-08-31', endDate='2026-09-15', periodMode='observation').items()})
-          print('RESULT', result['ok'], 'merchants', len(result['merchants']))
+              for sql in ["SHOW VARIABLES WHERE Variable_name IN ('version','tmpdir','datadir','tmp_table_size','max_heap_table_size')", "SHOW GLOBAL STATUS LIKE 'Created_tmp%'", "SHOW FULL PROCESSLIST"]:
+                  try:
+                      rows = original(conn, sql)
+                      if 'PROCESSLIST' in sql:
+                          rows = [{k: r.get(k) for k in ('Id','Command','Time','State')} for r in rows]
+                      print('SYSTEM', sql, rows, flush=True)
+                  except Exception as e:
+                      print('ERROR', type(e).__name__, str(e), flush=True)
+              for table in ('cnpscy_amazon_order','cnpscy_amazon_click'):
+                  try:
+                      with conn.cursor() as cursor:
+                          cursor.execute('SELECT * FROM ' + p.db.q(table) + ' LIMIT 0')
+                          print('DIRECT METADATA', table, [c[0] for c in cursor.description], flush=True)
+                  except Exception as e:
+                      print('DIRECT ERROR', table, type(e).__name__, str(e), flush=True)
           PY
