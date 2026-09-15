@@ -1,84 +1,40 @@
 name: Refresh DB caches
-
 on:
-  workflow_run:
-    workflows:
-      - Sync Levanta payments
-    types:
-      - completed
   workflow_dispatch:
-
 permissions:
-  contents: write
-
-concurrency:
-  group: refresh-db-caches-main
-  cancel-in-progress: false
-
+  contents: read
 jobs:
-  refresh-caches:
-    name: Rebuild API caches from DB
-    if: >-
-      github.repository == 'Yeahpromos/offer-intelligence' &&
-      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'))
+  diagnose-report:
+    if: github.repository == 'Yeahpromos/offer-intelligence' && github.ref == 'refs/heads/halfl1fe/repair-promotion-report'
     runs-on: ubuntu-latest
-    env:
-      CACHE_BRANCH: main
-
     steps:
-      - name: Check out trusted main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install PyMySQL
-        run: pip install PyMySQL==1.1.1
-
-      - name: Promote revenue-producing Tier 4 merchants to Tier 3
+          python-version: '3.12'
+      - run: pip install PyMySQL==1.1.1
+      - name: Read promotion report without writing data
         env:
           OFFER_DB_HOST: ${{ vars.OFFER_DB_HOST }}
           OFFER_DB_NAME: ${{ vars.OFFER_DB_NAME }}
           OFFER_DB_USER: ${{ vars.OFFER_DB_USER }}
           OFFER_DB_PASSWORD: ${{ secrets.OFFER_DB_PASSWORD }}
           OFFER_DB_PORT: ${{ vars.OFFER_DB_PORT }}
-          OFFER_DB_READ_TIMEOUT: "300"
         run: |
-          python scripts/promote_revenue_tier4.py --output output/tier4-revenue-preview.json
-          python scripts/promote_revenue_tier4.py --apply --output output/tier4-revenue-promotions.json
-
-      - name: Save Tier promotion audit report
-        uses: actions/upload-artifact@v4
-        with:
-          name: tier4-revenue-promotions
-          path: output/tier4-revenue-*.json
-          if-no-files-found: error
-
-      - name: Rebuild API caches from DB
-        env:
-          OFFER_DB_HOST: ${{ vars.OFFER_DB_HOST }}
-          OFFER_DB_NAME: ${{ vars.OFFER_DB_NAME }}
-          OFFER_DB_USER: ${{ vars.OFFER_DB_USER }}
-          OFFER_DB_PASSWORD: ${{ secrets.OFFER_DB_PASSWORD }}
-          OFFER_DB_PORT: ${{ vars.OFFER_DB_PORT }}
-          OFFER_DB_READ_TIMEOUT: "300"
-        run: python scripts/refresh_api_caches.py
-
-      - name: Commit updated caches
-        run: |
-          git add protected_data/db_offers_cache.json protected_data/db_keywords_cache.json protected_data/db_publishers_cache.json
-          if git diff --cached --quiet; then
-            echo "No cache changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Refresh ranked offer caches / 刷新排序后的 Offer 缓存"
-          git push origin "HEAD:$CACHE_BRANCH"
+          python - <<'PY'
+          import time
+          import offer_performance as p
+          original = p.db.fetch_all
+          def traced(conn, sql, params=()):
+              start = time.monotonic()
+              try:
+                  result = original(conn, sql, params)
+                  print('QUERY', sql[:100], 'rows', len(result), 'seconds', round(time.monotonic()-start, 2), flush=True)
+                  return result
+              except Exception:
+                  print('FAILED SQL', sql, flush=True)
+                  raise
+          p.db.fetch_all = traced
+          result = p.report({k: [v] for k, v in dict(merchantIds='399096', launchDate='2026-08-31', startDate='2026-08-31', endDate='2026-09-15', periodMode='observation').items()})
+          print('RESULT', result['ok'], 'merchants', len(result['merchants']))
+          PY
